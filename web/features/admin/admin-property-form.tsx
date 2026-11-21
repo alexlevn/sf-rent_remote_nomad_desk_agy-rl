@@ -40,6 +40,7 @@ const SEED_GALLERY_OPTIONS = [
 ];
 
 const MAX_IMAGES = 50;
+const INT4_MAX = 2_147_483_647;
 
 function isSafeImagePath(url: string): boolean {
   const trimmed = url.trim();
@@ -78,6 +79,8 @@ export function AdminPropertyForm({
         (l) => l.city.toLowerCase() === initialData.city.toLowerCase()
       );
       if (byCity) return byCity;
+      // Preserve unmatched city in edit mode instead of silently overwriting with locations[0]
+      return null;
     }
     return locations[0] ?? null;
   })();
@@ -272,6 +275,8 @@ export function AdminPropertyForm({
     const rentNum = Number(monthlyRentUsd);
     if (!Number.isFinite(rentNum) || rentNum <= 0) {
       nextErrors.monthlyRentUsd = 'Monthly rent must be greater than $0.';
+    } else if (Math.round(rentNum * 100) > INT4_MAX) {
+      nextErrors.monthlyRentUsd = 'Monthly rent exceeds the maximum allowed amount.';
     }
 
     const minStayNum = Number(minimumStayNights);
@@ -563,7 +568,11 @@ export function AdminPropertyForm({
               className={inputClass}
               required
             >
-              <option value="">Select a city...</option>
+              <option value="">
+                {initialData?.city && !defaultLocation
+                  ? `${initialData.city}${initialData.country ? `, ${initialData.country}` : ''} (Current)`
+                  : 'Select a city...'}
+              </option>
               {locations.map((loc) => (
                 <option key={loc.id} value={String(loc.id)}>
                   {loc.city}, {loc.country}

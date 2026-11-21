@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, startTransiti
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Property, PropertyStatus, HostProfile } from '@/lib/types';
+import { stripHtmlTags } from '@/lib/validations/content';
 import {
   fetchAdminPropertiesAction,
   approvePropertyAction,
@@ -37,6 +38,7 @@ export function PropertyModerationTable() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   // Modal states
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -68,6 +70,12 @@ export function PropertyModerationTable() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (errorMessage) {
+      errorBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [errorMessage]);
 
   const showToast = (msg: string) => {
     setErrorMessage(null);
@@ -298,6 +306,7 @@ export function PropertyModerationTable() {
       {/* Inline Error Banner */}
       {errorMessage && (
         <div
+          ref={errorBannerRef}
           role="alert"
           data-testid="property-action-error"
           className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
@@ -737,7 +746,9 @@ export function PropertyModerationTable() {
                 Description
               </span>
               <p className="text-neutral-700 dark:text-neutral-300 leading-relaxed text-xs">
-                {selectedProperty.description || 'No detailed description provided.'}
+                {selectedProperty.description
+                  ? stripHtmlTags(selectedProperty.description)
+                  : 'No detailed description provided.'}
               </p>
             </div>
 
