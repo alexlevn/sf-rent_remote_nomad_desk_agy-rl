@@ -17,7 +17,7 @@ Stages of the automated build pipeline for this project.
 | S7 | runner | Build: Backend (local Docker) | ✅ | 14 tasks |
 | S7A | agent | Plan: Admin | ✅ |  |
 | S7B | runner | Build: Admin | ✅ | 11 tasks |
-| S7C | agent | Plan: Content entry + image upload | 🔲 |  |
+| S7C | agent | Plan: Content entry + image upload | ⏳ | attempt 1 |
 | S7D | runner | Build: Content entry + image upload | 🔲 |  |
 | S8 | agent | Frontend review & fixes | 🔲 |  |
 | S9 | agent | Backend review & fixes | 🔲 |  |
