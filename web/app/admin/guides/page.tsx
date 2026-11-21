@@ -11,6 +11,9 @@ import {
 } from '@/app/admin/cms-actions';
 import { TiptapEditor } from '@/features/admin/tiptap-editor';
 import { PaginationBar } from '@/features/admin/pagination-bar';
+import { ImagePickerField } from '@/features/media/image-picker-field';
+import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { isSafeImagePath } from '@/lib/validations/media';
 import {
   BookOpen,
   FileText,
@@ -23,10 +26,46 @@ import {
   ArrowLeft,
   Sparkles,
   X,
+  Clock,
+  Save,
+  Loader2,
 } from 'lucide-react';
 
 const CATEGORIES = ['Activities', 'Coworking', 'Neighborhoods', 'Cost of Living', 'City Guide'];
 const PAGE_SIZE = 20;
+
+function formatLastSaved(iso?: string): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  }).format(date)} UTC`;
+}
+
+function serializeGuideSnapshot(guide: Partial<TravelGuide> | null): string {
+  if (!guide) return '';
+  return JSON.stringify({
+    title: guide.title ?? '',
+    slug: guide.slug ?? '',
+    city: guide.city ?? '',
+    category: guide.category ?? '',
+    publishDate: guide.publishDate ?? '',
+    featured: Boolean(guide.featured),
+    image: guide.image ?? '',
+    excerpt: guide.excerpt ?? '',
+    content: guide.content ?? '',
+    seoTitle: guide.seoTitle ?? '',
+    seoDescription: guide.seoDescription ?? '',
+    status: guide.status ?? 'published',
+  });
+}
 
 export default function AdminGuidesPage() {
   const [guides, setGuides] = useState<TravelGuide[]>([]);
@@ -45,8 +84,14 @@ export default function AdminGuidesPage() {
   // Editor mode state
   const [isEditing, setIsEditing] = useState(false);
   const [currentGuide, setCurrentGuide] = useState<Partial<TravelGuide> | null>(null);
+  const [persistedGuide, setPersistedGuide] = useState<TravelGuide | null>(null);
+  const [baselineSnapshot, setBaselineSnapshot] = useState<string>('');
+  const [lastSavedById, setLastSavedById] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const isDirty = isEditing && serializeGuideSnapshot(currentGuide) !== baselineSnapshot;
+  const { confirmLeave } = useUnsavedChanges(isDirty);
 
   const isActionRunningRef = useRef(false);
   const requestIdRef = useRef(0);
@@ -126,7 +171,7 @@ export default function AdminGuidesPage() {
   }, [fetchGuidesPage, page]);
 
   const handleOpenNew = () => {
-    setCurrentGuide({
+    const draft: Partial<TravelGuide> = {
       title: '',
       slug: '',
       city: locations[0]?.city || 'Barcelona',
@@ -139,7 +184,10 @@ export default function AdminGuidesPage() {
       seoDescription: '',
       content: '<h2>Neighborhood Overview</h2><p>Start writing your guide content here...</p>',
       status: 'published',
-    });
+    };
+    setCurrentGuide(draft);
+    setPersistedGuide(null);
+    setBaselineSnapshot(serializeGuideSnapshot(draft));
     setFormError(null);
     setActionError(null);
     setIsEditing(true);
@@ -147,10 +195,22 @@ export default function AdminGuidesPage() {
 
   const handleOpenEdit = (guide: TravelGuide) => {
     // Preserve seed content exactly (AC-CMS-3)
-    setCurrentGuide({ ...guide });
+    const editable = { ...guide };
+    setCurrentGuide(editable);
+    setPersistedGuide(guide);
+    setBaselineSnapshot(serializeGuideSnapshot(editable));
     setFormError(null);
     setActionError(null);
     setIsEditing(true);
+  };
+
+  const handleBackToList = () => {
+    if (!confirmLeave()) return;
+    setIsEditing(false);
+    setCurrentGuide(null);
+    setPersistedGuide(null);
+    setBaselineSnapshot('');
+    setFormError(null);
   };
 
   const handleSave = async (intentStatus?: 'published' | 'draft') => {
@@ -158,6 +218,12 @@ export default function AdminGuidesPage() {
 
     if (!currentGuide.title?.trim()) {
       setFormError('Please enter an article title.');
+      return;
+    }
+
+    const trimmedImage = (currentGuide.image ?? '').trim();
+    if (!trimmedImage || !isSafeImagePath(trimmedImage)) {
+      setFormError('Cover image must be a valid /uploads/, /seed/, or https:// URL.');
       return;
     }
 
@@ -169,11 +235,12 @@ export default function AdminGuidesPage() {
       const finalStatus = intentStatus || currentGuide.status || 'published';
       const payload: Partial<TravelGuide> = {
         ...currentGuide,
+        image: trimmedImage,
         status: finalStatus,
         seoTitle: currentGuide.seoTitle?.trim() || '',
         seoDescription: currentGuide.seoDescription?.trim() || '',
         slug:
-          currentGuide.slug ||
+          currentGuide.slug?.trim() ||
           currentGuide.title
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
@@ -181,14 +248,22 @@ export default function AdminGuidesPage() {
       };
 
       const isNew = !currentGuide.id;
-      await saveTravelGuideAction(payload);
+      const result = await saveTravelGuideAction(payload);
+      if (result?.guide?.id) {
+        const savedAt = new Date().toISOString();
+        setLastSavedById((prev) => ({ ...prev, [result.guide.id]: savedAt }));
+      }
       showToast(
         isNew
-          ? `Travel Guide "${payload.title}" published to /travel-guide (AC-CMS-3)!`
+          ? finalStatus === 'draft'
+            ? `Travel Guide "${payload.title}" saved as draft!`
+            : `Travel Guide "${payload.title}" published to /travel-guide (AC-CMS-3)!`
           : `Travel Guide "${payload.title}" updated successfully (AC-CMS-3)!`
       );
+      setBaselineSnapshot('');
       setIsEditing(false);
       setCurrentGuide(null);
+      setPersistedGuide(null);
       if (isNew && page !== 1) {
         setPage(1);
       } else {
@@ -224,6 +299,27 @@ export default function AdminGuidesPage() {
     }
   };
 
+  const liveGuide = persistedGuide ?? currentGuide;
+  const canViewOnWeb = Boolean(
+    currentGuide?.id &&
+      currentGuide.status === 'published' &&
+      persistedGuide?.status === 'published' &&
+      liveGuide?.city &&
+      liveGuide?.category &&
+      liveGuide?.slug
+  );
+  const viewOnWebHref =
+    canViewOnWeb && liveGuide?.city && liveGuide?.category && liveGuide?.slug
+      ? `/travel-guide/${encodeURIComponent(liveGuide.city.toLowerCase())}/${encodeURIComponent(liveGuide.category.toLowerCase())}/${encodeURIComponent(liveGuide.slug)}`
+      : null;
+
+  const sessionSavedAt = currentGuide?.id ? lastSavedById[currentGuide.id] : undefined;
+  const lastSavedLabel = sessionSavedAt
+    ? formatLastSaved(sessionSavedAt)
+    : currentGuide?.id && currentGuide.publishDate
+      ? currentGuide.publishDate
+      : null;
+
   return (
     <div className="space-y-6">
       {/* Toast Alert */}
@@ -238,7 +334,9 @@ export default function AdminGuidesPage() {
       <div className="flex items-center gap-2 border-b border-[var(--color-border-light)] pb-px">
         <button
           type="button"
-          onClick={() => setIsEditing(false)}
+          onClick={() => {
+            if (isEditing) handleBackToList();
+          }}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-[var(--color-brand)] text-[var(--color-brand)] cursor-pointer"
         >
           <BookOpen className="w-4 h-4" />
@@ -246,6 +344,9 @@ export default function AdminGuidesPage() {
         </button>
         <Link
           href="/admin/blog"
+          onClick={(e) => {
+            if (!confirmLeave()) e.preventDefault();
+          }}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-neutral-500 hover:text-neutral-900 transition-colors"
         >
           <FileText className="w-4 h-4" />
@@ -453,23 +554,41 @@ export default function AdminGuidesPage() {
         </div>
       ) : (
         /* Full 2-Column Editorial View (AC-CMS-3) */
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
+        <div className="space-y-6 pb-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => setIsEditing(false)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-brand)] hover:underline cursor-pointer"
+              onClick={handleBackToList}
+              data-testid="guide-back-btn"
+              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[var(--color-brand)] hover:underline cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Guides Table</span>
             </button>
-            <div className="text-xs text-neutral-400">
-              {currentGuide?.id ? `Editing Guide #${currentGuide.id}` : 'Drafting New Guide'}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+              <span>
+                {currentGuide?.id ? `Editing Guide #${currentGuide.id}` : 'Drafting New Guide'}
+              </span>
+              {viewOnWebHref && (
+                <Link
+                  href={viewOnWebHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="guide-view-on-web-link"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border-light)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-neutral-50 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-[var(--color-brand)]" />
+                  <span>View on Web</span>
+                </Link>
+              )}
             </div>
           </div>
 
           {formError && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2"
+            >
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{formError}</span>
             </div>
@@ -477,7 +596,7 @@ export default function AdminGuidesPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {/* Left 70%: Editorial Title, Summary, Rich Editor */}
-            <div className="lg:col-span-2 space-y-5">
+            <div className="lg:col-span-2 space-y-5 min-w-0">
               <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 shadow-2xs space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
@@ -523,7 +642,7 @@ export default function AdminGuidesPage() {
             </div>
 
             {/* Right 30%: Publishing card, Destination, Category, Featured, SEO */}
-            <div className="space-y-5">
+            <div className="space-y-5 min-w-0">
               {/* Publishing Controls */}
               <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-2xs space-y-4">
                 <h3 className="font-bold text-sm text-[var(--color-text-on-light)] pb-2 border-b border-[var(--color-border-light)]">
@@ -558,13 +677,21 @@ export default function AdminGuidesPage() {
                     />
                   </div>
 
+                  <div
+                    data-testid="guide-last-saved"
+                    className="flex items-center gap-2 text-xs text-[var(--color-text-on-light-muted)] pt-1"
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>{lastSavedLabel ? `Last saved: ${lastSavedLabel}` : 'Not saved yet'}</span>
+                  </div>
+
                   <div className="pt-2 flex flex-col gap-2">
                     <button
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => handleSave('published')}
                       data-testid="publish-guide-btn"
-                      className="w-full py-2.5 px-4 rounded-xl bg-[var(--color-brand)] text-white font-semibold text-xs hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
+                      className="w-full min-h-10 py-2.5 px-4 rounded-xl bg-[var(--color-brand)] text-white font-semibold text-xs hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
                     >
                       {isSubmitting ? 'Saving...' : 'Publish Article'}
                     </button>
@@ -573,7 +700,7 @@ export default function AdminGuidesPage() {
                       disabled={isSubmitting}
                       onClick={() => handleSave('draft')}
                       data-testid="save-draft-guide-btn"
-                      className="w-full py-2.5 px-4 rounded-xl border border-[var(--color-border-light)] bg-white text-neutral-700 font-semibold text-xs hover:bg-neutral-50 disabled:opacity-50 transition-colors cursor-pointer"
+                      className="w-full min-h-10 py-2.5 px-4 rounded-xl border border-[var(--color-border-light)] bg-white text-neutral-700 font-semibold text-xs hover:bg-neutral-50 disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       Save Draft
                     </button>
@@ -644,16 +771,19 @@ export default function AdminGuidesPage() {
                   </label>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-neutral-700 mb-1">Cover Image URL</label>
-                  <input
-                    type="text"
-                    value={currentGuide?.image || ''}
-                    onChange={(e) => setCurrentGuide((prev) => (prev ? { ...prev, image: e.target.value } : null))}
-                    placeholder="/seed/guide/placeholder.webp"
-                    className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
-                  />
-                </div>
+                <ImagePickerField
+                  id="guide-cover-image"
+                  label="Cover Image"
+                  value={currentGuide?.image || ''}
+                  onChange={(url) =>
+                    setCurrentGuide((prev) => (prev ? { ...prev, image: url } : null))
+                  }
+                  placeholder="/seed/guide/placeholder.webp"
+                  helperText="Upload, pick from Media Library, or enter a /seed/, /uploads/, or https:// URL."
+                  testIdPrefix="guide-cover-image"
+                  previewAlt={currentGuide?.title || 'Travel guide cover preview'}
+                  modalTitle="Choose Guide Cover Image"
+                />
 
                 <div>
                   <label className="block font-semibold text-neutral-700 mb-1">URL Slug</label>
@@ -707,6 +837,73 @@ export default function AdminGuidesPage() {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Sticky Save Bar */}
+          <div
+            data-testid="guide-sticky-save-bar"
+            className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--color-border-light)] bg-white/95 backdrop-blur-xs px-4 py-3 shadow-lg"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 rounded-full ${isDirty ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              />
+              <span
+                data-testid="guide-dirty-status"
+                className={
+                  isDirty
+                    ? 'text-amber-700 font-semibold'
+                    : 'text-[var(--color-text-on-light-muted)]'
+                }
+              >
+                {isDirty ? 'Unsaved changes' : 'Ready to save'}
+              </span>
+              {lastSavedLabel && (
+                <span className="text-[var(--color-text-on-light-muted)]">
+                  · Last saved: {lastSavedLabel}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                data-testid="guide-cancel-btn"
+                className="min-h-10 px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleSave('draft')}
+                data-testid="guide-sticky-draft-btn"
+                className="min-h-10 px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Save Draft
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleSave('published')}
+                data-testid="guide-sticky-publish-btn"
+                className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Publish Article</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

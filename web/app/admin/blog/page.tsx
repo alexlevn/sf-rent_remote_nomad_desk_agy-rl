@@ -10,6 +10,9 @@ import {
 } from '@/app/admin/cms-actions';
 import { TiptapEditor } from '@/features/admin/tiptap-editor';
 import { PaginationBar } from '@/features/admin/pagination-bar';
+import { ImagePickerField } from '@/features/media/image-picker-field';
+import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { isSafeImagePath } from '@/lib/validations/media';
 import {
   FileText,
   BookOpen,
@@ -21,6 +24,9 @@ import {
   Trash2,
   ArrowLeft,
   X,
+  Clock,
+  Save,
+  Loader2,
 } from 'lucide-react';
 
 const BLOG_CATEGORIES = [
@@ -31,6 +37,39 @@ const BLOG_CATEGORIES = [
   'Digital Nomad Lifestyle',
 ];
 const PAGE_SIZE = 20;
+
+function formatLastSaved(iso?: string): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  }).format(date)} UTC`;
+}
+
+function serializePostSnapshot(post: Partial<BlogPost> | null): string {
+  if (!post) return '';
+  return JSON.stringify({
+    title: post.title ?? '',
+    slug: post.slug ?? '',
+    category: post.category ?? '',
+    readTime: post.readTime ?? '',
+    publishDate: post.publishDate ?? '',
+    author: post.author ?? '',
+    image: post.image ?? '',
+    excerpt: post.excerpt ?? '',
+    content: post.content ?? '',
+    seoTitle: post.seoTitle ?? '',
+    seoDescription: post.seoDescription ?? '',
+    status: post.status ?? 'published',
+  });
+}
 
 export default function AdminBlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -48,8 +87,14 @@ export default function AdminBlogPage() {
   // Editor mode state
   const [isEditing, setIsEditing] = useState(false);
   const [currentPost, setCurrentPost] = useState<Partial<BlogPost> | null>(null);
+  const [persistedPost, setPersistedPost] = useState<BlogPost | null>(null);
+  const [baselineSnapshot, setBaselineSnapshot] = useState<string>('');
+  const [lastSavedById, setLastSavedById] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const isDirty = isEditing && serializePostSnapshot(currentPost) !== baselineSnapshot;
+  const { confirmLeave } = useUnsavedChanges(isDirty);
 
   const isActionRunningRef = useRef(false);
   const requestIdRef = useRef(0);
@@ -113,7 +158,7 @@ export default function AdminBlogPage() {
   }, [fetchPostsPage, page]);
 
   const handleOpenNew = () => {
-    setCurrentPost({
+    const draft: Partial<BlogPost> = {
       title: '',
       slug: '',
       category: 'Remote Setup',
@@ -126,7 +171,10 @@ export default function AdminBlogPage() {
       seoDescription: '',
       content: '<h2>Introduction</h2><p>Share your insights and tips for remote professionals...</p>',
       status: 'published',
-    });
+    };
+    setCurrentPost(draft);
+    setPersistedPost(null);
+    setBaselineSnapshot(serializePostSnapshot(draft));
     setFormError(null);
     setActionError(null);
     setIsEditing(true);
@@ -134,10 +182,22 @@ export default function AdminBlogPage() {
 
   const handleOpenEdit = (post: BlogPost) => {
     // Preserve seed content exactly (AC-CMS-3)
-    setCurrentPost({ ...post });
+    const editable = { ...post };
+    setCurrentPost(editable);
+    setPersistedPost(post);
+    setBaselineSnapshot(serializePostSnapshot(editable));
     setFormError(null);
     setActionError(null);
     setIsEditing(true);
+  };
+
+  const handleBackToList = () => {
+    if (!confirmLeave()) return;
+    setIsEditing(false);
+    setCurrentPost(null);
+    setPersistedPost(null);
+    setBaselineSnapshot('');
+    setFormError(null);
   };
 
   const handleSave = async (intentStatus?: 'published' | 'draft') => {
@@ -145,6 +205,12 @@ export default function AdminBlogPage() {
 
     if (!currentPost.title?.trim()) {
       setFormError('Please enter an article title.');
+      return;
+    }
+
+    const trimmedImage = (currentPost.image ?? '').trim();
+    if (!trimmedImage || !isSafeImagePath(trimmedImage)) {
+      setFormError('Cover image must be a valid /uploads/, /seed/, or https:// URL.');
       return;
     }
 
@@ -156,11 +222,12 @@ export default function AdminBlogPage() {
       const finalStatus = intentStatus || currentPost.status || 'published';
       const payload: Partial<BlogPost> = {
         ...currentPost,
+        image: trimmedImage,
         status: finalStatus,
         seoTitle: currentPost.seoTitle?.trim() || '',
         seoDescription: currentPost.seoDescription?.trim() || '',
         slug:
-          currentPost.slug ||
+          currentPost.slug?.trim() ||
           currentPost.title
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
@@ -168,14 +235,22 @@ export default function AdminBlogPage() {
       };
 
       const isNew = !currentPost.id;
-      await saveBlogPostAction(payload);
+      const result = await saveBlogPostAction(payload);
+      if (result?.post?.id) {
+        const savedAt = new Date().toISOString();
+        setLastSavedById((prev) => ({ ...prev, [result.post.id]: savedAt }));
+      }
       showToast(
         isNew
-          ? `Blog article "${payload.title}" published to /blog!`
+          ? finalStatus === 'draft'
+            ? `Blog article "${payload.title}" saved as draft!`
+            : `Blog article "${payload.title}" published to /blog!`
           : `Blog article "${payload.title}" updated successfully!`
       );
+      setBaselineSnapshot('');
       setIsEditing(false);
       setCurrentPost(null);
+      setPersistedPost(null);
       if (isNew && page !== 1) {
         setPage(1);
       } else {
@@ -211,6 +286,23 @@ export default function AdminBlogPage() {
     }
   };
 
+  const livePost = persistedPost ?? currentPost;
+  const canViewOnWeb = Boolean(
+    currentPost?.id &&
+      currentPost.status === 'published' &&
+      persistedPost?.status === 'published' &&
+      livePost?.slug
+  );
+  const viewOnWebHref =
+    canViewOnWeb && livePost?.slug ? `/blog/${encodeURIComponent(livePost.slug)}` : null;
+
+  const sessionSavedAt = currentPost?.id ? lastSavedById[currentPost.id] : undefined;
+  const lastSavedLabel = sessionSavedAt
+    ? formatLastSaved(sessionSavedAt)
+    : currentPost?.id && currentPost.publishDate
+      ? currentPost.publishDate
+      : null;
+
   return (
     <div className="space-y-6">
       {/* Toast Alert */}
@@ -225,6 +317,9 @@ export default function AdminBlogPage() {
       <div className="flex items-center gap-2 border-b border-[var(--color-border-light)] pb-px">
         <Link
           href="/admin/guides"
+          onClick={(e) => {
+            if (!confirmLeave()) e.preventDefault();
+          }}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-neutral-500 hover:text-neutral-900 transition-colors"
         >
           <BookOpen className="w-4 h-4" />
@@ -232,7 +327,9 @@ export default function AdminBlogPage() {
         </Link>
         <button
           type="button"
-          onClick={() => setIsEditing(false)}
+          onClick={() => {
+            if (isEditing) handleBackToList();
+          }}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-[var(--color-brand)] text-[var(--color-brand)] cursor-pointer"
         >
           <FileText className="w-4 h-4" />
@@ -430,23 +527,41 @@ export default function AdminBlogPage() {
         </div>
       ) : (
         /* Full 2-Column Editorial View */
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
+        <div className="space-y-6 pb-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => setIsEditing(false)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--color-brand)] hover:underline cursor-pointer"
+              onClick={handleBackToList}
+              data-testid="post-back-btn"
+              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[var(--color-brand)] hover:underline cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Blog Table</span>
             </button>
-            <div className="text-xs text-neutral-400">
-              {currentPost?.id ? `Editing Article #${currentPost.id}` : 'Drafting New Article'}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+              <span>
+                {currentPost?.id ? `Editing Article #${currentPost.id}` : 'Drafting New Article'}
+              </span>
+              {viewOnWebHref && (
+                <Link
+                  href={viewOnWebHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="post-view-on-web-link"
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border-light)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-neutral-50 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-[var(--color-brand)]" />
+                  <span>View on Web</span>
+                </Link>
+              )}
             </div>
           </div>
 
           {formError && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
+            <div
+              role="alert"
+              className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2"
+            >
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{formError}</span>
             </div>
@@ -454,7 +569,7 @@ export default function AdminBlogPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {/* Left 70%: Editorial Title, Summary, Rich Editor */}
-            <div className="lg:col-span-2 space-y-5">
+            <div className="lg:col-span-2 space-y-5 min-w-0">
               <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 shadow-2xs space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
@@ -499,7 +614,7 @@ export default function AdminBlogPage() {
             </div>
 
             {/* Right 30%: Publishing card, Taxonomy, Author, SEO */}
-            <div className="space-y-5">
+            <div className="space-y-5 min-w-0">
               {/* Publishing Controls */}
               <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-2xs space-y-4">
                 <h3 className="font-bold text-sm text-[var(--color-text-on-light)] pb-2 border-b border-[var(--color-border-light)]">
@@ -534,13 +649,21 @@ export default function AdminBlogPage() {
                     />
                   </div>
 
+                  <div
+                    data-testid="post-last-saved"
+                    className="flex items-center gap-2 text-xs text-[var(--color-text-on-light-muted)] pt-1"
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>{lastSavedLabel ? `Last saved: ${lastSavedLabel}` : 'Not saved yet'}</span>
+                  </div>
+
                   <div className="pt-2 flex flex-col gap-2">
                     <button
                       type="button"
                       disabled={isSubmitting}
                       onClick={() => handleSave('published')}
                       data-testid="publish-post-btn"
-                      className="w-full py-2.5 px-4 rounded-xl bg-[var(--color-brand)] text-white font-semibold text-xs hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
+                      className="w-full min-h-10 py-2.5 px-4 rounded-xl bg-[var(--color-brand)] text-white font-semibold text-xs hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
                     >
                       {isSubmitting ? 'Saving...' : 'Publish Post'}
                     </button>
@@ -549,7 +672,7 @@ export default function AdminBlogPage() {
                       disabled={isSubmitting}
                       onClick={() => handleSave('draft')}
                       data-testid="save-draft-post-btn"
-                      className="w-full py-2.5 px-4 rounded-xl border border-[var(--color-border-light)] bg-white text-neutral-700 font-semibold text-xs hover:bg-neutral-50 disabled:opacity-50 transition-colors cursor-pointer"
+                      className="w-full min-h-10 py-2.5 px-4 rounded-xl border border-[var(--color-border-light)] bg-white text-neutral-700 font-semibold text-xs hover:bg-neutral-50 disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       Save Draft
                     </button>
@@ -603,16 +726,19 @@ export default function AdminBlogPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-neutral-700 mb-1">Cover Image URL</label>
-                  <input
-                    type="text"
-                    value={currentPost?.image || ''}
-                    onChange={(e) => setCurrentPost((prev) => (prev ? { ...prev, image: e.target.value } : null))}
-                    placeholder="/seed/blog/blog-nomad-gear.webp"
-                    className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
-                  />
-                </div>
+                <ImagePickerField
+                  id="blog-cover-image"
+                  label="Cover Image"
+                  value={currentPost?.image || ''}
+                  onChange={(url) =>
+                    setCurrentPost((prev) => (prev ? { ...prev, image: url } : null))
+                  }
+                  placeholder="/seed/blog/blog-nomad-gear.webp"
+                  helperText="Upload, pick from Media Library, or enter a /seed/, /uploads/, or https:// URL."
+                  testIdPrefix="blog-cover-image"
+                  previewAlt={currentPost?.title || 'Blog post cover preview'}
+                  modalTitle="Choose Blog Cover Image"
+                />
 
                 <div>
                   <label className="block font-semibold text-neutral-700 mb-1">URL Slug</label>
@@ -666,6 +792,73 @@ export default function AdminBlogPage() {
                   </span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Sticky Save Bar */}
+          <div
+            data-testid="post-sticky-save-bar"
+            className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--color-border-light)] bg-white/95 backdrop-blur-xs px-4 py-3 shadow-lg"
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 rounded-full ${isDirty ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              />
+              <span
+                data-testid="post-dirty-status"
+                className={
+                  isDirty
+                    ? 'text-amber-700 font-semibold'
+                    : 'text-[var(--color-text-on-light-muted)]'
+                }
+              >
+                {isDirty ? 'Unsaved changes' : 'Ready to save'}
+              </span>
+              {lastSavedLabel && (
+                <span className="text-[var(--color-text-on-light-muted)]">
+                  · Last saved: {lastSavedLabel}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                data-testid="post-cancel-btn"
+                className="min-h-10 px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleSave('draft')}
+                data-testid="post-sticky-draft-btn"
+                className="min-h-10 px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 transition-colors cursor-pointer"
+              >
+                Save Draft
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => handleSave('published')}
+                data-testid="post-sticky-publish-btn"
+                className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Publish Post</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
