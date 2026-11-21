@@ -127,7 +127,7 @@ export default async function ApartmentDetailPage({ params }: PageProps) {
         <ImageGallery images={property.images} title={property.title} />
 
         {/* 2-Column Split: Content (65%) vs Sticky Booking Widget (35%) */}
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
           {/* Left Content Column (65%, ~816px on 1440px) */}
           <div className="flex-1 w-full min-w-0">
             {/* Specs Bar & Workstation Box (AC-DETAIL-1) */}
