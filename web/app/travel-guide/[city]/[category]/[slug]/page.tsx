@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getTravelGuideBySlug } from '@/lib/api/guides';
 import { listProperties } from '@/lib/api/properties';
-import { sanitizeHtml } from '@/lib/validations/content';
+import { hasHtmlTags, sanitizeHtml } from '@/lib/validations/content';
 import { ArticleLayout } from '@/features/content/article-layout';
 import { SuggestedApartments } from '@/features/content/suggested-apartments';
 
@@ -137,7 +137,7 @@ export default async function TravelGuideDetailPage({
         <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-4">
           Monthly accommodations typically provide up to 35% savings over nightly Airbnb rates, eliminating tourist taxes and cleaning surcharges.
         </p>
-        {guide.content.includes('<') ? (
+        {hasHtmlTags(guide.content) ? (
           <div
             className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
             dangerouslySetInnerHTML={{

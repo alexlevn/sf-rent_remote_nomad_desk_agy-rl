@@ -87,6 +87,8 @@ export function TiptapEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
+    // Tiptap v3 defaults to false; true keeps toolbar active/disabled states in sync with selection
+    shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit.configure({
         link: false,
@@ -161,11 +163,14 @@ export function TiptapEditor({
     setActiveDialog(type);
   };
 
-  const closeDialog = () => {
+  const closeDialog = (restoreFocus = false) => {
     setActiveDialog(null);
     setDialogInput('');
     setDialogAlt('');
     setDialogError(null);
+    if (restoreFocus) {
+      editor?.chain().focus().run();
+    }
   };
 
   const handleApplyDialog = () => {
@@ -217,7 +222,7 @@ export function TiptapEditor({
       handleApplyDialog();
     } else if (e.key === 'Escape') {
       e.preventDefault();
-      closeDialog();
+      closeDialog(true);
     }
   };
 
@@ -235,7 +240,7 @@ export function TiptapEditor({
 
   const toolbarBtnClass = (isActive = false, disabled = false) =>
     cn(
-      'p-1.5 rounded transition-colors cursor-pointer',
+      'flex items-center justify-center min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 p-2 sm:p-1.5 rounded transition-colors cursor-pointer',
       isActive
         ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)]'
         : 'text-[var(--color-text-on-light)] hover:bg-[var(--color-surface-muted)]',
@@ -557,7 +562,7 @@ export function TiptapEditor({
             </button>
             <button
               type="button"
-              onClick={closeDialog}
+              onClick={() => closeDialog(true)}
               className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] transition-colors cursor-pointer"
             >
               Cancel
@@ -578,7 +583,11 @@ export function TiptapEditor({
             data-testid={`${testIdPrefix}-visual`}
             className="cursor-text"
             style={{ minHeight }}
-            onClick={() => editor?.chain().focus().run()}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                editor?.chain().focus().run();
+              }
+            }}
           >
             <EditorContent editor={editor} />
           </div>

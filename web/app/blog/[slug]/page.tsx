@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { getBlogPostBySlug, listBlogPosts } from '@/lib/api/blog';
-import { sanitizeHtml } from '@/lib/validations/content';
+import { hasHtmlTags, sanitizeHtml } from '@/lib/validations/content';
 import { Badge } from '@/components/ui/badge';
 import { ArticleLayout } from '@/features/content/article-layout';
 
@@ -163,7 +163,7 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
           </p>
         </div>
 
-        {post.content.includes('<') ? (
+        {hasHtmlTags(post.content) ? (
           <div
             className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
             dangerouslySetInnerHTML={{
