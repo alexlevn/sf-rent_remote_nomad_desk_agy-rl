@@ -1,19 +1,36 @@
 import type { User, UserRole } from '@/lib/types';
 import { getUserById, getUserByEmail } from '@/lib/api/users';
+import { auth } from '@/lib/auth/config';
 
 const globalForAuth = globalThis as unknown as {
-  __nomaddeskCurrentUserId?: number;
+  __nomaddeskCurrentUserId?: number | null;
 };
 
 /**
- * Returns current authenticated mock user. Defaults to guest demo account.
+ * Returns current authenticated user.
+ * 1. Checks NextAuth session via auth()
+ * 2. Checks explicit global test/mock session
+ * 3. Falls back to demo user (id 1) if present in DB
  */
 export async function getCurrentUser(): Promise<User> {
-  const userId = globalForAuth.__nomaddeskCurrentUserId ?? 1;
-  const user = await getUserById(userId);
-  if (user) return user;
+  // 1. Try to get user from Auth.js session
+  try {
+    const session = await auth();
+    if (session?.user?.id) {
+      const user = await getUserById(Number(session.user.id));
+      if (user) return user;
+    }
+  } catch {
+    // Outside request context / headers not available
+  }
 
-  // Fallback to demo user
+  // 2. Global session for dev / mock testing
+  if (globalForAuth.__nomaddeskCurrentUserId !== undefined && globalForAuth.__nomaddeskCurrentUserId !== null) {
+    const user = await getUserById(globalForAuth.__nomaddeskCurrentUserId);
+    if (user) return user;
+  }
+
+  // 3. Fallback to demo user
   const fallback = await getUserByEmail('demo@example.com');
   if (fallback) return fallback;
 

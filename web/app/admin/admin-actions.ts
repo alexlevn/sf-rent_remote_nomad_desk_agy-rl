@@ -7,7 +7,7 @@ import {
   deleteProperty,
 } from '@/lib/api/properties';
 import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
-import { listUsers } from '@/lib/api/users';
+import { listUsers, updateUser } from '@/lib/api/users';
 import {
   listReservations,
   updateReservationStatus,
@@ -113,5 +113,25 @@ export async function cancelReservationAdminAction(
   revalidatePath('/');
   revalidatePath('/admin/reservations');
   revalidatePath('/guests/reservations');
+  return updated;
+}
+
+/**
+ * Fetches all users for the Admin Directory table.
+ */
+export async function fetchAdminUsersAction() {
+  return listUsers();
+}
+
+/**
+ * Updates a user account (e.g. role, active status) from the admin portal.
+ */
+export async function updateUserAction(
+  id: number,
+  data: Parameters<typeof updateUser>[1]
+) {
+  const updated = await updateUser(id, data);
+  revalidatePath('/admin');
+  revalidatePath('/admin/users');
   return updated;
 }

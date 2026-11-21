@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, startTransition } from 'react';
 import type { User, UserRole } from '@/lib/types';
-import { listUsers, updateUser } from '@/lib/api/users';
+import { fetchAdminUsersAction, updateUserAction } from '@/app/admin/admin-actions';
 import {
   Search,
   ShieldCheck,
@@ -26,7 +26,7 @@ export function UserTable() {
 
   const fetchUsers = async () => {
     try {
-      const data = await listUsers();
+      const data = await fetchAdminUsersAction();
       startTransition(() => {
         setUsers(data);
         setLoading(false);
@@ -78,7 +78,7 @@ export function UserTable() {
     }
 
     try {
-      await updateUser(targetUser.id, { role: newRole });
+      await updateUserAction(targetUser.id, { role: newRole });
       showToast(
         newRole === 'admin'
           ? `User ${targetUser.email} promoted to Administrator.`
@@ -104,7 +104,7 @@ export function UserTable() {
 
     const nextActive = !targetUser.isActive;
     try {
-      await updateUser(targetUser.id, { isActive: nextActive });
+      await updateUserAction(targetUser.id, { isActive: nextActive });
       showToast(
         nextActive
           ? `Account for ${targetUser.email} has been activated.`

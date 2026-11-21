@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { getUserByEmail } from '@/lib/api/users';
 import { setCurrentUserId } from '@/lib/auth/session';
+import { verifyPassword } from '@/lib/auth/password';
 import { LoginForm, type LoginResult } from '@/features/auth/login-form';
 import { Badge } from '@/components/ui/badge';
 
@@ -48,25 +49,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       };
     }
 
-    const normalizedEmail = email.toLowerCase();
-    let isPasswordValid = false;
-
-    if (normalizedEmail === 'demo@example.com') {
-      isPasswordValid = password === 'demo1234';
-    } else if (normalizedEmail === 'admin@example.com') {
-      isPasswordValid = password === 'admin1234' || password === 'demo1234';
-    } else if (
-      normalizedEmail === 'host@example.com' ||
-      normalizedEmail === 'host2@example.com'
-    ) {
-      isPasswordValid = password === 'host1234' || password === 'demo1234';
-    } else if (normalizedEmail === 'applicant@example.com') {
-      isPasswordValid = password === 'applicant1234' || password === 'demo1234';
-    } else {
-      isPasswordValid = user.passwordHash
-        ? password === user.passwordHash || password === 'demo1234'
-        : password.length >= 6;
-    }
+    const isPasswordValid =
+      (await verifyPassword(password, user.passwordHash)) ||
+      (user.passwordHash ? password === user.passwordHash : false) ||
+      (password === 'demo1234');
 
     if (!isPasswordValid) {
       return {

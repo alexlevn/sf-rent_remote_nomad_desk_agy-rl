@@ -9,7 +9,7 @@ import {
 import { listProperties } from '@/lib/api/properties';
 import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
 import { listReservations } from '@/lib/api/reservations';
-import { listUsers } from '@/lib/api/users';
+import { fetchAdminUsersAction } from '@/app/admin/admin-actions';
 import type { HostProfile, Property, User } from '@/lib/types';
 import {
   UserCheck,
@@ -45,7 +45,7 @@ export default function AdminDashboardPage() {
         listProperties({ status: 'all' }),
         listHosts(),
         listReservations(),
-        listUsers(),
+        fetchAdminUsersAction(),
       ]);
 
       const published = allProperties.filter((p) => p.status === 'published');

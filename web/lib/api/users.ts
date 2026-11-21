@@ -1,70 +1,95 @@
-import type { User } from '@/lib/types';
-import { getMockStore } from './mock/seed-data';
+import { eq, sql } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { users } from '@/lib/db/schema';
+import type { User, UserRole } from '@/lib/types';
+
+function mapUserRow(row: typeof users.$inferSelect): User {
+  return {
+    id: row.id,
+    email: row.email,
+    passwordHash: row.passwordHash,
+    firstName: row.firstName || '',
+    lastName: row.lastName || '',
+    role: row.role as UserRole,
+    isActive: row.isActive,
+    createdAt: row.createdAt ? row.createdAt.toISOString() : undefined,
+  };
+}
 
 /**
  * Lists all registered users in the platform.
  */
 export async function listUsers(): Promise<User[]> {
-  const store = getMockStore();
-  return store.users.map((u) => ({ ...u }));
+  const rows = await db.select().from(users).orderBy(users.id);
+  return rows.map(mapUserRow);
 }
 
 /**
  * Retrieves a user by ID.
  */
 export async function getUserById(id: number): Promise<User | null> {
-  const store = getMockStore();
-  const user = store.users.find((u) => u.id === id);
-  return user ? { ...user } : null;
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return rows.length > 0 ? mapUserRow(rows[0]) : null;
 }
 
 /**
  * Retrieves a user by email address.
  */
 export async function getUserByEmail(email: string): Promise<User | null> {
-  const store = getMockStore();
-  const user = store.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-  return user ? { ...user } : null;
+  const normalized = email.trim().toLowerCase();
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(sql`lower(${users.email})`, normalized))
+    .limit(1);
+  return rows.length > 0 ? mapUserRow(rows[0]) : null;
 }
 
 /**
  * Updates a user account (e.g. status, profile, role).
  */
 export async function updateUser(id: number, data: Partial<User>): Promise<User> {
-  const store = getMockStore();
-  const index = store.users.findIndex((u) => u.id === id);
-  if (index === -1) {
+  const updateValues: Record<string, unknown> = {};
+  if (data.email !== undefined) updateValues.email = data.email.trim().toLowerCase();
+  if (data.passwordHash !== undefined) updateValues.passwordHash = data.passwordHash;
+  if (data.firstName !== undefined) updateValues.firstName = data.firstName;
+  if (data.lastName !== undefined) updateValues.lastName = data.lastName;
+  if (data.role !== undefined) updateValues.role = data.role;
+  if (data.isActive !== undefined) updateValues.isActive = data.isActive;
+
+  const rows = await db
+    .update(users)
+    .set(updateValues)
+    .where(eq(users.id, id))
+    .returning();
+
+  if (!rows.length) {
     throw new Error(`User ${id} not found`);
   }
-
-  const updated: User = {
-    ...store.users[index],
-    ...data,
-    id: store.users[index].id,
-  };
-  store.users[index] = updated;
-  return { ...updated };
+  return mapUserRow(rows[0]);
 }
 
 /**
  * Creates a new user account (e.g. during register).
  */
 export async function createUser(data: Omit<User, 'id'>): Promise<User> {
-  const store = getMockStore();
-  const exists = store.users.some((u) => u.email.toLowerCase() === data.email.toLowerCase());
-  if (exists) {
+  const normalized = data.email.trim().toLowerCase();
+  const existing = await getUserByEmail(normalized);
+  if (existing) {
     throw new Error(`Email ${data.email} is already registered`);
   }
 
-  const maxId = store.users.reduce((max, u) => Math.max(max, u.id), 0);
-  const newUser: User = {
-    ...data,
-    id: maxId + 1,
-    isActive: data.isActive ?? true,
-    role: data.role || 'guest',
-    createdAt: new Date().toISOString(),
-  };
+  const rows = await db
+    .insert(users)
+    .values({
+      email: normalized,
+      passwordHash: data.passwordHash,
+      firstName: data.firstName || '',
+      lastName: data.lastName || '',
+      role: data.role || 'guest',
+      isActive: data.isActive ?? true,
+    })
+    .returning();
 
-  store.users.push(newUser);
-  return { ...newUser };
+  return mapUserRow(rows[0]);
 }

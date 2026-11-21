@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getUserByEmail, createUser } from '@/lib/api/users';
 import { setCurrentUserId } from '@/lib/auth/session';
+import { hashPassword } from '@/lib/auth/password';
 import { RegisterForm, type RegisterResult } from '@/features/auth/register-form';
 
 export const metadata: Metadata = {
@@ -40,11 +41,13 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         };
       }
 
+      const hashedPassword = await hashPassword(data.password);
+
       const newUser = await createUser({
         firstName: data.firstName.trim(),
         lastName: data.lastName.trim(),
         email,
-        passwordHash: data.password,
+        passwordHash: hashedPassword,
         role: 'guest',
         isActive: true,
       });
