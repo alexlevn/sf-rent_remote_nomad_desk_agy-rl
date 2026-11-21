@@ -225,21 +225,13 @@ test.describe('City Search & Filters E2E Suite', () => {
     const notFoundRes = await page.goto('/l/apartments/non-existent-draft-listing-slug');
     expect(notFoundRes?.status()).toBe(404);
 
-    // 2. Authenticate as Host and visit Host Listings
+    // 2. Authenticate as Host via Auth.js credentials and visit Host Listings
     await page.goto('/login');
-    await page.evaluate(() => {
-      localStorage.setItem(
-        'nomaddesk_user',
-        JSON.stringify({
-          id: 3,
-          email: 'host@example.com',
-          name: 'Casa Urbana',
-          role: 'host',
-          firstName: 'Casa',
-          lastName: 'Urbana',
-        })
-      );
-    });
+    await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
+    await page.getByLabel(/email address/i).fill('host@example.com');
+    await page.getByLabel(/password/i).fill('host1234');
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+    await page.waitForURL('/');
 
     await page.goto('/host/listings');
 

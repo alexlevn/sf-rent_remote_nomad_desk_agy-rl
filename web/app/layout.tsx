@@ -5,6 +5,9 @@ import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { SITE_CONFIG } from '@/content/site';
 
+// Render routes dynamically at request time so Docker builds need no live DB and CMS/DB edits appear immediately
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: SITE_CONFIG.title,
   description: SITE_CONFIG.description,

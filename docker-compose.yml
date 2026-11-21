@@ -29,6 +29,8 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      additional_contexts:
+        seed: ./docs/seed
     container_name: nomaddesk_web
     ports:
       - "3288:3288"
@@ -41,6 +43,8 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/nomaddesk
       NEXTAUTH_URL: http://localhost:3288
       NEXTAUTH_SECRET: nomaddesk_jwt_secret_dev
+      AUTH_SECRET: nomaddesk_jwt_secret_dev
+      AUTH_TRUST_HOST: "true"
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       UPLOAD_DIR: /app/web/.data/uploads
@@ -49,6 +53,12 @@ services:
     volumes:
       - ky-uploads:/app/web/.data/uploads
     command: sh -c "npm run db:migrate && npm run db:seed && npm start"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3288/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres_data:
