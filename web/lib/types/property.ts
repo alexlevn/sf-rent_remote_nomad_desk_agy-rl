@@ -57,9 +57,11 @@ export interface Property {
 
 export interface PropertyFilterParams {
   city?: string;
+  neighborhood?: string;
   moveIn?: string;
   moveOut?: string;
   bedrooms?: number;
+  exactBedrooms?: boolean;
   minPrice?: number;
   maxPrice?: number;
   amenities?: string[];

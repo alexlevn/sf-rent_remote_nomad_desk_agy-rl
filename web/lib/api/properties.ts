@@ -16,13 +16,16 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
   const store = getMockStore();
   let result = [...store.properties];
 
-  // Status filtering (default: 'published' only, unless 'all' or explicit status requested)
+  // Status filtering (default: 'published' only from approved hosts, unless 'all' or explicit status requested)
   if (params?.status === 'all') {
     // Return properties of all statuses
   } else if (params?.status) {
     result = result.filter((p) => p.status === params.status);
   } else {
-    result = result.filter((p) => p.status === 'published');
+    const approvedHostIds = new Set(
+      store.hosts.filter((h) => h.status === 'approved').map((h) => h.id)
+    );
+    result = result.filter((p) => p.status === 'published' && approvedHostIds.has(p.hostId));
   }
 
   // City filter (case-insensitive on city name or slug)
@@ -36,6 +39,12 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
     );
   }
 
+  // Neighborhood filter
+  if (params?.neighborhood) {
+    const qNeigh = params.neighborhood.trim().toLowerCase();
+    result = result.filter((p) => p.neighborhood.toLowerCase() === qNeigh);
+  }
+
   // Host filter
   if (params?.hostId != null) {
     result = result.filter((p) => p.hostId === params.hostId);
@@ -46,9 +55,13 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
     result = result.filter((p) => p.featuredPosition != null || p.isFeatured === true);
   }
 
-  // Bedrooms filter (minimum bedrooms)
+  // Bedrooms filter (exact or minimum)
   if (params?.bedrooms != null) {
-    result = result.filter((p) => p.bedrooms >= params.bedrooms!);
+    if (params.exactBedrooms) {
+      result = result.filter((p) => p.bedrooms === params.bedrooms!);
+    } else {
+      result = result.filter((p) => p.bedrooms >= params.bedrooms!);
+    }
   }
 
   // Min price filter (cents)
@@ -117,11 +130,23 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
 
 /**
  * Retrieves a property by its URL slug.
+ * By default requires property to be 'published' and its host 'approved' (AC-LIST-6).
  */
-export async function getPropertyBySlug(slug: string): Promise<Property | null> {
+export async function getPropertyBySlug(
+  slug: string,
+  options?: { allowUnpublished?: boolean }
+): Promise<Property | null> {
   const store = getMockStore();
   const property = store.properties.find((p) => p.slug === slug);
-  return property ? { ...property } : null;
+  if (!property) return null;
+
+  if (!options?.allowUnpublished) {
+    if (property.status !== 'published') return null;
+    const host = store.hosts.find((h) => h.id === property.hostId);
+    if (!host || host.status !== 'approved') return null;
+  }
+
+  return { ...property };
 }
 
 /**

@@ -12,9 +12,14 @@ export async function listLocations(): Promise<Location[]> {
 /**
  * Retrieves a destination location by slug (e.g. 'madrid', 'barcelona').
  */
-export async function getLocationBySlug(slug: string): Promise<Location | null> {
+export async function getLocationBySlug(slug?: string): Promise<Location | null> {
+  if (!slug || typeof slug !== 'string') return null;
   const store = getMockStore();
-  const loc = store.locations.find((l) => l.slug === slug || l.city.toLowerCase() === slug.toLowerCase());
+  // Strip 'furnished-apartments-' prefix if present
+  const cleanSlug = slug.replace(/^furnished-apartments-/, '').trim().toLowerCase();
+  const loc = store.locations.find(
+    (l) => l.slug.toLowerCase() === cleanSlug || l.city.toLowerCase() === cleanSlug
+  );
   return loc ? { ...loc } : null;
 }
 
