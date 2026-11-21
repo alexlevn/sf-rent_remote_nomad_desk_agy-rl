@@ -89,7 +89,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
 
   return (
     <div className="p-8 sm:p-10">
-      <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-on-light)] tracking-tight mb-2">
+      <h1 className="text-2xl font-bold text-[var(--color-text-on-light)] tracking-tight mb-2">
         Welcome back
       </h1>
       <p className="text-sm text-[var(--color-text-on-light-muted)] mb-6">

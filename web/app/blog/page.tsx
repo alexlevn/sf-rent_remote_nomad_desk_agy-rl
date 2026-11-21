@@ -22,7 +22,7 @@ export default async function BlogHubPage() {
             <div className="mb-3">
               <Badge variant="accent">Editorial</Badge>
             </div>
-            <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white mb-4 leading-tight">
+            <h1 className="text-2xl sm:text-4xl lg:text-[40px] lg:leading-[44px] font-bold tracking-tight text-white mb-4 leading-tight">
               Insights for Remote Workers &amp; Digital Nomads
             </h1>
             <p className="text-sm sm:text-base text-[#d1c8be] leading-relaxed">

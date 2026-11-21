@@ -12,7 +12,7 @@ export default function CorporateHousingPage() {
   return (
     <main className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full">
       <div className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-bold text-[var(--color-text-on-light)] tracking-tight mb-4">
+        <h1 className="text-3xl sm:text-[36px] font-bold text-[var(--color-text-on-light)] tracking-tight mb-4">
           {CORPORATE_HOUSING_CONTENT.title}
         </h1>
         <p className="text-lg sm:text-xl text-[var(--color-text-on-light)] leading-relaxed">

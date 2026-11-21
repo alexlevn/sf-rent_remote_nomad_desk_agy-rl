@@ -64,7 +64,7 @@ export default function PartnerNetworkPage() {
             </Badge>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-tight">
+          <h1 className="text-4xl sm:text-5xl lg:text-[56px] lg:leading-[58px] font-bold text-white tracking-tight leading-tight">
             Grow Your Portfolio with High-Quality Nomad Tenants
           </h1>
 
@@ -143,7 +143,7 @@ export default function PartnerNetworkPage() {
           <span className="text-xs uppercase tracking-widest font-bold text-[var(--color-brand)] block mb-2">
             Seamless Onboarding
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
+          <h2 className="text-3xl sm:text-4xl lg:text-[48px] lg:leading-[48px] font-bold tracking-tight text-white mb-4">
             4 Steps to Hosting on NomadDesk
           </h2>
           <p className="text-sm sm:text-base text-[var(--color-text-on-dark-muted)] max-w-2xl mx-auto">
