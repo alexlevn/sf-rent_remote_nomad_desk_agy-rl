@@ -1,31 +1,64 @@
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { SITE_CONFIG } from '@/content/site';
+import type { Metadata } from 'next';
+import { listLocations } from '@/lib/api/locations';
+import { listProperties } from '@/lib/api/properties';
+import { listVideos } from '@/lib/api/videos';
+import { listTravelGuides } from '@/lib/api/guides';
+import { HeroSearch } from '@/features/home/hero-search';
+import { FeaturedApartments } from '@/features/home/featured-apartments';
+import { TopCities } from '@/features/home/top-cities';
+import { Showcase3D } from '@/features/home/showcase-3d';
+import { WorkstationStrip } from '@/features/home/workstation-strip';
+import { CommunityReels } from '@/features/home/community-reels';
+import { GuideHighlights } from '@/features/home/guide-highlights';
+import { HomeFAQ } from '@/features/home/home-faq';
+import { UIStateShowcase } from '@/features/home/ui-state-showcase';
 
-export default function HomePage() {
+export const metadata: Metadata = {
+  title: 'NomadDesk — Furnished Apartments with Ergonomic Workstations for Monthly Rent',
+  description:
+    'Curated monthly furnished apartments equipped with dual 4K monitors, ergonomic executive seating, and verified high-speed fiber internet for digital nomads.',
+};
+
+export default async function HomePage() {
+  const [locations, properties, videos, guides] = await Promise.all([
+    listLocations(),
+    listProperties({ featured: true }),
+    listVideos(),
+    listTravelGuides({ featured: true }),
+  ]);
+
+  // Fallback to general list if featured query returned fewer than 3
+  const displayProperties =
+    properties.length >= 3 ? properties : await listProperties();
+
   return (
-    <section className="flex-1 flex flex-col items-center justify-center p-8 sm:p-16 text-center max-w-4xl mx-auto">
-      <Badge variant="accent" className="mb-4">
-        ⚡ Dedicated Ergonomic Workstation in Every Home
-      </Badge>
-      <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-[var(--color-text-on-light)] mb-4">
-        Furnished Apartments for Monthly Rentals with Proper Desks
-      </h1>
-      <p className="text-base sm:text-lg text-[var(--color-text-on-light-muted)] max-w-2xl mb-8">
-        Pack one suitcase. Arrive, unpack, and sit down at a dual-monitor 4K desk
-        with guaranteed fiber internet in top remote work hubs worldwide.
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-4">
-        <Button asChild size="lg" pill>
-          <Link href={SITE_CONFIG.links.browse}>Browse Apartments</Link>
-        </Button>
-        <Button asChild variant="outline" size="lg" pill>
-          <Link href={SITE_CONFIG.links.workstationBuilder}>
-            Build Your Workstation
-          </Link>
-        </Button>
-      </div>
-    </section>
+    <div className="flex flex-col min-h-screen">
+      {/* 1. Hero Search Box */}
+      <HeroSearch locations={locations} />
+
+      {/* 2. Featured Apartments Grid */}
+      <FeaturedApartments properties={displayProperties} />
+
+      {/* 3. Top Cities for Remote Work */}
+      <TopCities locations={locations} />
+
+      {/* 4. 3D Stay Showcase & Process */}
+      <Showcase3D />
+
+      {/* 5. Workstation Upgrade Banner */}
+      <WorkstationStrip />
+
+      {/* 6. Community Video Reels */}
+      <CommunityReels videos={videos} />
+
+      {/* 7. Travel Guides Highlights */}
+      <GuideHighlights guides={guides} />
+
+      {/* 8. FAQs Accordion */}
+      <HomeFAQ />
+
+      {/* 9. UI States & Verification Showcase */}
+      <UIStateShowcase />
+    </div>
   );
 }
