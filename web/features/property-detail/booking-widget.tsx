@@ -8,6 +8,11 @@ import { calculateBookingTotal } from '@/lib/pricing';
 import { CalendarPicker } from './calendar-picker';
 import type { BlockedDate, Property, Reservation } from '@/lib/types';
 
+const PRO_UPGRADE_MONTHLY_EUR_CENTS = 15000;
+const DEFAULT_MOVE_IN_OFFSET_DAYS = 90;
+const DEFAULT_MOVE_OUT_OFFSET_DAYS = 120;
+const DEFAULT_MIN_STAY_NIGHTS = 30;
+
 interface BookingWidgetProps {
   property: Property;
   blockedDates?: BlockedDate[];
@@ -26,9 +31,9 @@ export function BookingWidget({
   // Default initial dates: 90 days out to 120 days out (30 nights)
   const defaultDates = useMemo(() => {
     const dIn = new Date();
-    dIn.setDate(dIn.getDate() + 90);
+    dIn.setDate(dIn.getDate() + DEFAULT_MOVE_IN_OFFSET_DAYS);
     const dOut = new Date();
-    dOut.setDate(dOut.getDate() + 120);
+    dOut.setDate(dOut.getDate() + DEFAULT_MOVE_OUT_OFFSET_DAYS);
     return {
       moveIn: dIn.toISOString().slice(0, 10),
       moveOut: dOut.toISOString().slice(0, 10),
@@ -40,7 +45,7 @@ export function BookingWidget({
   const [workstationSetup, setWorkstationSetup] = useState<'comfort' | 'pro'>('comfort');
   const [showCalendar, setShowCalendar] = useState(false);
 
-  const minNights = property.minimumStayNights || 30;
+  const minNights = property.minimumStayNights || DEFAULT_MIN_STAY_NIGHTS;
 
   // Calculate nights
   const nights = useMemo(() => {
@@ -76,7 +81,8 @@ export function BookingWidget({
   const isDateUnavailable = isConflict || isInvalidNights;
 
   // Workstation add-on EUR cents
-  const workstationEURCents = workstationSetup === 'pro' ? 15000 : 0;
+  const workstationEURCents =
+    workstationSetup === 'pro' ? PRO_UPGRADE_MONTHLY_EUR_CENTS : 0;
 
   // Calculate pricing breakdown in real-time (AC-DETAIL-2)
   const pricing = useMemo(() => {
