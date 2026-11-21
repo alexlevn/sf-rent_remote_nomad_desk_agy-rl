@@ -15,7 +15,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    throw error;
+    console.error('[api/media] Auth check failed:', error);
+    return NextResponse.json({ error: 'Authentication check failed.' }, { status: 500 });
   }
 
   const searchParams = request.nextUrl.searchParams;

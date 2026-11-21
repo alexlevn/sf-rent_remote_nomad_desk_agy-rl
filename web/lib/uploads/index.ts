@@ -1,4 +1,5 @@
 import {
+  MAX_MEDIA_ALT_LENGTH,
   MediaServiceError,
   deleteUnusedMedia,
   findMediaUsages,
@@ -37,6 +38,7 @@ export async function handleImageUpload(
 
 export {
   MAX_IMAGE_DIMENSION,
+  MAX_MEDIA_ALT_LENGTH,
   MAX_UPLOAD_FILE_SIZE,
   MediaServiceError,
   UploadValidationError,

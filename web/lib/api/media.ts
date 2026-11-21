@@ -13,7 +13,7 @@ import { deleteUploadFile, saveUploadedFile } from '@/lib/storage/upload';
 import type { MediaItem, MediaListResult, UploadActor } from '@/lib/types';
 
 const INT4_MAX = 2_147_483_647;
-const MAX_ALT_LENGTH = 255;
+export const MAX_MEDIA_ALT_LENGTH = 255;
 
 export type MediaServiceErrorStatus = 400 | 403 | 404 | 409;
 
@@ -71,7 +71,7 @@ function normalizeAlt(alt?: string | null): string | null {
   if (typeof alt !== 'string') return null;
   const trimmed = alt.trim();
   if (trimmed.length === 0) return null;
-  return trimmed.slice(0, MAX_ALT_LENGTH);
+  return trimmed.slice(0, MAX_MEDIA_ALT_LENGTH);
 }
 
 function escapeIlike(input: string): string {
@@ -407,9 +407,14 @@ export async function deleteUnusedMedia(
     );
   }
 
+  const deleteWhere =
+    actor.role === 'host'
+      ? and(eq(media.id, row.id), eq(media.uploadedBy, actor.user.id))
+      : eq(media.id, row.id);
+
   const deletedRows = await db
     .delete(media)
-    .where(eq(media.id, row.id))
+    .where(deleteWhere)
     .returning({ id: media.id, storageKey: media.storageKey });
 
   if (deletedRows.length === 0) {

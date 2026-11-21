@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthError, requireUploadActor } from '@/lib/auth/guards';
 import {
+  MAX_MEDIA_ALT_LENGTH,
   MAX_UPLOAD_FILE_SIZE,
   MediaServiceError,
   UploadValidationError,
@@ -13,7 +14,6 @@ export const dynamic = 'force-dynamic';
 
 // Allow small multipart boundary/field overhead above the 5 MB file limit
 const MAX_MULTIPART_CONTENT_LENGTH = MAX_UPLOAD_FILE_SIZE + 256 * 1024;
-const MAX_ALT_LENGTH = 255;
 
 function isBlobLike(value: unknown): value is Blob {
   return (
@@ -32,7 +32,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    throw error;
+    console.error('[api/uploads] Auth check failed:', error);
+    return NextResponse.json({ error: 'Authentication check failed.' }, { status: 500 });
   }
 
   // Reject obviously oversized payloads before buffering multipart body into memory
@@ -78,9 +79,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
     const trimmedAlt = rawAlt.trim();
-    if (trimmedAlt.length > MAX_ALT_LENGTH) {
+    if (trimmedAlt.length > MAX_MEDIA_ALT_LENGTH) {
       return NextResponse.json(
-        { error: `Alt text must be ${MAX_ALT_LENGTH} characters or fewer.` },
+        { error: `Alt text must be ${MAX_MEDIA_ALT_LENGTH} characters or fewer.` },
         { status: 400 },
       );
     }
