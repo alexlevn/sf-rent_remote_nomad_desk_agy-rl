@@ -1,4 +1,7 @@
+import { randomInt } from 'node:crypto';
 import { and, asc, desc, eq, inArray, isNotNull, lt, sql, type SQL } from 'drizzle-orm';
+import { z } from 'zod';
+import { getExchangeRates } from '@/lib/api/rates';
 import { db } from '@/lib/db/client';
 import {
   blockedDates,
@@ -9,7 +12,9 @@ import {
 } from '@/lib/db/schema';
 import {
   notifyBookingCancelled,
+  notifyBookingConfirmed,
   notifyBookingDecision,
+  notifyNewBookingRequest,
 } from '@/lib/email/notifications';
 import { getPaymentDriver } from '@/lib/payments/driver';
 import { calculateBookingTotal } from '@/lib/pricing';
@@ -26,8 +31,36 @@ import type {
 import {
   blockedDateInputSchema,
   hostInt4IdSchema,
+  isoDateSchema,
 } from '@/lib/validations/host';
-import { getMockStore } from './mock/seed-data';
+
+const createReservationInputSchema = z
+  .object({
+    propertyId: hostInt4IdSchema,
+    moveInDate: isoDateSchema,
+    moveOutDate: isoDateSchema,
+    guestName: z.string().trim().min(1, 'Guest name is required').max(150),
+    guestEmail: z.string().trim().email('Valid guest email is required').max(150),
+    guestPhone: z.string().trim().max(50).optional(),
+    userId: hostInt4IdSchema.optional(),
+    workstationMonthlyEUR: z.number().int().min(0).max(10000000).optional(),
+    workstationConfig: z.record(z.string(), z.unknown()).nullable().optional(),
+  })
+  .refine((data) => data.moveOutDate > data.moveInDate, {
+    message: 'Move-out date must be after move-in date',
+    path: ['moveOutDate'],
+  });
+
+function getPgErrorCode(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const record = err as { code?: unknown; cause?: unknown };
+  if (typeof record.code === 'string') return record.code;
+  if (typeof record.cause === 'object' && record.cause !== null) {
+    const causeCode = (record.cause as { code?: unknown }).code;
+    if (typeof causeCode === 'string') return causeCode;
+  }
+  return undefined;
+}
 
 function mapReservationRow(row: typeof reservations.$inferSelect): Reservation {
   return {
@@ -75,18 +108,11 @@ function mapBlockedDateRow(row: typeof blockedDates.$inferSelect): BlockedDate {
 }
 
 /**
- * Checks if two date intervals [startA, endA) and [startB, endB) overlap.
- */
-function datesOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
-  return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
-}
-
-/**
- * Calculates number of nights between two YYYY-MM-DD date strings.
+ * Calculates number of nights between two YYYY-MM-DD date strings (UTC).
  */
 function calculateNights(moveInDate: string, moveOutDate: string): number {
-  const dIn = new Date(moveInDate);
-  const dOut = new Date(moveOutDate);
+  const dIn = new Date(`${moveInDate}T00:00:00Z`);
+  const dOut = new Date(`${moveOutDate}T00:00:00Z`);
   const diffMs = dOut.getTime() - dIn.getTime();
   return Math.round(diffMs / (1000 * 3600 * 24));
 }
@@ -215,98 +241,276 @@ export async function getReservationById(id: number): Promise<Reservation | null
 }
 
 /**
- * Creates a new reservation with instant booking or request-to-book workflow.
- * (Full DB transaction + FOR UPDATE + exclusion constraint implemented in T12.)
+ * Creates a new reservation in a single DB transaction with row-level locking
+ * (SELECT ... FOR UPDATE), lazy 48h expiry, server-side pricing, MockPaymentDriver,
+ * Postgres exclusion constraint (23P01) fallback, and Mailpit notifications.
  */
 export async function createReservation(
   data: CreateReservationInput
 ): Promise<Reservation> {
-  const store = getMockStore();
-  const property = store.properties.find((p) => p.id === data.propertyId);
-  if (!property) {
-    throw new Error(`Property ${data.propertyId} not found`);
+  const parsedResult = createReservationInputSchema.safeParse({
+    ...data,
+    workstationConfig: data.workstationConfig ?? null,
+  });
+  if (!parsedResult.success) {
+    const firstMsg =
+      parsedResult.error.issues[0]?.message || 'Invalid reservation input';
+    throw new Error(firstMsg);
   }
+  const valid = parsedResult.data;
 
-  // Validate minimum stay requirement
-  const nights = calculateNights(data.moveInDate, data.moveOutDate);
-  const minStay = property.minimumStayNights || BOOKING_RULES.minimumStayNights;
-  if (nights < minStay) {
-    throw new Error(`Minimum stay requirement is ${minStay} nights (requested ${nights} nights)`);
-  }
+  const rates = await getExchangeRates();
+  const paymentDriver = getPaymentDriver();
 
-  // Availability collision check: blocked dates
-  const isBlocked = store.blockedDates.some(
-    (b) =>
-      b.propertyId === property.id &&
-      datesOverlap(b.startDate, b.endDate, data.moveInDate, data.moveOutDate)
-  );
-  if (isBlocked) {
-    throw new Error('Selected dates are blocked by host and unavailable for booking');
-  }
-
-  // Availability collision check: active reservations (pending or confirmed)
-  const isConflict = store.reservations.some(
-    (r) =>
-      r.propertyId === property.id &&
-      (r.status === 'pending' || r.status === 'confirmed') &&
-      datesOverlap(r.moveInDate, r.moveOutDate, data.moveInDate, data.moveOutDate)
-  );
-  if (isConflict) {
-    throw new Error('Selected dates are already booked by another reservation');
-  }
-
-  // Calculate pricing
-  const pricing = calculateBookingTotal(
-    property.pricePerMonth,
-    nights,
-    data.workstationMonthlyEUR || 0,
-    store.rates
-  );
-
-  const now = new Date();
-  const maxId = store.reservations.reduce((max, r) => Math.max(max, r.id), 0);
-  const newId = maxId + 1;
-  const bookingCode = `ND-${Math.floor(10000 + Math.random() * 90000)}`;
-
-  // Instant booking vs Request-to-book (D12, D13)
-  const isInstant = property.isDirectBooking;
-  const initialStatus: ReservationStatus = isInstant ? 'confirmed' : 'pending';
-  const initialPaymentStatus = isInstant ? 'captured' : 'authorized';
-  const respondBy = isInstant
-    ? null
-    : new Date(now.getTime() + BOOKING_RULES.respondHours * 3600 * 1000).toISOString();
-
-  const newReservation: Reservation = {
-    id: newId,
-    code: bookingCode,
-    userId: data.userId || 1, // Default to guest demo user if not logged in
-    propertyId: property.id,
-    moveInDate: data.moveInDate,
-    moveOutDate: data.moveOutDate,
-    nights,
-    monthlyRent: property.pricePerMonth,
-    rentAmount: pricing.rentAmountUSD,
-    workstationFee: pricing.workstationFeeUSD,
-    totalAmount: pricing.totalAmountUSD,
-    commissionAmount: pricing.commissionAmountUSD,
-    hostPayout: pricing.hostPayoutUSD,
-    workstationConfig: data.workstationConfig || null,
-    guestName: data.guestName,
-    guestEmail: data.guestEmail,
-    guestPhone: data.guestPhone || '',
-    status: initialStatus,
-    respondBy,
-    paymentStatus: initialPaymentStatus,
-    paymentRef: `mock_txn_${Date.now()}`,
-    commissionRate: BOOKING_RULES.commissionPercent,
-    respondHours: BOOKING_RULES.respondHours,
-    freeCancelDays: BOOKING_RULES.freeCancelDays,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
+  let expiredPaymentRefs: string[] = [];
+  let authorizedPaymentRef: string | null = null;
+  let txResult: {
+    reservation: Reservation;
+    propertyInfo: {
+      title: string;
+      city: string;
+      country: string;
+      neighborhood: string;
+      address: string;
+    };
+    hostId: number | null;
+    isInstant: boolean;
   };
 
-  store.reservations.unshift(newReservation);
-  return { ...newReservation };
+  try {
+    txResult = await db.transaction(async (tx) => {
+      // 1. Lock property row to serialize concurrent bookings for the same apartment (D28)
+      const propRows = await tx
+        .select({
+          id: properties.id,
+          hostId: properties.hostId,
+          title: properties.title,
+          city: properties.city,
+          country: properties.country,
+          neighborhood: properties.neighborhood,
+          address: properties.address,
+          pricePerMonth: properties.pricePerMonth,
+          minimumStayNights: properties.minimumStayNights,
+          isDirectBooking: properties.isDirectBooking,
+          status: properties.status,
+        })
+        .from(properties)
+        .where(eq(properties.id, valid.propertyId))
+        .for('update')
+        .limit(1);
+
+      if (propRows.length === 0) {
+        throw new Error(`Property ${valid.propertyId} not found`);
+      }
+
+      const property = propRows[0];
+      if (property.status !== 'published') {
+        throw new Error('This property is not currently available for booking');
+      }
+
+      // Validate minimum stay requirement
+      const nights = calculateNights(valid.moveInDate, valid.moveOutDate);
+      const minStay = property.minimumStayNights || BOOKING_RULES.minimumStayNights;
+      if (nights < minStay) {
+        throw new Error(
+          `Minimum stay requirement is ${minStay} nights (requested ${nights} nights)`
+        );
+      }
+
+      // 2. Lazily expire overdue pending reservations for this property inside transaction (Risk #9)
+      const now = new Date();
+      const expiredRows = await tx
+        .update(reservations)
+        .set({
+          status: 'expired',
+          paymentStatus: 'voided',
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(reservations.propertyId, property.id),
+            eq(reservations.status, 'pending'),
+            isNotNull(reservations.respondBy),
+            lt(reservations.respondBy, now)
+          )
+        )
+        .returning({ paymentRef: reservations.paymentRef });
+
+      expiredPaymentRefs = expiredRows
+        .map((r) => r.paymentRef)
+        .filter((ref): ref is string => Boolean(ref));
+
+      // 3. Check availability against blocked_dates and active reservations
+      const conflictingBlocks = await tx
+        .select({ id: blockedDates.id })
+        .from(blockedDates)
+        .where(
+          and(
+            eq(blockedDates.propertyId, property.id),
+            sql`${blockedDates.startDate} < ${valid.moveOutDate}::date`,
+            sql`${blockedDates.endDate} > ${valid.moveInDate}::date`
+          )
+        )
+        .limit(1);
+
+      if (conflictingBlocks.length > 0) {
+        throw new Error(
+          'Selected dates are blocked by host and unavailable for booking'
+        );
+      }
+
+      const conflictingBookings = await tx
+        .select({ id: reservations.id })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.propertyId, property.id),
+            inArray(reservations.status, ['pending', 'confirmed']),
+            sql`${reservations.moveInDate} < ${valid.moveOutDate}::date`,
+            sql`${reservations.moveOutDate} > ${valid.moveInDate}::date`
+          )
+        )
+        .limit(1);
+
+      if (conflictingBookings.length > 0) {
+        throw new Error(
+          'These dates were just booked. Please choose different dates.'
+        );
+      }
+
+      // 4. Recalculate full pricing server-side from DB property price & exchange rates (D18, Risk #5)
+      const pricing = calculateBookingTotal(
+        property.pricePerMonth,
+        nights,
+        valid.workstationMonthlyEUR ?? 0,
+        rates
+      );
+
+      // 5. Authorize payment via MockPaymentDriver
+      const bookingCode = `ND-${randomInt(10000, 100000)}`;
+      const authResult = await paymentDriver.authorize(
+        pricing.totalAmountUSD,
+        'USD',
+        {
+          cardNumber: '4242424242424242',
+          cardholderName: valid.guestName,
+        }
+      );
+      authorizedPaymentRef = authResult.paymentRef;
+
+      // 6. Insert reservation (Instant -> confirmed + captured; Request -> pending + authorized + 48h respondBy)
+      const isInstant = property.isDirectBooking;
+      const initialStatus: ReservationStatus = isInstant ? 'confirmed' : 'pending';
+      const initialPaymentStatus: PaymentStatus = isInstant
+        ? 'captured'
+        : 'authorized';
+      const respondBy = isInstant
+        ? null
+        : new Date(now.getTime() + BOOKING_RULES.respondHours * 3600 * 1000);
+
+      const insertedRows = await tx
+        .insert(reservations)
+        .values({
+          code: bookingCode,
+          userId: valid.userId ?? 1,
+          propertyId: property.id,
+          moveInDate: valid.moveInDate,
+          moveOutDate: valid.moveOutDate,
+          nights,
+          monthlyRent: property.pricePerMonth,
+          rentAmount: pricing.rentAmountUSD,
+          workstationFee: pricing.workstationFeeUSD,
+          totalAmount: pricing.totalAmountUSD,
+          commissionAmount: pricing.commissionAmountUSD,
+          hostPayout: pricing.hostPayoutUSD,
+          workstationConfig:
+            (data.workstationConfig as unknown as Record<string, unknown> | null) ??
+            null,
+          guestName: valid.guestName,
+          guestEmail: valid.guestEmail,
+          guestPhone: valid.guestPhone ?? '',
+          status: initialStatus,
+          respondBy,
+          paymentStatus: initialPaymentStatus,
+          paymentRef: authResult.paymentRef,
+          commissionRate: BOOKING_RULES.commissionPercent,
+          respondHours: BOOKING_RULES.respondHours,
+          freeCancelDays: BOOKING_RULES.freeCancelDays,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      if (isInstant) {
+        await paymentDriver.capture(authResult.paymentRef);
+      }
+
+      return {
+        reservation: mapReservationRow(insertedRows[0]),
+        propertyInfo: {
+          title: property.title,
+          city: property.city,
+          country: property.country ?? '',
+          neighborhood: property.neighborhood ?? '',
+          address: property.address ?? '',
+        },
+        hostId: property.hostId,
+        isInstant,
+      };
+    });
+  } catch (err: unknown) {
+    // Void any payment authorization if the DB transaction rolled back
+    if (authorizedPaymentRef) {
+      await paymentDriver.void(authorizedPaymentRef).catch(() => undefined);
+    }
+
+    // 7. Convert Postgres btree_gist exclusion violation (23P01) to friendly collision message (Risk #7)
+    if (getPgErrorCode(err) === '23P01') {
+      throw new Error(
+        'These dates were just booked. Please choose different dates.'
+      );
+    }
+    throw err;
+  }
+
+  // Void payment holds for any lazily expired pending reservations outside the transaction
+  for (const ref of expiredPaymentRefs) {
+    await paymentDriver.void(ref).catch(() => undefined);
+  }
+
+  // 8. Dispatch transactional email notifications via Mailpit (errors swallowed inside notifier)
+  let hostEmail: string | undefined;
+  let hostDisplayName = 'NomadDesk Host';
+  if (txResult.hostId != null) {
+    const hostRows = await db
+      .select({
+        displayName: hostProfiles.displayName,
+        email: users.email,
+      })
+      .from(hostProfiles)
+      .innerJoin(users, eq(hostProfiles.userId, users.id))
+      .where(eq(hostProfiles.id, txResult.hostId))
+      .limit(1);
+    hostEmail = hostRows[0]?.email;
+    hostDisplayName = hostRows[0]?.displayName || hostDisplayName;
+  }
+
+  if (txResult.isInstant) {
+    await notifyBookingConfirmed(
+      txResult.reservation,
+      txResult.propertyInfo,
+      hostEmail
+    );
+  } else {
+    await notifyNewBookingRequest(
+      txResult.reservation,
+      txResult.propertyInfo,
+      { displayName: hostDisplayName },
+      hostEmail || 'host@example.com'
+    );
+  }
+
+  return txResult.reservation;
 }
 
 /**
@@ -383,6 +587,26 @@ export async function updateReservationStatus(
     );
   }
 
+  // Enforce 14-day free cancellation policy for guest cancelling a confirmed booking (AC-BOOK-4)
+  if (
+    status === 'cancelled' &&
+    existing.status === 'confirmed' &&
+    cancelledBy === 'guest'
+  ) {
+    const freeCancelDays = existing.freeCancelDays ?? BOOKING_RULES.freeCancelDays;
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    const moveInUtc = new Date(`${existing.moveInDate}T00:00:00Z`);
+    const daysUntilMoveIn = Math.floor(
+      (moveInUtc.getTime() - todayUtc.getTime()) / (1000 * 3600 * 24)
+    );
+    if (daysUntilMoveIn < freeCancelDays) {
+      throw new Error(
+        `Free cancellation is only available at least ${freeCancelDays} days before move-in`
+      );
+    }
+  }
+
   const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
   if (status === 'rejected' && trimmedReason.length === 0) {
     throw new Error('Rejection reason is required');
@@ -396,8 +620,13 @@ export async function updateReservationStatus(
     await paymentDriver.void(paymentRef);
     paymentStatus = 'voided';
   } else if (status === 'cancelled') {
-    await paymentDriver.refund(paymentRef);
-    paymentStatus = 'refunded';
+    if (existing.status === 'pending') {
+      await paymentDriver.void(paymentRef);
+      paymentStatus = 'voided';
+    } else {
+      await paymentDriver.refund(paymentRef);
+      paymentStatus = 'refunded';
+    }
   } else if (status === 'completed') {
     paymentStatus = 'captured';
   }
