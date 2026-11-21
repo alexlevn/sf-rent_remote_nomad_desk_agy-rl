@@ -35,6 +35,8 @@ export function PropertyModerationTable() {
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [hostFilter, setHostFilter] = useState<string>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal states
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -60,11 +62,20 @@ export function PropertyModerationTable() {
 
   useEffect(() => {
     fetchData();
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000);
   };
 
   // Find host display name
@@ -97,6 +108,7 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await approvePropertyAction(property.id);
@@ -106,7 +118,7 @@ export function PropertyModerationTable() {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'published' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to approve property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to approve property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -118,6 +130,7 @@ export function PropertyModerationTable() {
     if (!rejectingProperty || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await updatePropertyStatusAction(rejectingProperty.id, 'rejected', rejectionReason);
@@ -129,7 +142,7 @@ export function PropertyModerationTable() {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'rejected', rejectionReason } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reject property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reject property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -141,6 +154,7 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await updatePropertyStatusAction(property.id, 'hidden');
@@ -150,7 +164,7 @@ export function PropertyModerationTable() {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'hidden' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to hide property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to hide property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -162,6 +176,7 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await approvePropertyAction(property.id);
@@ -171,7 +186,7 @@ export function PropertyModerationTable() {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'published' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to publish property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to publish property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -186,6 +201,7 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await deletePropertyAction(property.id);
@@ -195,7 +211,7 @@ export function PropertyModerationTable() {
       }
       await fetchData();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -273,6 +289,28 @@ export function PropertyModerationTable() {
             onClick={() => setToastMessage(null)}
             className="text-neutral-400 hover:text-white ml-2"
             aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Inline Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          data-testid="property-action-error"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-0.5 cursor-pointer"
+            aria-label="Dismiss error"
           >
             <X className="w-4 h-4" />
           </button>
@@ -571,7 +609,7 @@ export function PropertyModerationTable() {
 
                           {/* Edit / Delete */}
                           <Link
-                            href={`/host/listings/${property.id}/edit`}
+                            href={`/admin/properties/${property.id}/edit`}
                             className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded-md hover:bg-neutral-100"
                             title="Edit listing details"
                           >
@@ -718,7 +756,7 @@ export function PropertyModerationTable() {
             <div className="pt-4 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex items-center justify-between">
               <div>
                 <Link
-                  href={`/host/listings/${selectedProperty.id}/edit`}
+                  href={`/admin/properties/${selectedProperty.id}/edit`}
                   className="btn btn-outline btn-sm text-xs inline-flex items-center gap-1.5"
                 >
                   <Edit className="w-3.5 h-3.5" />
