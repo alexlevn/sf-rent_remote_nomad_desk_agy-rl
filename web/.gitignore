@@ -1,0 +1,28 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/blob-report
+
+# next.js
+/.next/
+/out/
+/build
+/dist
+
+# misc
+*.log
+.DS_Store
+*.pem
+
+# local env files
+.env*
+!.env.example
+
+# typescript
+*.tsbuildinfo
