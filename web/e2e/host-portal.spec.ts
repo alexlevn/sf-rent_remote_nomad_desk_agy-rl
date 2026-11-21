@@ -120,7 +120,11 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
 
     await page.locator('#listing-title').fill(testTitle);
     await page.locator('#listing-neighborhood').fill('Salamanca');
-    await page.locator('#listing-description').fill(
+    const descEditable = page.locator('#listing-description');
+    await expect(descEditable).toBeVisible();
+    await descEditable.click();
+    await expect(descEditable).toBeFocused();
+    await descEditable.pressSequentially(
       'Executive penthouse in central Madrid featuring ultra-fast 1Gbps fiber internet and dual 4K monitors.'
     );
 

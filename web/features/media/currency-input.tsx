@@ -66,13 +66,12 @@ export function CurrencyInput({
   const displayedValue = isFocused
     ? parseCurrencyDraft(draftText) === normalizedValue
       ? draftText
-      : normalizedValue === ''
-        ? ''
-        : String(normalizedValue)
+      : formatCurrencyInteger(normalizedValue)
     : formatCurrencyInteger(normalizedValue);
 
   const handleFocus = () => {
-    setDraftText(normalizedValue === '' ? '' : String(normalizedValue));
+    // Keep display text unchanged on focus so selection and Playwright fill() replace instead of concatenating
+    setDraftText(formatCurrencyInteger(normalizedValue));
     setIsFocused(true);
   };
 

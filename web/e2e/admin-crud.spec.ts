@@ -187,13 +187,15 @@ test.describe('Admin Full CRUD & Tiptap Visual E2E Suite', () => {
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
 
-    // Insert Image via inline dialog
+    // Insert Image via Media Library Modal (From URL tab)
     await page.getByRole('button', { name: 'Insert Image' }).click();
-    const imageDialog = page.getByTestId('rich-editor-inline-dialog');
-    await expect(imageDialog).toBeVisible();
-    await imageDialog.getByLabel('Image URL / Path').fill('/seed/guide/placeholder.webp');
-    await imageDialog.getByLabel('Image alt text').fill('Nomad coworking space');
-    await imageDialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    const mediaModal = page.getByTestId('media-library-modal');
+    await expect(mediaModal).toBeVisible();
+    await mediaModal.getByTestId('media-tab-url').click();
+    await mediaModal.getByLabel('Image URL / Path').fill('/seed/guide/placeholder.webp');
+    await mediaModal.getByLabel('Alt text (optional)').fill('Nomad coworking space');
+    await mediaModal.getByTestId('media-url-insert-btn').click();
+    await expect(mediaModal).not.toBeVisible();
     await expect(visualEditor.locator('img[src="/seed/guide/placeholder.webp"]')).toBeVisible();
 
     // Publish
