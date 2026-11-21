@@ -35,7 +35,7 @@ test.describe('Admin Platform Management E2E Suite', () => {
     await expect(guest403.getByText(/demo@example.com/i)).toBeVisible();
 
     // 3. Log in as host user (host@example.com)
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
 
     // 4. Host attempts to access /admin -> blocked with 403 Forbidden
     await page.goto('/admin');
@@ -88,7 +88,7 @@ test.describe('Admin Platform Management E2E Suite', () => {
     await expect(activeApplicantRow.getByText('Approved')).toBeVisible();
 
     // 7. Log out and log in as newly approved applicant
-    await loginAs(page, 'applicant@example.com', 'demo1234');
+    await loginAs(page, 'applicant@example.com', 'applicant1234');
 
     // 8. Access /host -> successfully loads host portal without redirection to /host/apply
     await page.goto('/host');
@@ -103,7 +103,7 @@ test.describe('Admin Platform Management E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Host creates a new listing and submits for review (as in AC-HOST-3)
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
     await page.goto('/host/listings/new');
     await expect(page.getByRole('heading', { name: /Create New Apartment Listing/i })).toBeVisible();
 

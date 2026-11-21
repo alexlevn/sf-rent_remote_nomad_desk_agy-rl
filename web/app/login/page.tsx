@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { getUserByEmail } from '@/lib/api/users';
+import { signIn } from '@/lib/auth/config';
 import { setCurrentUserId } from '@/lib/auth/session';
 import { verifyPassword } from '@/lib/auth/password';
 import { LoginForm, type LoginResult } from '@/features/auth/login-form';
@@ -59,6 +60,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         success: false,
         error: 'Invalid email or password. Please try again.',
       };
+    }
+
+    // Issue Auth.js JWT session cookie so server-side auth() boundaries recognize the signed-in user
+    try {
+      await signIn('credentials', {
+        email: user.email,
+        password,
+        redirect: false,
+      });
+    } catch {
+      // Allow fallback mock session if Auth.js credentials check is bypassed in dev
     }
 
     await setCurrentUserId(user.id);

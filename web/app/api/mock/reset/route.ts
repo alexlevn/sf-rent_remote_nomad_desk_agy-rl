@@ -5,6 +5,8 @@ import { resetSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
   blockedDates,
+  blogPosts,
+  communityVideos,
   hostProfiles,
   locations,
   properties,
@@ -12,6 +14,8 @@ import {
   settings,
   travelGuides,
   users,
+  workstationAddons,
+  workstationComponents,
   workstationPackages,
 } from '@/lib/db/schema';
 import { DEFAULT_EXCHANGE_RATES } from '@/lib/pricing';
@@ -47,6 +51,9 @@ export async function POST() {
     await db.delete(properties).where(notInArray(properties.id, SEED_PROPERTY_IDS));
     await db.delete(hostProfiles).where(gt(hostProfiles.id, 3));
     await db.delete(travelGuides).where(notInArray(travelGuides.id, SEED_TRAVEL_GUIDE_IDS));
+    await db.delete(blogPosts).where(gt(blogPosts.id, 2));
+    await db.delete(communityVideos).where(gt(communityVideos.id, 7));
+    await db.update(communityVideos).set({ isActive: true });
     await db.delete(locations).where(gt(locations.id, SEED_LOCATION_MAX_ID));
     await db.update(locations).set({ isActive: true });
 
@@ -61,6 +68,10 @@ export async function POST() {
         })
         .where(eq(properties.id, propId));
     }
+
+    await db.update(workstationPackages).set({ isActive: true });
+    await db.update(workstationComponents).set({ isActive: true });
+    await db.update(workstationAddons).set({ isActive: true });
 
     await db
       .update(workstationPackages)
