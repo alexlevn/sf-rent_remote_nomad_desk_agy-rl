@@ -57,6 +57,7 @@ export interface Property {
 
 export interface PropertyFilterParams {
   city?: string;
+  locationId?: number;
   neighborhood?: string;
   moveIn?: string;
   moveOut?: string;

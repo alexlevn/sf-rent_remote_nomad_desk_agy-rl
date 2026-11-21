@@ -6,10 +6,12 @@ import {
   AdminKpiCards,
   type AdminKpiStats,
 } from '@/features/admin/admin-kpi-cards';
-import { listProperties } from '@/lib/api/properties';
 import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
 import { listReservations } from '@/lib/api/reservations';
-import { fetchAdminUsersAction } from '@/app/admin/admin-actions';
+import {
+  fetchAdminPropertiesAction,
+  fetchAdminUsersAction,
+} from '@/app/admin/admin-actions';
 import type { HostProfile, Property, User } from '@/lib/types';
 import {
   UserCheck,
@@ -41,12 +43,13 @@ export default function AdminDashboardPage() {
   // Load initial platform data
   const loadData = async () => {
     try {
-      const [allProperties, allHosts, allReservations, allUsers] = await Promise.all([
-        listProperties({ status: 'all' }),
+      const [adminPropsData, allHosts, allReservations, allUsers] = await Promise.all([
+        fetchAdminPropertiesAction(),
         listHosts(),
         listReservations(),
         fetchAdminUsersAction(),
       ]);
+      const allProperties = adminPropsData.propList;
 
       const published = allProperties.filter((p) => p.status === 'published');
       const activeH = allHosts.filter((h) => h.status === 'approved');
