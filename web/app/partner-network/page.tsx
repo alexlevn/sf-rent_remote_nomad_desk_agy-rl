@@ -42,15 +42,14 @@ export default function PartnerNetworkPage() {
           </p>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/host/apply">
-              <Button
-                variant="primary"
-                size="lg"
-                className="w-full sm:w-auto px-8 py-4 text-base font-semibold rounded-full shadow-[var(--shadow-lg)]"
-              >
-                {hero.ctaLabel}
-              </Button>
-            </Link>
+            <Button
+              asChild
+              variant="primary"
+              size="lg"
+              className="w-full sm:w-auto px-8 py-4 text-base font-semibold rounded-full shadow-[var(--shadow-lg)]"
+            >
+              <Link href="/host/apply">{hero.ctaLabel}</Link>
+            </Button>
           </div>
         </div>
       </section>
@@ -100,7 +99,7 @@ export default function PartnerNetworkPage() {
               <div className="text-[var(--color-brand)] font-bold text-2xl mb-2">
                 {step.numberLabel}
               </div>
-              <h4 className="text-white font-semibold text-sm mb-2">{step.title}</h4>
+              <h3 className="text-white font-semibold text-sm mb-2">{step.title}</h3>
               <p className="text-xs text-[var(--color-text-on-dark-muted)] leading-relaxed">
                 {step.description}
               </p>
@@ -109,15 +108,14 @@ export default function PartnerNetworkPage() {
         </div>
 
         <div className="text-center mt-12">
-          <Link href="/host/apply">
-            <Button
-              variant="primary"
-              size="lg"
-              className="px-8 py-4 text-sm font-semibold rounded-full shadow-[var(--shadow-lg)]"
-            >
-              {stepsSection.ctaLabel}
-            </Button>
-          </Link>
+          <Button
+            asChild
+            variant="primary"
+            size="lg"
+            className="px-8 py-4 text-sm font-semibold rounded-full shadow-[var(--shadow-lg)]"
+          >
+            <Link href="/host/apply">{stepsSection.ctaLabel}</Link>
+          </Button>
         </div>
       </section>
 
