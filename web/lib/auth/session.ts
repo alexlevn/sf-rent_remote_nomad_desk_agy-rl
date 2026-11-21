@@ -2,9 +2,42 @@ import type { User, UserRole } from '@/lib/types';
 import { getUserById, getUserByEmail } from '@/lib/api/users';
 import { auth } from '@/lib/auth/config';
 
+const INT4_MAX = 2_147_483_647;
+
 const globalForAuth = globalThis as unknown as {
   __nomaddeskCurrentUserId?: number | null;
 };
+
+/**
+ * Returns the authenticated user strictly from the Auth.js HttpOnly JWT cookie
+ * refreshed from Postgres. Never reads globalForAuth or falls back to demo user.
+ */
+export async function getStrictSessionUser(): Promise<User | null> {
+  let rawId: unknown;
+  try {
+    const session = await auth();
+    rawId = session?.user?.id;
+  } catch {
+    // Outside request context / headers not available
+    return null;
+  }
+
+  if (rawId === undefined || rawId === null) {
+    return null;
+  }
+
+  const normalizedId = typeof rawId === 'string' ? rawId.trim() : String(rawId);
+  if (!/^\d+$/.test(normalizedId)) {
+    return null;
+  }
+
+  const userId = Number(normalizedId);
+  if (!Number.isInteger(userId) || userId <= 0 || userId > INT4_MAX) {
+    return null;
+  }
+
+  return getUserById(userId);
+}
 
 /**
  * Returns current authenticated user.

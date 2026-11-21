@@ -9,6 +9,7 @@ import {
   communityVideos,
   hostProfiles,
   locations,
+  media,
   properties,
   reservations,
   settings,
@@ -19,6 +20,7 @@ import {
   workstationPackages,
 } from '@/lib/db/schema';
 import { DEFAULT_EXCHANGE_RATES } from '@/lib/pricing';
+import { deleteUploadFile } from '@/lib/storage/upload';
 
 const SEED_PROPERTY_IDS = [16060, 16061, 17001, 17002, 18001, 18002, 19001, 19002];
 const SEED_TRAVEL_GUIDE_IDS = [361, 362, 363, 364, 365, 366, 367, 368];
@@ -40,11 +42,33 @@ function getRelativeDateStr(offsetDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function POST() {
+export async function POST(request?: Request) {
   resetMockData();
   resetSession();
 
+  let keepMedia = false;
+  if (request?.url) {
+    try {
+      keepMedia = new URL(request.url).searchParams.get('keepMedia') === '1';
+    } catch {
+      keepMedia = false;
+    }
+  }
+
   try {
+    // Clean uploaded media unless keepMedia=1 is explicitly requested
+    if (!keepMedia) {
+      const existingMedia = await db
+        .select({ id: media.id, storageKey: media.storageKey })
+        .from(media);
+      if (existingMedia.length > 0) {
+        await db.delete(media);
+        await Promise.allSettled(
+          existingMedia.map((row) => deleteUploadFile(row.storageKey)),
+        );
+      }
+    }
+
     // Clean non-seed records and restore seed states for deterministic E2E isolation
     await db.delete(blockedDates).where(gt(blockedDates.id, 2));
     await db.delete(reservations).where(gt(reservations.id, 6));

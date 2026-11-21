@@ -2,8 +2,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { hostProfiles } from '@/lib/db/schema';
 import { getUserById } from '@/lib/api/users';
-import { getCurrentUser } from '@/lib/auth/session';
-import type { User } from '@/lib/types';
+import { getCurrentUser, getStrictSessionUser } from '@/lib/auth/session';
+import type { UploadActor, User } from '@/lib/types';
 
 export class AuthError extends Error {
   status: number;
@@ -83,4 +83,47 @@ export async function requireAdmin(): Promise<User> {
   }
 
   return user;
+}
+
+/**
+ * Verifies the caller via Auth.js HttpOnly JWT + fresh Postgres lookup only.
+ * Allows active admins and active hosts with an approved host profile.
+ */
+export async function requireUploadActor(): Promise<UploadActor> {
+  const user = await getStrictSessionUser();
+  if (!user || !user.isActive) {
+    throw new AuthError('Unauthorized: Authentication required', 401);
+  }
+
+  if (user.role === 'admin') {
+    return { user, role: 'admin' };
+  }
+
+  if (user.role === 'host') {
+    const [profile] = await db
+      .select()
+      .from(hostProfiles)
+      .where(eq(hostProfiles.userId, user.id))
+      .limit(1);
+
+    if (!profile) {
+      throw new AuthError('Forbidden: No host profile found for user', 403);
+    }
+
+    if (profile.status === 'suspended') {
+      throw new AuthError('Forbidden: Host account has been suspended', 403);
+    }
+
+    if (profile.status !== 'approved') {
+      throw new AuthError(`Forbidden: Host profile status is ${profile.status}`, 403);
+    }
+
+    return {
+      user,
+      role: 'host',
+      hostId: profile.id,
+    };
+  }
+
+  throw new AuthError('Forbidden: Host or administrator role required', 403);
 }
