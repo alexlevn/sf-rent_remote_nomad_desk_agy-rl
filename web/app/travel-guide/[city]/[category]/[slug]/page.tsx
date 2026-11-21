@@ -113,43 +113,43 @@ export default async function TravelGuideDetailPage({
       }
     >
       {/* Rich Editorial Body */}
-      <div>
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mt-6 mb-4">
-          Neighborhood Dynamics &amp; Internet Reliability
-        </h2>
-        <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-5">
-          When moving to {guide.city} for a month or longer, internet speed and proximity to ergonomic workstations are vital. Traditional short-term rental hosts frequently overestimate their WiFi capabilities, leaving remote employees frustrated during high-stakes video meetings.
-        </p>
+      {hasHtmlTags(guide.content) ? (
+        <div
+          className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
+          dangerouslySetInnerHTML={{
+            __html: sanitizeHtml(guide.content),
+          }}
+        />
+      ) : (
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mt-6 mb-4">
+            Neighborhood Dynamics &amp; Internet Reliability
+          </h2>
+          <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-5">
+            When moving to {guide.city} for a month or longer, internet speed and proximity to ergonomic workstations are vital. Traditional short-term rental hosts frequently overestimate their WiFi capabilities, leaving remote employees frustrated during high-stakes video meetings.
+          </p>
 
-        {/* NomadDesk Verified Standard Callout */}
-        <div className="bg-[#faf8f5] border-l-4 border-[var(--color-brand)] p-4 sm:p-5 rounded-r-xl my-6">
-          <strong className="block text-sm sm:text-base font-bold text-[var(--color-text-on-light)] mb-1">
-            NomadDesk Verified Standard:
-          </strong>
-          <span className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed">
-            Every verified property in {guide.city} maintains symmetric fiber connections with a minimum 300 Mbps speed tier and dedicated dual-screen desk hardware.
-          </span>
-        </div>
+          {/* NomadDesk Verified Standard Callout */}
+          <div className="bg-[#faf8f5] border-l-4 border-[var(--color-brand)] p-4 sm:p-5 rounded-r-xl my-6">
+            <strong className="block text-sm sm:text-base font-bold text-[var(--color-text-on-light)] mb-1">
+              NomadDesk Verified Standard:
+            </strong>
+            <span className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed">
+              Every verified property in {guide.city} maintains symmetric fiber connections with a minimum 300 Mbps speed tier and dedicated dual-screen desk hardware.
+            </span>
+          </div>
 
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mt-8 mb-4">
-          Cost of Living &amp; Monthly Stays
-        </h2>
-        <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-4">
-          Monthly accommodations typically provide up to 35% savings over nightly Airbnb rates, eliminating tourist taxes and cleaning surcharges.
-        </p>
-        {hasHtmlTags(guide.content) ? (
-          <div
-            className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
-            dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(guide.content),
-            }}
-          />
-        ) : (
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mt-8 mb-4">
+            Cost of Living &amp; Monthly Stays
+          </h2>
+          <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-4">
+            Monthly accommodations typically provide up to 35% savings over nightly Airbnb rates, eliminating tourist taxes and cleaning surcharges.
+          </p>
           <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)]">
             {guide.content}
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </ArticleLayout>
   );
 }

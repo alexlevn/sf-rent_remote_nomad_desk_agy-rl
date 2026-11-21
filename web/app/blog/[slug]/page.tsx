@@ -145,37 +145,37 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
       }
     >
       {/* Rich Editorial Body */}
-      <div>
-        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mt-6 mb-4">
-          Comparing Total Costs vs Traditional Vacation Rentals
-        </h2>
-        <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-5">
-          Traditional hotel and short-term platforms slap on service surcharges ranging from 14% to 22%, combined with variable cleaning fees and local tourist taxes. By committing to monthly stays (30+ days), guests unlock institutional rates while host operators enjoy guaranteed occupancy.
-        </p>
-
-        {/* Key Takeaway Callout Box */}
-        <div className="bg-[#faf8f5] border border-[var(--color-border-light)] rounded-xl p-5 my-6">
-          <strong className="block text-sm sm:text-base font-bold text-[var(--color-text-on-light)] mb-1">
-            Key Takeaway for Tech Workers:
-          </strong>
-          <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed">
-            A dedicated workstation in your apartment eliminates the need for expensive €250/mo coworking hot-desk memberships while providing complete privacy for confidential video calls.
+      {hasHtmlTags(post.content) ? (
+        <div
+          className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
+          dangerouslySetInnerHTML={{
+            __html: sanitizeHtml(post.content),
+          }}
+        />
+      ) : (
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mt-6 mb-4">
+            Comparing Total Costs vs Traditional Vacation Rentals
+          </h2>
+          <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-5">
+            Traditional hotel and short-term platforms slap on service surcharges ranging from 14% to 22%, combined with variable cleaning fees and local tourist taxes. By committing to monthly stays (30+ days), guests unlock institutional rates while host operators enjoy guaranteed occupancy.
           </p>
-        </div>
 
-        {hasHtmlTags(post.content) ? (
-          <div
-            className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
-            dangerouslySetInnerHTML={{
-              __html: sanitizeHtml(post.content),
-            }}
-          />
-        ) : (
+          {/* Key Takeaway Callout Box */}
+          <div className="bg-[#faf8f5] border border-[var(--color-border-light)] rounded-xl p-5 my-6">
+            <strong className="block text-sm sm:text-base font-bold text-[var(--color-text-on-light)] mb-1">
+              Key Takeaway for Tech Workers:
+            </strong>
+            <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed">
+              A dedicated workstation in your apartment eliminates the need for expensive €250/mo coworking hot-desk memberships while providing complete privacy for confidential video calls.
+            </p>
+          </div>
+
           <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)]">
             {post.content}
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </ArticleLayout>
   );
 }
