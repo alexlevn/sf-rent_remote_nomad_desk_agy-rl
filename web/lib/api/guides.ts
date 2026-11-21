@@ -246,7 +246,9 @@ function escapeIlike(input: string): string {
 
 function normalizePagination(page?: number, pageSize?: number) {
   const safePage =
-    typeof page === 'number' && Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+    typeof page === 'number' && Number.isFinite(page)
+      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
+      : 1;
   const rawSize =
     typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
   const safePageSize = Math.min(Math.max(rawSize, 1), 100);
@@ -282,8 +284,14 @@ export async function listAdminGuidesPaginated(
 
   const conditions: SQL[] = [];
 
-  if (params?.city && params.city.trim() && params.city.trim().toLowerCase() !== 'all') {
-    conditions.push(eq(sql`lower(${travelGuides.city})`, params.city.trim().toLowerCase()));
+  if (
+    typeof params?.city === 'string' &&
+    params.city.trim() &&
+    params.city.trim().toLowerCase() !== 'all'
+  ) {
+    conditions.push(
+      eq(sql`lower(${travelGuides.city})`, params.city.trim().slice(0, 100).toLowerCase())
+    );
   }
 
   if (params?.status && params.status !== 'all') {
@@ -294,8 +302,8 @@ export async function listAdminGuidesPaginated(
     }
   }
 
-  if (params?.search && params.search.trim()) {
-    const pattern = `%${escapeIlike(params.search.trim())}%`;
+  if (typeof params?.search === 'string' && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
     const searchCond = or(
       ilike(travelGuides.title, pattern),
       ilike(travelGuides.slug, pattern),
