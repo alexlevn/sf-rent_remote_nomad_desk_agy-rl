@@ -154,13 +154,13 @@ export const Header: React.FC = () => {
             trigger={
               <div
                 className="flex items-center gap-2 p-1 pr-2.5 rounded-full border border-[var(--color-border-dark)] bg-black/40 hover:border-neutral-500 transition-all cursor-pointer"
-                title={`${authUser.name} (${authUser.role})`}
+                title={`${authUser.name || authUser.email} (${authUser.role})`}
               >
                 <div className="h-7 w-7 rounded-full bg-[var(--color-brand)] flex items-center justify-center font-bold text-xs text-white">
-                  {authUser.name.charAt(0).toUpperCase()}
+                  {(authUser.name || authUser.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <span className="hidden sm:inline text-xs font-medium text-white max-w-[90px] truncate">
-                  {authUser.name.split(' ')[0]}
+                  {(authUser.name || authUser.email || 'User').split(' ')[0]}
                 </span>
                 <ChevronDown className="h-3 w-3 text-[var(--color-text-on-dark-muted)]" />
               </div>
