@@ -18,7 +18,7 @@ Stages of the automated build pipeline for this project.
 | S7A | agent | Plan: Admin | ✅ |  |
 | S7B | runner | Build: Admin | ✅ | 11 tasks |
 | S7C | agent | Plan: Content entry + image upload | ✅ |  |
-| S7D | runner | Build: Content entry + image upload | 🔲 |  |
+| S7D | runner | Build: Content entry + image upload | ⏳ | 0 task xong, còn 10 |
 | S8 | agent | Frontend review & fixes | 🔲 |  |
 | S9 | agent | Backend review & fixes | 🔲 |  |
 | S10 | agent | Full local run, E2E & final report | 🔲 |  |
