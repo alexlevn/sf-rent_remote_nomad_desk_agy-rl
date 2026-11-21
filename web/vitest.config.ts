@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // DB integration test files share one local Postgres instance and mutate host/user flags temporarily
+    fileParallelism: false,
     include: ['tests/**/*.{test,spec}.{ts,tsx}', 'lib/**/*.{test,spec}.{ts,tsx}'],
     server: {
       deps: {
