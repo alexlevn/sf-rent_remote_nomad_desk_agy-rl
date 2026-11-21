@@ -1,0 +1,55 @@
+name: nomaddesk
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: nomaddesk_db
+    ports:
+      - "55188:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: nomaddesk
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: nomaddesk_mailpit
+    ports:
+      - "18188:8025"
+      - "11188:1025"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: nomaddesk_web
+    ports:
+      - "3288:3288"
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/nomaddesk
+      NEXTAUTH_URL: http://localhost:3288
+      NEXTAUTH_SECRET: nomaddesk_jwt_secret_dev
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      UPLOAD_DIR: /app/web/.data/uploads
+      PORT: 3288
+      HOSTNAME: 0.0.0.0
+    volumes:
+      - ky-uploads:/app/web/.data/uploads
+    command: sh -c "npm run db:migrate && npm run db:seed && npm start"
+
+volumes:
+  postgres_data:
+  ky-uploads:

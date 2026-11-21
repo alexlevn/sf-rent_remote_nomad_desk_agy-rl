@@ -19,10 +19,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
   ],
-  webServer: {
-    command: 'npm run dev -- -p 3288',
-    url: 'http://localhost:3288',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  },
+  webServer: process.env.E2E_DOCKER
+    ? undefined
+    : {
+        command: 'npm run dev -- -p 3288',
+        url: 'http://localhost:3288',
+        reuseExistingServer: !process.env.CI,
+        timeout: 30_000,
+      },
 });
