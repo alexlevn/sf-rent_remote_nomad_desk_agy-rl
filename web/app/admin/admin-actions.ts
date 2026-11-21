@@ -32,7 +32,7 @@ export async function approvePropertyAction(id: number) {
   const updated = await updatePropertyStatus(id, 'published');
   revalidatePath('/');
   revalidatePath('/admin/properties');
-  revalidatePath('/c/[city]');
+  revalidatePath('/c/[city]', 'page');
   return updated;
 }
 
@@ -47,7 +47,7 @@ export async function updatePropertyStatusAction(
   const updated = await updatePropertyStatus(id, status, reason);
   revalidatePath('/');
   revalidatePath('/admin/properties');
-  revalidatePath('/c/[city]');
+  revalidatePath('/c/[city]', 'page');
   return updated;
 }
 
@@ -81,7 +81,7 @@ export async function reviewHostAction(
   revalidatePath('/');
   revalidatePath('/admin/hosts');
   revalidatePath('/host');
-  revalidatePath('/c/[city]');
+  revalidatePath('/c/[city]', 'page');
   return updated;
 }
 

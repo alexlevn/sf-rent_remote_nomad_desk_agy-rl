@@ -84,7 +84,7 @@ export const MobileNav: React.FC = () => {
       {/* Slide-out Drawer Panel */}
       <div
         className={`fixed top-0 right-0 bottom-0 w-[85%] max-w-xs bg-[var(--color-bg-dark)] border-l border-[var(--color-border-dark)] text-[var(--color-text-on-dark)] z-[70] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
+          isOpen ? 'translate-x-0' : 'translate-x-full invisible pointer-events-none'
         }`}
       >
         {/* Drawer Header */}

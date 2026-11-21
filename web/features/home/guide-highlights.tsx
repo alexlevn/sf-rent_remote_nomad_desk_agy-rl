@@ -49,7 +49,7 @@ export function GuideHighlights({ guides }: GuideHighlightsProps) {
                 className="group bg-white rounded-2xl overflow-hidden border border-[var(--color-border-light)] shadow-sm hover:shadow-md transition-shadow flex flex-col"
               >
                 <div className="relative h-48 w-full overflow-hidden bg-neutral-100">
-                  <Link href={guideUrl}>
+                  <Link href={guideUrl} className="block w-full h-full relative">
                     <Image
                       src={normalizeSrc(guide.image || '/seed/guide/placeholder.jpg')}
                       alt={guide.title}
@@ -74,7 +74,7 @@ export function GuideHighlights({ guides }: GuideHighlightsProps) {
                       {guide.publishDate}
                     </div>
                     <h3 className="text-base font-bold text-[var(--color-text-on-light)] mb-2 group-hover:text-[var(--color-brand)] transition-colors line-clamp-2">
-                      <Link href={guideUrl}>{guide.title}</Link>
+                      <Link href={guideUrl} className="block w-full h-full relative">{guide.title}</Link>
                     </h3>
                     <p className="text-xs text-[var(--color-text-on-light-muted)] line-clamp-3 mb-4 leading-relaxed">
                       {guide.excerpt}

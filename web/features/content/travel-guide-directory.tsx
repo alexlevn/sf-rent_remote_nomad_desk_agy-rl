@@ -116,7 +116,7 @@ export function TravelGuideDirectory({ guides }: TravelGuideDirectoryProps) {
                 className="group flex flex-col bg-white border border-[var(--color-border-light)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="relative h-[180px] w-full overflow-hidden bg-neutral-100">
-                  <Link href={detailHref} tabIndex={-1} aria-hidden="true">
+                  <Link href={detailHref} tabIndex={-1} aria-hidden="true" className="block w-full h-full relative">
                     <Image
                       src={normalizeSrc(guide.image)}
                       alt={guide.title}

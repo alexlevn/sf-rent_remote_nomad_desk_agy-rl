@@ -257,8 +257,8 @@ export async function updateExchangeRatesAction(rates: Partial<ExchangeRates>) {
   const updated = await updateExchangeRates(rates);
   revalidatePath('/');
   revalidatePath('/admin/settings');
-  revalidatePath('/c/[city]');
-  revalidatePath('/l/apartments/[slug]');
+  revalidatePath('/c/[city]', 'page');
+  revalidatePath('/l/apartments/[slug]', 'page');
   return { success: true, rates: updated };
 }
 

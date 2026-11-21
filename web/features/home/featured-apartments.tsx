@@ -44,7 +44,7 @@ function ApartmentCard({ property }: { property: Property }) {
     <article className="group bg-white rounded-2xl overflow-hidden border border-[var(--color-border-light)] shadow-sm hover:shadow-md transition-shadow flex flex-col">
       {/* Image Carousel */}
       <div className="relative h-60 w-full overflow-hidden bg-neutral-100">
-        <Link href={detailUrl} className="block w-full h-full">
+        <Link href={detailUrl} className="block w-full h-full relative">
           <Image
             src={normalizeSrc(images[activeImageIndex])}
             alt={property.title}
