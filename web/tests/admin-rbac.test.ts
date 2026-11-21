@@ -273,9 +273,12 @@ describe('Admin RBAC Security Suite (T8)', () => {
         mockGetUserById.mockResolvedValue(dbUser);
       });
 
-      it.each(ADMIN_ACTION_CASES)('$name rejects with $expectedStatus', async ({ invoke }) => {
-        await expectRejectedWithStatus(invoke, expectedAdminActionStatus);
-      });
+      it.each(ADMIN_ACTION_CASES)(
+        `$name rejects with ${expectedAdminActionStatus}`,
+        async ({ invoke }) => {
+          await expectRejectedWithStatus(invoke, expectedAdminActionStatus);
+        }
+      );
     }
   );
 
