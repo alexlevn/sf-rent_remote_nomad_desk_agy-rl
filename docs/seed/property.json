@@ -44,7 +44,9 @@
       "/seed/property/prop-madrid-4.webp",
       "/seed/property/prop-madrid-5.webp"
     ],
-    "description": "Housed in a distinguished classic building, this light-filled 240 sqm residence marries original high ceilings and refined mouldings with a flawless, high-end contemporary interior, just steps from El Retiro Park.\n\nThe Address: Jerónimos is one of Madrid's most coveted neighbourhoods, beside El Retiro and a short walk from the city's finest museums, galleries and restaurants. The building itself is a grand classic house with a marble entrance hall and concierge service.\n\nThe Salon: A majestic open-plan space where formal dining and an elegant lounge flow together beneath period mouldings. Tall classic windows and balconies with integrated wooden shutters bathe the room in natural light, while concealed speakers deliver high-fidelity sound throughout.\n\nThe Kitchen: A masterpiece in metallic finishes and textured natural stone, anchored by a commanding island made for effortless entertaining and private tastings. Fully panelled premium appliances, a backlit glass wine cabinet and integrated shelving keep the lines pure and seamless with the salon.\n\nStudy-Library: A showpiece workspace with its own classic balcony, soaring ceilings and a bespoke bookcase spanning the entire main wall, the ultimate setting for high-level remote work. A second, fully independent study creates a rare dual-office configuration, ideal for working couples or as a creative studio. A separate laundry room completes the home.\n\nBedrooms and Bathrooms: Serene, generous bedrooms with floor-to-ceiling fitted wardrobes in premium finishes, herringbone floors and abundant natural light. Two sumptuous bathrooms in natural stone and microcement, with brushed-steel fittings and heated towel rails."
+    "description": "Housed in a distinguished classic building, this light-filled 240 sqm residence marries original high ceilings and refined mouldings with a flawless, high-end contemporary interior, just steps from El Retiro Park.\n\nThe Address: Jerónimos is one of Madrid's most coveted neighbourhoods, beside El Retiro and a short walk from the city's finest museums, galleries and restaurants. The building itself is a grand classic house with a marble entrance hall and concierge service.\n\nThe Salon: A majestic open-plan space where formal dining and an elegant lounge flow together beneath period mouldings. Tall classic windows and balconies with integrated wooden shutters bathe the room in natural light, while concealed speakers deliver high-fidelity sound throughout.\n\nThe Kitchen: A masterpiece in metallic finishes and textured natural stone, anchored by a commanding island made for effortless entertaining and private tastings. Fully panelled premium appliances, a backlit glass wine cabinet and integrated shelving keep the lines pure and seamless with the salon.\n\nStudy-Library: A showpiece workspace with its own classic balcony, soaring ceilings and a bespoke bookcase spanning the entire main wall, the ultimate setting for high-level remote work. A second, fully independent study creates a rare dual-office configuration, ideal for working couples or as a creative studio. A separate laundry room completes the home.\n\nBedrooms and Bathrooms: Serene, generous bedrooms with floor-to-ceiling fitted wardrobes in premium finishes, herringbone floors and abundant natural light. Two sumptuous bathrooms in natural stone and microcement, with brushed-steel fittings and heated towel rails.",
+    "hostId": 1,
+    "status": "published"
   },
   {
     "id": 16061,
@@ -91,7 +93,9 @@
       "/seed/property/prop-madrid-9.webp",
       "/seed/property/prop-madrid-10.jpg"
     ],
-    "description": "Bright and airy 2-bedroom flat in Chamberí designed specifically for remote work with high-speed fiber internet and dedicated ergonomic office."
+    "description": "Bright and airy 2-bedroom flat in Chamberí designed specifically for remote work with high-speed fiber internet and dedicated ergonomic office.",
+    "hostId": 1,
+    "status": "published"
   },
   {
     "id": 17001,
@@ -138,7 +142,9 @@
       "/seed/property/prop-buenos-aires-4.webp",
       "/seed/property/prop-buenos-aires-5.webp"
     ],
-    "description": "Sophisticated 1-bedroom apartment in prime Palermo Chico, steps from MALBA and botanical gardens. Full building amenities including heated pool and fitness center."
+    "description": "Sophisticated 1-bedroom apartment in prime Palermo Chico, steps from MALBA and botanical gardens. Full building amenities including heated pool and fitness center.",
+    "hostId": 2,
+    "status": "published"
   },
   {
     "id": 17002,
@@ -185,7 +191,9 @@
       "/seed/property/prop-buenos-aires-9.webp",
       "/seed/property/prop-buenos-aires-10.webp"
     ],
-    "description": "Modern sunlit studio in residential Nuñez with tree-lined street views, balcony, and a turnkey workstation setup ready for immediate productivity."
+    "description": "Modern sunlit studio in residential Nuñez with tree-lined street views, balcony, and a turnkey workstation setup ready for immediate productivity.",
+    "hostId": 2,
+    "status": "published"
   },
   {
     "id": 18001,
@@ -232,7 +240,9 @@
       "/seed/property/prop-lima-4.webp",
       "/seed/property/prop-lima-5.webp"
     ],
-    "description": "Designer loft right in the heart of Miraflores, walking distance to Larcomar shopping center and Malecón ocean cliffs."
+    "description": "Designer loft right in the heart of Miraflores, walking distance to Larcomar shopping center and Malecón ocean cliffs.",
+    "hostId": 2,
+    "status": "published"
   },
   {
     "id": 18002,
@@ -279,7 +289,9 @@
       "/seed/property/prop-lima-9.webp",
       "/seed/property/prop-lima-10.webp"
     ],
-    "description": "Bohemian luxury in Barranco art district. Features rooftop terrace with Pacific Ocean views and top-tier workstation."
+    "description": "Bohemian luxury in Barranco art district. Features rooftop terrace with Pacific Ocean views and top-tier workstation.",
+    "hostId": 2,
+    "status": "published"
   },
   {
     "id": 19001,
@@ -326,7 +338,9 @@
       "/seed/property/prop-barcelona-4.webp",
       "/seed/property/prop-barcelona-5.webp"
     ],
-    "description": "High ceilings, classic Catalan hydraulic tiles, modern acoustic insulation, and high-spec workstation in Barcelona’s most iconic neighborhood."
+    "description": "High ceilings, classic Catalan hydraulic tiles, modern acoustic insulation, and high-spec workstation in Barcelona’s most iconic neighborhood.",
+    "hostId": 1,
+    "status": "published"
   },
   {
     "id": 19002,
@@ -373,6 +387,8 @@
       "/seed/property/prop-barcelona-9.webp",
       "/seed/property/prop-barcelona-10.webp"
     ],
-    "description": "Charming flat in pedestrianized Gràcia with quiet garden-facing terrace, sun throughout the day, and dedicated remote work desk."
+    "description": "Charming flat in pedestrianized Gràcia with quiet garden-facing terrace, sun throughout the day, and dedicated remote work desk.",
+    "hostId": 1,
+    "status": "published"
   }
 ]

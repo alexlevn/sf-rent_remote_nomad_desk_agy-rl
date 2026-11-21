@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "userId": 3,
+    "displayName": "Casa Urbana Stays",
+    "slug": "casa-urbana-stays",
+    "phone": "+34 600 000 001",
+    "website": null,
+    "cities": "Madrid, Barcelona",
+    "portfolioSize": 12,
+    "bio": "Design-led furnished apartments in central Madrid and Barcelona, set up for long stays and focused work.",
+    "avatar": null,
+    "status": "approved",
+    "approvedAt": "2026-01-15T10:00:00Z"
+  },
+  {
+    "id": 2,
+    "userId": 4,
+    "displayName": "Andes Living Co.",
+    "slug": "andes-living-co",
+    "phone": "+54 11 0000 0002",
+    "website": null,
+    "cities": "Buenos Aires, Lima",
+    "portfolioSize": 20,
+    "bio": "Monthly rentals across Buenos Aires and Lima with fast fibre and dedicated desks in every unit.",
+    "avatar": null,
+    "status": "approved",
+    "approvedAt": "2026-02-03T10:00:00Z"
+  },
+  {
+    "id": 3,
+    "userId": 5,
+    "displayName": "Nordic Nest Rentals",
+    "slug": "nordic-nest-rentals",
+    "phone": "+46 70 000 0003",
+    "website": null,
+    "cities": "Riga",
+    "portfolioSize": 5,
+    "bio": "Small portfolio of quiet studios in Riga old town, looking to reach remote workers.",
+    "avatar": null,
+    "status": "pending",
+    "approvedAt": null
+  }
+]
