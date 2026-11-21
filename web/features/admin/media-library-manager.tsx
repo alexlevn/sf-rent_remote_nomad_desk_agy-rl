@@ -62,6 +62,7 @@ export function MediaLibraryManager() {
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [settledQueryKey, setSettledQueryKey] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<number>>(() => new Set());
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -101,20 +102,22 @@ export function MediaLibraryManager() {
     const controller = new AbortController();
     let cancelled = false;
 
-    const params = new URLSearchParams({
-      page: String(page),
-      pageSize: String(PAGE_SIZE),
-    });
-    if (debouncedSearch.length > 0) {
-      params.set('search', debouncedSearch);
-    }
+    const loadMedia = async () => {
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+      if (debouncedSearch.length > 0) {
+        params.set('search', debouncedSearch);
+      }
 
-    fetch(`/api/media?${params.toString()}`, {
-      method: 'GET',
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-      .then(async (response) => {
+      try {
+        const response = await fetch(`/api/media?${params.toString()}`, {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+
         const data = (await response.json().catch(() => null)) as
           | MediaListResult
           | { error?: string }
@@ -143,13 +146,15 @@ export function MediaLibraryManager() {
         setTotal(data.total);
         setTotalPages(safeTotalPages);
         setSettledQueryKey(currentQueryKey);
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (cancelled) return;
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setLibraryError('Network error while loading media library.');
         setSettledQueryKey(currentQueryKey);
-      });
+      }
+    };
+
+    void loadMedia();
 
     return () => {
       cancelled = true;
@@ -269,7 +274,7 @@ export function MediaLibraryManager() {
   }, [handleUploadFiles]);
 
   const handleCopyUrl = async (item: MediaItem) => {
-    setLibraryError(null);
+    setActionError(null);
     try {
       if (!navigator.clipboard) {
         throw new Error('Clipboard API unavailable');
@@ -287,7 +292,7 @@ export function MediaLibraryManager() {
       }, 2000);
     } catch {
       if (isMountedRef.current) {
-        setLibraryError(`Unable to copy automatically. Copy manually: ${item.url}`);
+        setActionError(`Unable to copy automatically. Copy manually: ${item.url}`);
       }
     }
   };
@@ -297,7 +302,7 @@ export function MediaLibraryManager() {
 
     deletingIdsRef.current.add(item.id);
     setDeletingIds(new Set(deletingIdsRef.current));
-    setLibraryError(null);
+    setActionError(null);
 
     try {
       const response = await fetch(`/api/media/${item.id}`, {
@@ -310,7 +315,11 @@ export function MediaLibraryManager() {
       if (!isMountedRef.current) return;
 
       if (!response.ok) {
-        setLibraryError(payload?.error || 'Failed to delete media item.');
+        setActionError(payload?.error || 'Failed to delete media item.');
+        // Refresh usage badges if the asset became referenced in another tab
+        if (response.status === 409) {
+          setRefreshNonce((n) => n + 1);
+        }
         return;
       }
 
@@ -322,7 +331,7 @@ export function MediaLibraryManager() {
       }
     } catch {
       if (isMountedRef.current) {
-        setLibraryError('Network error while deleting media item.');
+        setActionError('Network error while deleting media item.');
       }
     } finally {
       deletingIdsRef.current.delete(item.id);
@@ -508,6 +517,26 @@ export function MediaLibraryManager() {
             </button>
           </div>
         </div>
+
+        {actionError && (
+          <div
+            role="alert"
+            data-testid="media-action-error"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--color-error-border)] bg-[var(--color-error-bg)] px-3.5 py-2.5 text-xs text-[var(--color-error)]"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span className="break-words">{actionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="shrink-0 font-semibold underline cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {libraryError && (
           <div

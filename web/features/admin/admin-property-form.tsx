@@ -298,36 +298,42 @@ export function AdminPropertyForm({
   const handleMediaSelect = (selected: SelectedMediaItem[]) => {
     if (selected.length === 0) return;
 
+    const next = [...images];
     let hitLimit = false;
-    setImages((prev) => {
-      const next = [...prev];
-      for (const item of selected) {
-        const trimmed = item.url.trim();
-        if (!isSafeImagePath(trimmed) || next.includes(trimmed)) continue;
-        if (next.length >= MAX_IMAGES) {
-          hitLimit = true;
-          break;
-        }
-        next.push(trimmed);
+    let addedCount = 0;
+
+    for (const item of selected) {
+      const trimmed = item.url.trim();
+      if (!isSafeImagePath(trimmed) || next.includes(trimmed)) continue;
+      if (next.length >= MAX_IMAGES) {
+        hitLimit = true;
+        break;
       }
-      return next;
-    });
+      next.push(trimmed);
+      addedCount += 1;
+    }
+
+    if (addedCount > 0) {
+      setImages(next);
+      clearImagesFieldError();
+    }
 
     setImageError(
       hitLimit ? `Maximum ${MAX_IMAGES} images allowed per property.` : null,
     );
-    clearImagesFieldError();
   };
 
   const handleToggleSeedImage = (url: string) => {
     setImageError(null);
-    setImages((prev) => {
-      if (prev.includes(url)) {
-        return prev.filter((item) => item !== url);
-      }
-      if (prev.length >= MAX_IMAGES) return prev;
-      return [...prev, url];
-    });
+    if (images.includes(url)) {
+      setImages((prev) => prev.filter((item) => item !== url));
+      return;
+    }
+    if (images.length >= MAX_IMAGES) {
+      setImageError(`Maximum ${MAX_IMAGES} images allowed per property.`);
+      return;
+    }
+    setImages((prev) => [...prev, url]);
     clearImagesFieldError();
   };
 
@@ -1398,7 +1404,7 @@ export function AdminPropertyForm({
                             disabled={idx === 0}
                             title="Move up"
                             aria-label={`Move photo ${idx + 1} up`}
-                            className="flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
                           </button>
@@ -1408,7 +1414,7 @@ export function AdminPropertyForm({
                             disabled={idx === images.length - 1}
                             title="Move down"
                             aria-label={`Move photo ${idx + 1} down`}
-                            className="flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
                           </button>
@@ -1417,7 +1423,7 @@ export function AdminPropertyForm({
                             onClick={() => handleRemoveImage(idx)}
                             title="Remove photo"
                             aria-label={`Remove photo ${idx + 1}`}
-                            className="flex min-h-8 min-w-8 items-center justify-center rounded-lg border border-red-200 bg-white dark:bg-neutral-800 text-red-600 hover:bg-red-50 cursor-pointer"
+                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-red-200 bg-white dark:bg-neutral-800 text-red-600 hover:bg-red-50 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1507,7 +1513,7 @@ export function AdminPropertyForm({
           data-testid="property-sticky-save-bar"
           className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white/95 dark:bg-[var(--color-bg-dark-surface)]/95 backdrop-blur-xs px-4 py-3 shadow-lg"
         >
-          <div className="flex items-center gap-2 text-xs font-medium">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
             <span
               aria-hidden="true"
               className={`h-2 w-2 rounded-full ${
@@ -1524,6 +1530,12 @@ export function AdminPropertyForm({
             >
               {isDirty ? 'Unsaved changes' : 'Ready to save'}
             </span>
+            {Object.keys(errors).length > 0 && (
+              <span role="alert" className="text-red-600 font-semibold">
+                · Please fix {Object.keys(errors).length}{' '}
+                {Object.keys(errors).length === 1 ? 'field' : 'fields'} above
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2.5">
