@@ -34,6 +34,10 @@ const REJECTION_REASONS = [
   'Other',
 ];
 
+const REFERENCE_BASELINE_DATE = '2026-11-20';
+const DEFAULT_COUNTDOWN_HOURS = 36;
+const MIN_HOURS_THRESHOLD = 24;
+
 export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
   initialReservations,
   properties,
@@ -82,24 +86,28 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
     if (res.respondBy) {
       const diffMs =
         new Date(res.respondBy).getTime() -
-        new Date(res.createdAt || '2026-11-20T12:00:00Z').getTime();
+        new Date(res.createdAt || `${REFERENCE_BASELINE_DATE}T12:00:00Z`).getTime();
       const calcHours = Math.round(diffMs / (3600 * 1000));
-      return calcHours > 0 ? calcHours : 24;
+      return calcHours > 0 ? calcHours : MIN_HOURS_THRESHOLD;
     }
-    return 36;
+    return DEFAULT_COUNTDOWN_HOURS;
   };
 
   // Filter reservations by tab
-  const todayStr = '2026-11-20'; // Reference date baseline
   const requestsList = reservations.filter((r) => r.status === 'pending');
   const upcomingList = reservations.filter(
-    (r) => r.status === 'confirmed' && r.moveInDate >= todayStr
+    (r) => r.status === 'confirmed' && r.moveInDate >= REFERENCE_BASELINE_DATE
   );
   const currentList = reservations.filter(
-    (r) => r.status === 'confirmed' && r.moveInDate < todayStr && r.moveOutDate >= todayStr
+    (r) =>
+      r.status === 'confirmed' &&
+      r.moveInDate < REFERENCE_BASELINE_DATE &&
+      r.moveOutDate >= REFERENCE_BASELINE_DATE
   );
   const pastList = reservations.filter(
-    (r) => r.status === 'completed' || (r.status === 'confirmed' && r.moveOutDate < todayStr)
+    (r) =>
+      r.status === 'completed' ||
+      (r.status === 'confirmed' && r.moveOutDate < REFERENCE_BASELINE_DATE)
   );
   const cancelledList = reservations.filter(
     (r) => r.status === 'cancelled' || r.status === 'rejected' || r.status === 'expired'

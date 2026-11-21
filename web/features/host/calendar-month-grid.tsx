@@ -27,6 +27,10 @@ export interface CalendarMonthGridProps {
   onUnblockAction: (blockedDateId: number) => Promise<{ success: boolean; error?: string }>;
 }
 
+const DEFAULT_FALLBACK_PROPERTY_ID = 16060;
+const DESIGN_REFERENCE_YEAR = 2026;
+const DESIGN_REFERENCE_MONTH = 11; // December (0-indexed)
+
 export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
   properties,
   reservations: initialReservations,
@@ -40,7 +44,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
     if (initialPropertyId && properties.some((p) => p.id === initialPropertyId)) {
       return initialPropertyId;
     }
-    return properties[0]?.id || 16060;
+    return properties[0]?.id || DEFAULT_FALLBACK_PROPERTY_ID;
   });
 
   // Calendar Month Navigation
@@ -49,8 +53,8 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
     // Default to Dec 2026 or current date
     const d = new Date();
     // If current year is before 2026, set to Dec 2026 to match design and seed
-    if (d.getFullYear() < 2026) {
-      return new Date(2026, 11, 1);
+    if (d.getFullYear() < DESIGN_REFERENCE_YEAR) {
+      return new Date(DESIGN_REFERENCE_YEAR, DESIGN_REFERENCE_MONTH, 1);
     }
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
