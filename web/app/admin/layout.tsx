@@ -19,7 +19,9 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
   const session = await auth();
   const rawUserId = session?.user?.id ? Number(session.user.id) : NaN;
   const freshUser =
-    Number.isInteger(rawUserId) && rawUserId > 0 ? await getUserById(rawUserId) : null;
+    Number.isInteger(rawUserId) && rawUserId > 0 && rawUserId <= 2_147_483_647
+      ? await getUserById(rawUserId)
+      : null;
 
   // AC-AUTH-2: Unauthenticated state -> 403 Forbidden / Login prompt
   if (!freshUser) {

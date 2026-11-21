@@ -7,7 +7,9 @@ export default async function AdminUsersPage() {
   const session = await auth();
   const rawUserId = session?.user?.id ? Number(session.user.id) : NaN;
   const freshUser =
-    Number.isInteger(rawUserId) && rawUserId > 0 ? await getUserById(rawUserId) : null;
+    Number.isInteger(rawUserId) && rawUserId > 0 && rawUserId <= 2_147_483_647
+      ? await getUserById(rawUserId)
+      : null;
 
   // Layout renders 403 for unauthorized users; guard here too since layouts and pages render in parallel.
   if (!freshUser || !freshUser.isActive || freshUser.role !== 'admin') {
