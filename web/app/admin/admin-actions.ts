@@ -15,7 +15,7 @@ import {
   updateReservationStatus,
 } from '@/lib/api/reservations';
 import { notifyListingModeration } from '@/lib/email/notifications';
-import type { PropertyStatus, HostStatus, Property } from '@/lib/types';
+import type { PropertyStatus, HostStatus, Property, User } from '@/lib/types';
 
 const INT4_MAX = 2_147_483_647;
 const adminUserIdSchema = z.number().int().positive().max(INT4_MAX);
@@ -25,6 +25,11 @@ const adminUpdateUserSchema = z.object({
   firstName: z.string().trim().max(100).optional(),
   lastName: z.string().trim().max(100).optional(),
 });
+
+// Strip bcrypt hashes before serializing users across the Server Action boundary.
+function stripUserSecret(user: User): User {
+  return { ...user, passwordHash: '' };
+}
 
 async function dispatchListingModerationEmail(
   property: Property,
@@ -118,7 +123,7 @@ export async function deletePropertyAction(id: number) {
 export async function fetchAdminHostsAction() {
   await requireAdmin();
   const [hostList, userList] = await Promise.all([listHosts(), listUsers()]);
-  return { hostList, userList };
+  return { hostList, userList: userList.map(stripUserSecret) };
 }
 
 /**
@@ -177,7 +182,8 @@ export async function cancelReservationAdminAction(
  */
 export async function fetchAdminUsersAction() {
   await requireAdmin();
-  return listUsers();
+  const allUsers = await listUsers();
+  return allUsers.map(stripUserSecret);
 }
 
 /**
@@ -201,6 +207,10 @@ export async function updateUserAction(
     throw new Error(`User ${validId} not found`);
   }
 
+  if (Object.keys(parsed).length === 0) {
+    return stripUserSecret(targetUser);
+  }
+
   const isTargetActiveAdmin =
     targetUser.role === 'admin' && targetUser.isActive !== false;
   const wouldRemoveAdmin =
@@ -222,5 +232,5 @@ export async function updateUserAction(
   const updated = await updateUser(validId, parsed);
   revalidatePath('/admin');
   revalidatePath('/admin/users');
-  return updated;
+  return stripUserSecret(updated);
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { ZodError } from 'zod';
 import { AuthError, requireAdmin } from '@/lib/auth/guards';
 import { saveLocationAction, saveTravelGuideAction } from '@/app/admin/cms-actions';
 
@@ -26,12 +27,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
   }
 
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
   }
 
   try {
     const { action, payload } = body as { action?: unknown; payload?: unknown };
+
+    if (payload !== undefined && (!payload || typeof payload !== 'object' || Array.isArray(payload))) {
+      return NextResponse.json({ error: 'Payload must be an object' }, { status: 400 });
+    }
 
     if (action === 'saveLocation') {
       const result = await saveLocationAction(
@@ -49,6 +54,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { error: error.issues[0]?.message || 'Validation failed' },
+        { status: 400 }
+      );
+    }
     const status = (error as { status?: number }).status || 500;
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal Server Error' },
