@@ -5,7 +5,7 @@ Stages of the automated build pipeline for this project.
 | Stage | Kind | Title | Status | Note |
 | --- | --- | --- | --- | --- |
 | S1 | agent | UI, routes & API map | ✅ |  |
-| S2 | agent | Requirements & risks | ⏳ | attempt 1 |
+| S2 | agent | Requirements & risks | ✅ |  |
 | G1 | gate | Owner review: requirements | 🔲 |  |
 | S3 | agent | Static HTML design | 🔲 |  |
 | G2 | gate | Owner review: design | 🔲 |  |
