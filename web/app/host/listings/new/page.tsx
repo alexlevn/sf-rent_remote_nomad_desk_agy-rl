@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
+import { requireHost } from '@/lib/auth/guards';
 import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
 import { listLocations } from '@/lib/api/locations';
 import { saveHostListing } from '@/lib/api/properties';
@@ -42,11 +43,9 @@ export default async function NewListingPage() {
   ) {
     'use server';
     try {
-      if (!host) {
-        return { success: false, error: 'Host not authenticated.' };
-      }
+      const { hostId } = await requireHost();
 
-      const created = await saveHostListing(host.id, {
+      const created = await saveHostListing(hostId, {
         ...data,
         status: intent,
       });

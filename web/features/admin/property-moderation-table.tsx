@@ -4,12 +4,16 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, startTransiti
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Property, PropertyStatus, HostProfile } from '@/lib/types';
+import type { AdminPropertiesStatusCounts } from '@/lib/api/properties';
+import { stripHtmlTags } from '@/lib/validations/content';
 import {
   fetchAdminPropertiesAction,
+  fetchAdminPropertiesPaginatedAction,
   approvePropertyAction,
   updatePropertyStatusAction,
   deletePropertyAction,
 } from '@/app/admin/admin-actions';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   Search,
   CheckCircle,
@@ -24,17 +28,39 @@ import {
   Monitor,
 } from 'lucide-react';
 
-type ModerationTab = 'pending_review' | 'published' | 'hidden_or_other' | 'all';
+type ModerationTab = 'pending_review' | 'published' | 'hidden' | 'draft' | 'rejected' | 'all';
+
+const PAGE_SIZE = 20;
+
+const EMPTY_COUNTS: AdminPropertiesStatusCounts = {
+  all: 0,
+  published: 0,
+  pending_review: 0,
+  draft: 0,
+  rejected: 0,
+  hidden: 0,
+};
 
 export function PropertyModerationTable() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [hosts, setHosts] = useState<HostProfile[]>([]);
+  const [uniqueCities, setUniqueCities] = useState<string[]>([]);
+  const [counts, setCounts] = useState<AdminPropertiesStatusCounts>(EMPTY_COUNTS);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+
   const [activeTab, setActiveTab] = useState<ModerationTab>('pending_review');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [hostFilter, setHostFilter] = useState<string>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
+  const requestIdRef = useRef(0);
 
   // Modal states
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -43,70 +69,132 @@ export function PropertyModerationTable() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isActionRunningRef = useRef(false);
 
-  const fetchData = async () => {
-    try {
-      const { propList, hostList } = await fetchAdminPropertiesAction();
-      startTransition(() => {
-        setProperties(propList);
-        setHosts(hostList);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
-
+  // Load host & city filter options once on mount
   useEffect(() => {
-    fetchData();
+    let active = true;
+    const loadMetadata = async () => {
+      try {
+        const { propList, hostList } = await fetchAdminPropertiesAction();
+        if (!active) return;
+        const cities = Array.from(
+          new Set(propList.map((p) => p.city).filter((c): c is string => Boolean(c)))
+        ).sort();
+        startTransition(() => {
+          setHosts(hostList);
+          setUniqueCities(cities);
+        });
+      } catch {
+        // Non-blocking: filter dropdowns will simply remain empty if metadata fails
+      }
+    };
+    loadMetadata();
+    return () => {
+      active = false;
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
+  // Debounce keyword search (250ms) and reset page to 1 only when the trimmed query changes
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === debouncedSearch) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearch(trimmed);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearch]);
+
+  const fetchPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const result = await fetchAdminPropertiesPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          status: activeTab,
+          city: cityFilter === 'all' ? undefined : cityFilter,
+          hostId: hostFilter === 'all' ? undefined : Number(hostFilter),
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setProperties(result.items);
+          setTotal(result.total);
+          setCounts(result.counts);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to load properties');
+          setLoading(false);
+        });
+      }
+    },
+    [activeTab, cityFilter, hostFilter, debouncedSearch]
+  );
+
+  useEffect(() => {
+    fetchPage(page);
+  }, [page, fetchPage]);
+
+  useEffect(() => {
+    if (errorMessage) {
+      errorBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [errorMessage]);
+
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Find host display name
-  const getHostName = useCallback((hostId: number) => {
-    const host = hosts.find((h) => h.id === hostId);
-    return host ? host.displayName : `Host #${hostId}`;
+  const hostNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const h of hosts) {
+      map.set(h.id, h.displayName);
+    }
+    return map;
   }, [hosts]);
 
-  // Unique cities from properties
-  const uniqueCities = useMemo(() => {
-    const set = new Set<string>();
-    properties.forEach((p) => {
-      if (p.city) set.add(p.city);
-    });
-    return Array.from(set).sort();
-  }, [properties]);
+  const getHostName = useCallback(
+    (hostId: number) => hostNameById.get(hostId) ?? `Host #${hostId}`,
+    [hostNameById]
+  );
 
-  // Tab counts
-  const counts = useMemo(() => {
-    return {
-      pending: properties.filter((p) => p.status === 'pending_review').length,
-      published: properties.filter((p) => p.status === 'published').length,
-      hidden: properties.filter((p) => ['hidden', 'draft', 'rejected'].includes(p.status)).length,
-      all: properties.length,
-    };
-  }, [properties]);
+  const reloadAfterMutation = async () => {
+    const nextPage = properties.length <= 1 && page > 1 ? page - 1 : page;
+    if (nextPage !== page) {
+      setPage(nextPage);
+    } else {
+      await fetchPage(page);
+    }
+  };
 
   // Approve action (AC-ADMIN-2)
   const handleApprove = async (property: Property) => {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await approvePropertyAction(property.id);
       showToast(`Listing "${property.title}" approved and published to ${property.city}!`);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedProperty?.id === property.id) {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'published' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to approve property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to approve property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -118,18 +206,19 @@ export function PropertyModerationTable() {
     if (!rejectingProperty || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await updatePropertyStatusAction(rejectingProperty.id, 'rejected', rejectionReason);
       showToast(`Listing "${rejectingProperty.title}" rejected.`);
       const propId = rejectingProperty.id;
       setRejectingProperty(null);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedProperty?.id === propId) {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'rejected', rejectionReason } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reject property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reject property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -141,16 +230,17 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await updatePropertyStatusAction(property.id, 'hidden');
       showToast(`Listing "${property.title}" hidden from public view.`);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedProperty?.id === property.id) {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'hidden' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to hide property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to hide property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -162,16 +252,17 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await approvePropertyAction(property.id);
       showToast(`Listing "${property.title}" is now published.`);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedProperty?.id === property.id) {
         setSelectedProperty((prev) => (prev ? { ...prev, status: 'published' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to publish property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to publish property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -186,6 +277,7 @@ export function PropertyModerationTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await deletePropertyAction(property.id);
@@ -193,54 +285,14 @@ export function PropertyModerationTable() {
       if (selectedProperty?.id === property.id) {
         setSelectedProperty(null);
       }
-      await fetchData();
+      await reloadAfterMutation();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete property');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete property');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
     }
   };
-
-  // Filtered properties
-  const filteredProperties = useMemo(() => {
-    return properties.filter((p) => {
-      // Tab filter
-      if (activeTab === 'pending_review' && p.status !== 'pending_review') return false;
-      if (activeTab === 'published' && p.status !== 'published') return false;
-      if (
-        activeTab === 'hidden_or_other' &&
-        !['hidden', 'draft', 'rejected'].includes(p.status)
-      ) {
-        return false;
-      }
-
-      // City filter
-      if (cityFilter !== 'all' && p.city.toLowerCase() !== cityFilter.toLowerCase()) {
-        return false;
-      }
-
-      // Host filter
-      if (hostFilter !== 'all' && String(p.hostId) !== hostFilter) {
-        return false;
-      }
-
-      // Search query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const hostName = getHostName(p.hostId).toLowerCase();
-        return (
-          p.title.toLowerCase().includes(q) ||
-          p.reference.toLowerCase().includes(q) ||
-          p.city.toLowerCase().includes(q) ||
-          (p.neighborhood && p.neighborhood.toLowerCase().includes(q)) ||
-          hostName.includes(q)
-        );
-      }
-
-      return true;
-    });
-  }, [properties, activeTab, cityFilter, hostFilter, searchQuery, getHostName]);
 
   const renderStatusBadge = (status: PropertyStatus) => {
     switch (status) {
@@ -270,6 +322,7 @@ export function PropertyModerationTable() {
           <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-sm font-medium">{toastMessage}</span>
           <button
+            type="button"
             onClick={() => setToastMessage(null)}
             className="text-neutral-400 hover:text-white ml-2"
             aria-label="Dismiss"
@@ -279,20 +332,51 @@ export function PropertyModerationTable() {
         </div>
       )}
 
+      {/* Inline Error Banner */}
+      {errorMessage && (
+        <div
+          ref={errorBannerRef}
+          role="alert"
+          data-testid="property-action-error"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-0.5 cursor-pointer"
+            aria-label="Dismiss error"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Tabs Bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border-light)] pb-4">
         <button
-          onClick={() => setActiveTab('pending_review')}
+          type="button"
+          onClick={() => {
+            setActiveTab('pending_review');
+            setPage(1);
+          }}
           className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
             activeTab === 'pending_review'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
               : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
           }`}
         >
-          Pending Review ({counts.pending})
+          Pending Review ({counts.pending_review})
         </button>
         <button
-          onClick={() => setActiveTab('published')}
+          type="button"
+          onClick={() => {
+            setActiveTab('published');
+            setPage(1);
+          }}
           className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
             activeTab === 'published'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -302,17 +386,53 @@ export function PropertyModerationTable() {
           Published ({counts.published})
         </button>
         <button
-          onClick={() => setActiveTab('hidden_or_other')}
+          type="button"
+          onClick={() => {
+            setActiveTab('hidden');
+            setPage(1);
+          }}
           className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-            activeTab === 'hidden_or_other'
+            activeTab === 'hidden'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
               : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
           }`}
         >
-          Draft / Hidden / Rejected ({counts.hidden})
+          Hidden ({counts.hidden})
         </button>
         <button
-          onClick={() => setActiveTab('all')}
+          type="button"
+          onClick={() => {
+            setActiveTab('draft');
+            setPage(1);
+          }}
+          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            activeTab === 'draft'
+              ? 'bg-[var(--color-brand)] text-white shadow-sm'
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
+          }`}
+        >
+          Draft ({counts.draft})
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('rejected');
+            setPage(1);
+          }}
+          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            activeTab === 'rejected'
+              ? 'bg-[var(--color-brand)] text-white shadow-sm'
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
+          }`}
+        >
+          Rejected ({counts.rejected})
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('all');
+            setPage(1);
+          }}
           className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
             activeTab === 'all'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -332,7 +452,10 @@ export function PropertyModerationTable() {
           </label>
           <select
             value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
+            onChange={(e) => {
+              setCityFilter(e.target.value);
+              setPage(1);
+            }}
             className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           >
             <option value="all">All Cities ({uniqueCities.length})</option>
@@ -351,7 +474,10 @@ export function PropertyModerationTable() {
           </label>
           <select
             value={hostFilter}
-            onChange={(e) => setHostFilter(e.target.value)}
+            onChange={(e) => {
+              setHostFilter(e.target.value);
+              setPage(1);
+            }}
             className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           >
             <option value="all">All Hosts ({hosts.length})</option>
@@ -405,7 +531,7 @@ export function PropertyModerationTable() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredProperties.length === 0 ? (
+              ) : properties.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
@@ -422,7 +548,7 @@ export function PropertyModerationTable() {
                   </td>
                 </tr>
               ) : (
-                filteredProperties.map((property) => {
+                properties.map((property) => {
                   const monthlyUSD = Math.round(property.pricePerMonth / 100);
                   const firstImage = property.images?.[0] || '/seed/property/prop-madrid-1.webp';
 
@@ -445,6 +571,7 @@ export function PropertyModerationTable() {
                           </div>
                           <div className="min-w-0">
                             <button
+                              type="button"
                               onClick={() => setSelectedProperty(property)}
                               className="font-semibold text-[var(--color-text-on-light)] hover:text-[var(--color-brand)] text-left line-clamp-1"
                             >
@@ -507,6 +634,7 @@ export function PropertyModerationTable() {
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Quick Inspect */}
                           <button
+                            type="button"
                             onClick={() => setSelectedProperty(property)}
                             className="btn btn-outline btn-sm text-xs px-2.5 py-1"
                             title="Inspect listing details"
@@ -518,6 +646,7 @@ export function PropertyModerationTable() {
                           {property.status === 'pending_review' && (
                             <>
                               <button
+                                type="button"
                                 onClick={() => handleApprove(property)}
                                 disabled={isSubmitting}
                                 className="btn btn-primary btn-sm text-xs px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border-none"
@@ -525,6 +654,7 @@ export function PropertyModerationTable() {
                                 Approve
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   setRejectingProperty(property);
                                   setRejectionReason('Listing requires higher quality workstation photos');
@@ -548,6 +678,7 @@ export function PropertyModerationTable() {
                                 <ExternalLink className="w-4 h-4" />
                               </Link>
                               <button
+                                type="button"
                                 onClick={() => handleHide(property)}
                                 disabled={isSubmitting}
                                 className="btn btn-outline btn-sm text-xs px-2.5 py-1 text-amber-600 border-amber-200"
@@ -560,6 +691,7 @@ export function PropertyModerationTable() {
 
                           {property.status === 'hidden' && (
                             <button
+                              type="button"
                               onClick={() => handlePublish(property)}
                               disabled={isSubmitting}
                               className="btn btn-primary btn-sm text-xs px-2.5 py-1"
@@ -571,7 +703,7 @@ export function PropertyModerationTable() {
 
                           {/* Edit / Delete */}
                           <Link
-                            href={`/host/listings/${property.id}/edit`}
+                            href={`/admin/properties/${property.id}/edit`}
                             className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded-md hover:bg-neutral-100"
                             title="Edit listing details"
                           >
@@ -579,6 +711,7 @@ export function PropertyModerationTable() {
                           </Link>
 
                           <button
+                            type="button"
                             onClick={() => handleDelete(property)}
                             disabled={isSubmitting}
                             className="p-1.5 text-neutral-400 hover:text-red-600 rounded-md hover:bg-red-50"
@@ -595,6 +728,15 @@ export function PropertyModerationTable() {
             </tbody>
           </table>
         </div>
+
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+          disabled={loading}
+          itemLabel="properties"
+        />
       </div>
 
       {/* Modal: Property Detail Inspection */}
@@ -615,7 +757,9 @@ export function PropertyModerationTable() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedProperty(null)}
+                aria-label="Close inspection modal"
                 className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100"
               >
                 <X className="w-5 h-5" />
@@ -699,7 +843,9 @@ export function PropertyModerationTable() {
                 Description
               </span>
               <p className="text-neutral-700 dark:text-neutral-300 leading-relaxed text-xs">
-                {selectedProperty.description || 'No detailed description provided.'}
+                {selectedProperty.description
+                  ? stripHtmlTags(selectedProperty.description)
+                  : 'No detailed description provided.'}
               </p>
             </div>
 
@@ -718,7 +864,7 @@ export function PropertyModerationTable() {
             <div className="pt-4 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex items-center justify-between">
               <div>
                 <Link
-                  href={`/host/listings/${selectedProperty.id}/edit`}
+                  href={`/admin/properties/${selectedProperty.id}/edit`}
                   className="btn btn-outline btn-sm text-xs inline-flex items-center gap-1.5"
                 >
                   <Edit className="w-3.5 h-3.5" />
@@ -728,6 +874,7 @@ export function PropertyModerationTable() {
 
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => setSelectedProperty(null)}
                   className="btn btn-outline btn-sm text-xs"
                 >
@@ -737,6 +884,7 @@ export function PropertyModerationTable() {
                 {selectedProperty.status === 'pending_review' && (
                   <>
                     <button
+                      type="button"
                       onClick={() => {
                         setRejectingProperty(selectedProperty);
                         setRejectionReason('Listing requires higher quality workstation photos');
@@ -747,6 +895,7 @@ export function PropertyModerationTable() {
                       Reject
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleApprove(selectedProperty)}
                       disabled={isSubmitting}
                       className="btn btn-primary btn-sm text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -758,6 +907,7 @@ export function PropertyModerationTable() {
 
                 {selectedProperty.status === 'published' && (
                   <button
+                    type="button"
                     onClick={() => handleHide(selectedProperty)}
                     disabled={isSubmitting}
                     className="btn btn-outline btn-sm text-xs text-amber-600 border-amber-200"
@@ -768,6 +918,7 @@ export function PropertyModerationTable() {
 
                 {selectedProperty.status === 'hidden' && (
                   <button
+                    type="button"
                     onClick={() => handlePublish(selectedProperty)}
                     disabled={isSubmitting}
                     className="btn btn-primary btn-sm text-xs"

@@ -166,7 +166,7 @@ test.describe('Admin CMS Content Updates E2E Suite', () => {
     await page.getByTestId('guide-featured-checkbox').check();
 
     // Switch to HTML editor mode and fill formatted rich content
-    await page.getByRole('button', { name: 'HTML' }).click();
+    await page.getByRole('tab', { name: 'HTML' }).click();
     const richContent = '<h2>Cost of Living & Tech Hubs</h2><p>Lisbon offers <strong>exceptional</strong> sunlight.</p><ul><li>Reliable fiber internet</li><li>Vibrant nomad community</li></ul><a href="https://nomaddesk.com">Read full story</a>';
     await page.getByTestId('rich-editor-html').fill(richContent);
 
@@ -189,22 +189,24 @@ test.describe('Admin CMS Content Updates E2E Suite', () => {
     await expect(page.locator('strong').filter({ hasText: 'exceptional' })).toBeVisible();
     await expect(page.locator('li').filter({ hasText: 'Reliable fiber internet' })).toBeVisible();
 
-    // 7. Verify opening and saving a seed guide without changes leaves HTML unaltered
+    // 7. Verify opening and saving a seed guide (#361) in Tiptap without edits leaves HTML 100% unaltered
     await page.goto('/admin/guides');
-    const firstEditBtn = page.getByRole('button', { name: /Edit/i }).first();
-    await firstEditBtn.click();
+    await page.getByTestId('edit-guide-361').click();
+    await expect(page.getByTestId('rich-editor-visual')).toBeVisible();
 
-    await page.getByRole('button', { name: 'HTML' }).click();
+    // Read original seed HTML via HTML tab, then switch back to Visual tab without editing
+    await page.getByRole('tab', { name: 'HTML' }).click();
     const originalHtml = await page.getByTestId('rich-editor-html').inputValue();
+    await page.getByRole('tab', { name: 'Editor' }).click();
+    await expect(page.getByTestId('rich-editor-visual')).toBeVisible();
 
-    // Save without edits
+    // Save without making any edits in Tiptap
     await page.getByTestId('publish-guide-btn').click();
     await expect(page.getByText(/updated successfully/i)).toBeVisible();
 
-    // Re-open and verify HTML is identical
-    const editBtnAfterSave = page.getByRole('button', { name: /Edit/i }).first();
-    await editBtnAfterSave.click();
-    await page.getByRole('button', { name: 'HTML' }).click();
+    // Re-open the same seed guide (#361) and verify HTML is byte-for-byte identical
+    await page.getByTestId('edit-guide-361').click();
+    await page.getByRole('tab', { name: 'HTML' }).click();
     const reloadedHtml = await page.getByTestId('rich-editor-html').inputValue();
     expect(reloadedHtml).toBe(originalHtml);
   });
@@ -397,7 +399,7 @@ test.describe('Admin CMS Content Updates E2E Suite', () => {
     expect(guestAttempt).toBe(403);
 
     // 3. Host user attempts to call /api/admin/cms -> blocked with 403
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
     const hostAttempt = await page.evaluate(async () => {
       const res = await fetch('/api/admin/cms', {
         method: 'POST',
@@ -414,7 +416,7 @@ test.describe('Admin CMS Content Updates E2E Suite', () => {
     await page.getByTestId('new-guide-btn').click();
 
     await page.getByTestId('guide-title-input').fill('XSS Defense Security Audit Guide');
-    await page.getByRole('button', { name: 'HTML' }).click();
+    await page.getByRole('tab', { name: 'HTML' }).click();
 
     const xssPayload = '<h2>Clean Header</h2><p>Safe text content.</p><script>alert("xss-injected")</script><img src="nonexistent.jpg" onerror="alert(\'xss-onerror\')" />';
     await page.getByTestId('rich-editor-html').fill(xssPayload);

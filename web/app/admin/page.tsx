@@ -1,15 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, startTransition } from 'react';
+import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import Link from 'next/link';
 import {
   AdminKpiCards,
   type AdminKpiStats,
 } from '@/features/admin/admin-kpi-cards';
-import { listProperties } from '@/lib/api/properties';
-import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
-import { listReservations } from '@/lib/api/reservations';
-import { fetchAdminUsersAction } from '@/app/admin/admin-actions';
+import {
+  fetchAdminDashboardStatsAction,
+  fetchAdminHostsPaginatedAction,
+  fetchAdminPropertiesPaginatedAction,
+  fetchAdminUsersAction,
+  reviewHostAction,
+} from '@/app/admin/admin-actions';
+import type { AdminDashboardPeriod, AdminDashboardStats } from '@/lib/api/reservations';
 import type { HostProfile, Property, User } from '@/lib/types';
 import {
   UserCheck,
@@ -21,90 +25,167 @@ import {
   Check,
   X,
   Sparkles,
+  AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 
-export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<AdminKpiStats>({
-    publishedProperties: 8,
-    activeHosts: 2,
-    pendingHosts: 1,
-    pendingProperties: 0,
-    totalReservations: 3,
-    estimatedGmvUSD: 14200,
-    netCommissionUSD: 1420,
+const PERIOD_OPTIONS: Array<{ value: AdminDashboardPeriod; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: '7 Days' },
+  { value: '30d', label: '30 Days' },
+  { value: 'all', label: 'All Time' },
+];
+
+const EMPTY_STATS: AdminKpiStats = {
+  publishedProperties: 0,
+  activeHosts: 0,
+  pendingHosts: 0,
+  pendingProperties: 0,
+  totalReservations: 0,
+  estimatedGmvUSD: 0,
+  netCommissionUSD: 0,
+};
+
+function formatSubmittedDate(iso?: string): string {
+  if (!iso) return '—';
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
+}
+
+export default function AdminDashboardPage() {
+  const [period, setPeriod] = useState<AdminDashboardPeriod>('all');
+  const [dashboardStats, setDashboardStats] = useState<AdminDashboardStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
   const [pendingHosts, setPendingHosts] = useState<HostProfile[]>([]);
   const [pendingProperties, setPendingProperties] = useState<Property[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Load initial platform data
-  const loadData = async () => {
+  const statsRequestIdRef = useRef(0);
+  const queuesRequestIdRef = useRef(0);
+  const isActionRunningRef = useRef(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadStats = useCallback(async (selectedPeriod: AdminDashboardPeriod) => {
+    const reqId = ++statsRequestIdRef.current;
+    setLoadingStats(true);
     try {
-      const [allProperties, allHosts, allReservations, allUsers] = await Promise.all([
-        listProperties({ status: 'all' }),
-        listHosts(),
-        listReservations(),
-        fetchAdminUsersAction(),
-      ]);
-
-      const published = allProperties.filter((p) => p.status === 'published');
-      const activeH = allHosts.filter((h) => h.status === 'approved');
-      const pendingH = allHosts.filter((h) => h.status === 'pending');
-      const pendingP = allProperties.filter((p) => p.status === 'pending_review');
-
-      // Calculate GMV & commission from confirmed reservations
-      const confirmedReservations = allReservations.filter((r) => r.status === 'confirmed');
-      const gmvCents = confirmedReservations.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
-      const commissionCents = confirmedReservations.reduce(
-        (sum, r) => sum + (r.commissionAmount || Math.round((r.totalAmount || 0) * 0.1)),
-        0
-      );
-
+      const data = await fetchAdminDashboardStatsAction(selectedPeriod);
+      if (reqId !== statsRequestIdRef.current) return;
       startTransition(() => {
-        setStats({
-          publishedProperties: published.length,
-          activeHosts: activeH.length,
-          pendingHosts: pendingH.length,
-          pendingProperties: pendingP.length,
-          totalReservations: allReservations.length,
-          estimatedGmvUSD: gmvCents > 0 ? gmvCents / 100 : 14200,
-          netCommissionUSD: commissionCents > 0 ? commissionCents / 100 : 1420,
-        });
-        setPendingHosts(pendingH);
-        setPendingProperties(pendingP);
-        setUsers(allUsers);
+        setDashboardStats(data);
+        setLoadingStats(false);
       });
-    } catch {
-      // Fallback to initial seed values
+    } catch (err) {
+      if (reqId !== statsRequestIdRef.current) return;
+      startTransition(() => {
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to load dashboard metrics');
+        setLoadingStats(false);
+      });
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  const handleApproveHost = async (hostId: number, displayName: string) => {
+  const loadQueues = useCallback(async () => {
+    const reqId = ++queuesRequestIdRef.current;
     try {
-      await reviewHostApplication(hostId, 'approved');
-      setNotification(`Host application for "${displayName}" has been approved!`);
-      setTimeout(() => setNotification(null), 4000);
-      await loadData();
+      const [hostsPage, propsPage, allUsers] = await Promise.all([
+        fetchAdminHostsPaginatedAction({ status: 'pending', page: 1, pageSize: 10 }),
+        fetchAdminPropertiesPaginatedAction({ status: 'pending_review', page: 1, pageSize: 10 }),
+        fetchAdminUsersAction(),
+      ]);
+      if (reqId !== queuesRequestIdRef.current) return;
+      startTransition(() => {
+        setPendingHosts(hostsPage.items);
+        setPendingProperties(propsPage.items);
+        setUsers(allUsers);
+      });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to approve host');
+      if (reqId !== queuesRequestIdRef.current) return;
+      startTransition(() => {
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to load approval queues');
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStats(period);
+  }, [period, loadStats]);
+
+  useEffect(() => {
+    loadQueues();
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, [loadQueues]);
+
+  const showNotification = (msg: string) => {
+    setErrorMessage(null);
+    setNotification(msg);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setNotification(null), 4000);
+  };
+
+  const handleApproveHost = async (hostId: number, displayName: string) => {
+    if (isActionRunningRef.current) return;
+    isActionRunningRef.current = true;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await reviewHostAction(hostId, 'approved');
+      showNotification(`Host application for "${displayName}" has been approved!`);
+      await Promise.all([loadStats(period), loadQueues()]);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to approve host');
+    } finally {
+      setIsSubmitting(false);
+      isActionRunningRef.current = false;
     }
   };
 
   const handleRejectHost = async (hostId: number, displayName: string) => {
+    if (isActionRunningRef.current) return;
+    isActionRunningRef.current = true;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
     try {
-      await reviewHostApplication(hostId, 'rejected', 'Portfolio does not meet NomadDesk remote standards');
-      setNotification(`Host application for "${displayName}" was rejected.`);
-      setTimeout(() => setNotification(null), 4000);
-      await loadData();
+      await reviewHostAction(hostId, 'rejected', 'Portfolio does not meet NomadDesk remote standards');
+      showNotification(`Host application for "${displayName}" was rejected.`);
+      await Promise.all([loadStats(period), loadQueues()]);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reject host');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reject host');
+    } finally {
+      setIsSubmitting(false);
+      isActionRunningRef.current = false;
     }
   };
+
+  const kpiStats: AdminKpiStats = dashboardStats
+    ? {
+        publishedProperties: dashboardStats.publishedProperties,
+        activeHosts: dashboardStats.activeHosts,
+        pendingHosts: dashboardStats.pendingHosts,
+        pendingProperties: dashboardStats.pendingProperties,
+        totalReservations: dashboardStats.totalReservations,
+        estimatedGmvUSD: dashboardStats.estimatedGmvUSD,
+        netCommissionUSD: dashboardStats.netCommissionUSD,
+      }
+    : EMPTY_STATS;
+
+  const activePeriodLabel =
+    PERIOD_OPTIONS.find((opt) => opt.value === period)?.label ?? 'All Time';
 
   return (
     <div className="space-y-8">
@@ -143,15 +224,58 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Period Filter Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-2xl border border-[var(--color-border-light)] px-4 py-3 shadow-xs">
+        <div className="flex items-center gap-2 text-xs text-[var(--color-text-on-light-muted)]">
+          <Calendar className="w-4 h-4 text-[var(--color-brand)] shrink-0" />
+          <span>
+            Metrics window:{' '}
+            <strong className="text-[var(--color-text-on-light)]">{activePeriodLabel}</strong>
+            {dashboardStats && (
+              <span className="ml-2 text-neutral-500">
+                · {dashboardStats.newUsers} new users · {dashboardStats.newProperties} new listings
+              </span>
+            )}
+          </span>
+        </div>
+        <div
+          role="group"
+          aria-label="Dashboard period filter"
+          data-testid="dashboard-period-switcher"
+          className="inline-flex items-center gap-1 rounded-xl bg-neutral-100 p-1"
+        >
+          {PERIOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              data-testid={`dashboard-period-${opt.value}`}
+              onClick={() => setPeriod(opt.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                period === opt.value
+                  ? 'bg-[var(--color-brand)] text-white shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Notification Toast */}
       {notification && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs md:text-sm font-medium flex items-center justify-between shadow-sm animate-fade-in">
+        <div
+          role="status"
+          className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs md:text-sm font-medium flex items-center justify-between shadow-sm animate-fade-in"
+        >
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-600" />
             <span>{notification}</span>
           </div>
           <button
+            type="button"
             onClick={() => setNotification(null)}
+            aria-label="Dismiss notification"
             className="text-emerald-700 hover:text-emerald-900"
           >
             <X className="w-4 h-4" />
@@ -159,8 +283,31 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {/* Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs md:text-sm font-medium flex items-center justify-between shadow-sm"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            aria-label="Dismiss error"
+            className="text-red-600 hover:text-red-800"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* KPI Cards Grid */}
-      <AdminKpiCards stats={stats} />
+      <div className={loadingStats ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+        <AdminKpiCards stats={kpiStats} />
+      </div>
 
       {/* Action Queues Section */}
       <div className="space-y-6">
@@ -170,9 +317,9 @@ export default function AdminDashboardPage() {
             <div>
               <h2 className="text-base md:text-lg font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <span>Queue: Host Membership Applications Awaiting Approval</span>
-                {pendingHosts.length > 0 && (
+                {(dashboardStats?.pendingHosts ?? pendingHosts.length) > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-[var(--color-brand)]">
-                    {pendingHosts.length} pending
+                    {dashboardStats?.pendingHosts ?? pendingHosts.length} pending
                   </span>
                 )}
               </h2>
@@ -220,19 +367,25 @@ export default function AdminDashboardPage() {
                         <td className="py-3.5 px-4 text-neutral-700">
                           {host.portfolioSize} units
                         </td>
-                        <td className="py-3.5 px-4 text-neutral-500">Today</td>
+                        <td className="py-3.5 px-4 text-neutral-500 whitespace-nowrap">
+                          {formatSubmittedDate(host.createdAt)}
+                        </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
+                              type="button"
+                              disabled={isSubmitting}
                               onClick={() => handleApproveHost(host.id, host.displayName)}
-                              className="px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-sm inline-flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-1"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span>Approve</span>
                             </button>
                             <button
+                              type="button"
+                              disabled={isSubmitting}
                               onClick={() => handleRejectHost(host.id, host.displayName)}
-                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 transition-colors inline-flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
                             >
                               <X className="w-3.5 h-3.5" />
                               <span>Reject</span>
@@ -256,7 +409,7 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Two-column layout for Property Moderation and Recent Bookings */}
+        {/* Two-column layout for Property Moderation and Quick Platform Shortcuts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Queue: Property Moderations */}
           <div className="bg-white rounded-2xl border border-[var(--color-border-light)] shadow-sm overflow-hidden flex flex-col">
@@ -264,9 +417,9 @@ export default function AdminDashboardPage() {
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                   <span>Property Moderation Queue</span>
-                  {pendingProperties.length > 0 && (
+                  {(dashboardStats?.pendingProperties ?? pendingProperties.length) > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                      {pendingProperties.length} pending
+                      {dashboardStats?.pendingProperties ?? pendingProperties.length} pending
                     </span>
                   )}
                 </h3>

@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
+import { requireHost } from '@/lib/auth/guards';
 import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
 import { listProperties } from '@/lib/api/properties';
 import { listReservations, updateReservationStatus } from '@/lib/api/reservations';
@@ -79,7 +80,8 @@ export default async function HostDashboardPage() {
   async function acceptReservationAction(reservationId: number) {
     'use server';
     try {
-      await updateReservationStatus(reservationId, 'confirmed');
+      const { hostId } = await requireHost();
+      await updateReservationStatus(reservationId, 'confirmed', undefined, undefined, { hostId });
       revalidatePath('/host');
       return { success: true };
     } catch (err) {
@@ -94,7 +96,8 @@ export default async function HostDashboardPage() {
   async function rejectReservationAction(reservationId: number, reason?: string) {
     'use server';
     try {
-      await updateReservationStatus(reservationId, 'rejected', reason, 'host');
+      const { hostId } = await requireHost();
+      await updateReservationStatus(reservationId, 'rejected', reason, 'host', { hostId });
       revalidatePath('/host');
       return { success: true };
     } catch (err) {

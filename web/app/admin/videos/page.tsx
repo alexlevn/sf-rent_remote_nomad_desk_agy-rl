@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useRef, startTransition } from 'react';
 import type { CommunityVideo } from '@/lib/types';
-import { listVideos } from '@/lib/api/videos';
 import {
   saveVideoAction,
   deleteVideoAction,
   reorderVideosAction,
+  fetchVideosAction,
 } from '@/app/admin/cms-actions';
 import {
   Video,
@@ -34,7 +34,7 @@ export default function AdminVideosPage() {
 
   const fetchVideos = async () => {
     try {
-      const data = await listVideos({ includeInactive: true });
+      const data = await fetchVideosAction();
       startTransition(() => {
         setVideos(data);
         setLoading(false);

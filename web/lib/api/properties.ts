@@ -1,90 +1,212 @@
-import type { Property, PropertyFilterParams, PropertyStatus } from '@/lib/types';
-import { getMockStore } from './mock/seed-data';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lte,
+  notExists,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import {
+  blockedDates,
+  hostProfiles,
+  locations,
+  properties,
+  reservations,
+} from '@/lib/db/schema';
+import type {
+  Property,
+  PropertyFilterParams,
+  PropertyStatus,
+  PropertyWorkstation,
+} from '@/lib/types';
+import {
+  adminCreatePropertySchema,
+  adminUpdatePropertySchema,
+  createPropertySchema,
+  featuredReorderSchema,
+  int4IdSchema,
+  isoDateStringSchema,
+  nonNegativeInt4Schema,
+  propertyStatusSchema,
+  updatePropertySchema,
+} from '@/lib/validations/property';
+import { sanitizeHtml } from '@/lib/validations/content';
 
-/**
- * Checks if two date ranges [startA, endA) and [startB, endB) overlap.
- */
-function datesOverlap(startA: string, endA: string, startB: string, endB: string): boolean {
-  return new Date(startA) < new Date(endB) && new Date(endA) > new Date(startB);
+const DEFAULT_WORKSTATION: PropertyWorkstation = {
+  hasWorkstation: true,
+  desk: 'Standard Desk',
+  chair: 'Ergonomic Chair',
+  monitors: 'Ultrawide Monitor',
+  keyboard: 'Standard',
+  wifiSpeed: 300,
+};
+
+function parseWorkstation(raw: Record<string, unknown> | null): PropertyWorkstation {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_WORKSTATION };
+  }
+  return {
+    hasWorkstation:
+      typeof raw.hasWorkstation === 'boolean'
+        ? raw.hasWorkstation
+        : DEFAULT_WORKSTATION.hasWorkstation,
+    desk: typeof raw.desk === 'string' ? raw.desk : DEFAULT_WORKSTATION.desk,
+    chair: typeof raw.chair === 'string' ? raw.chair : DEFAULT_WORKSTATION.chair,
+    monitors:
+      typeof raw.monitors === 'string' ? raw.monitors : DEFAULT_WORKSTATION.monitors,
+    keyboard:
+      typeof raw.keyboard === 'string' ? raw.keyboard : DEFAULT_WORKSTATION.keyboard,
+    wifiSpeed:
+      typeof raw.wifiSpeed === 'number' && Number.isFinite(raw.wifiSpeed)
+        ? raw.wifiSpeed
+        : DEFAULT_WORKSTATION.wifiSpeed,
+  };
+}
+
+export function mapPropertyRow(row: typeof properties.$inferSelect): Property {
+  return {
+    id: row.id,
+    reference: row.reference || `ND-PROP-${row.id}`,
+    title: row.title,
+    slug: row.slug || `property-${row.id}`,
+    description: row.description || '',
+    pricePerMonth: row.pricePerMonth,
+    currency: row.currency,
+    locationId: row.locationId ?? 0,
+    city: row.city,
+    country: row.country || '',
+    neighborhood: row.neighborhood || '',
+    address: row.address || '',
+    bedrooms: row.bedrooms,
+    bathrooms: row.bathrooms,
+    totalSurface: row.totalSurface ?? 0,
+    maxGuests: row.maxGuests,
+    bedsCount: row.bedsCount,
+    kitchen: row.kitchen,
+    laundry: row.laundry,
+    balcony: row.balcony,
+    petFriendly: row.petFriendly,
+    pool: row.pool,
+    gym: row.gym,
+    terrace: row.terrace,
+    workstation: parseWorkstation(row.workstation),
+    houseRules: row.houseRules || '',
+    checkInStart: row.checkInStart,
+    checkOut: row.checkOut,
+    minimumStayNights: row.minimumStayNights,
+    isFeatured: row.featuredPosition != null,
+    featuredPosition: row.featuredPosition ?? null,
+    isDirectBooking: row.isDirectBooking,
+    images: Array.isArray(row.images) ? row.images : [],
+    hostId: row.hostId ?? 0,
+    status: row.status as PropertyStatus,
+    rejectionReason: row.rejectionReason ?? null,
+    createdAt: row.createdAt ? row.createdAt.toISOString() : undefined,
+    updatedAt: row.updatedAt ? row.updatedAt.toISOString() : undefined,
+  };
+}
+
+function escapeIlike(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
 /**
- * Lists properties matching filter criteria.
- * Defaults to 'published' properties for public browsing.
+ * Lists properties matching filter criteria from PostgreSQL.
+ * Defaults to 'published' properties belonging to 'approved' hosts (AC-LIST-6).
  */
 export async function listProperties(params?: PropertyFilterParams): Promise<Property[]> {
-  const store = getMockStore();
-  let result = [...store.properties];
+  const conditions: SQL[] = [];
+  const requireApprovedHost = !params?.status;
 
-  // Status filtering (default: 'published' only from approved hosts, unless 'all' or explicit status requested)
   if (params?.status === 'all') {
     // Return properties of all statuses
   } else if (params?.status) {
-    result = result.filter((p) => p.status === params.status);
+    const validStatus = propertyStatusSchema.safeParse(params.status);
+    if (!validStatus.success) return [];
+    conditions.push(eq(properties.status, validStatus.data));
   } else {
-    const approvedHostIds = new Set(
-      store.hosts.filter((h) => h.status === 'approved').map((h) => h.id)
-    );
-    result = result.filter((p) => p.status === 'published' && approvedHostIds.has(p.hostId));
+    conditions.push(eq(properties.status, 'published'));
+    conditions.push(eq(hostProfiles.status, 'approved'));
   }
 
-  // City filter (case-insensitive on city name or slug)
-  if (params?.city) {
-    const qCity = params.city.trim().toLowerCase();
-    result = result.filter(
-      (p) =>
-        p.city.toLowerCase() === qCity ||
-        p.city.toLowerCase().includes(qCity) ||
-        p.neighborhood.toLowerCase().includes(qCity)
+  // City filter (case-insensitive substring on city or neighborhood)
+  if (params?.city && params.city.trim()) {
+    const pattern = `%${escapeIlike(params.city.trim())}%`;
+    const cityCond = or(
+      ilike(properties.city, pattern),
+      ilike(properties.neighborhood, pattern)
     );
+    if (cityCond) conditions.push(cityCond);
   }
 
-  // Neighborhood filter
-  if (params?.neighborhood) {
-    const qNeigh = params.neighborhood.trim().toLowerCase();
-    result = result.filter((p) => p.neighborhood.toLowerCase() === qNeigh);
+  // Location ID filter
+  if (params?.locationId != null) {
+    const parsedLoc = int4IdSchema.safeParse(params.locationId);
+    if (!parsedLoc.success) return [];
+    conditions.push(eq(properties.locationId, parsedLoc.data));
+  }
+
+  // Neighborhood filter (case-insensitive exact match)
+  if (params?.neighborhood && params.neighborhood.trim()) {
+    conditions.push(
+      eq(sql`lower(${properties.neighborhood})`, params.neighborhood.trim().toLowerCase())
+    );
   }
 
   // Host filter
   if (params?.hostId != null) {
-    result = result.filter((p) => p.hostId === params.hostId);
+    const parsedHost = int4IdSchema.safeParse(params.hostId);
+    if (!parsedHost.success) return [];
+    conditions.push(eq(properties.hostId, parsedHost.data));
   }
 
   // Featured filter
   if (params?.featured) {
-    result = result
-      .filter((p) => p.featuredPosition != null || p.isFeatured === true)
-      .sort((a, b) => (a.featuredPosition ?? 999) - (b.featuredPosition ?? 999));
+    conditions.push(isNotNull(properties.featuredPosition));
   }
 
   // Bedrooms filter (exact or minimum)
   if (params?.bedrooms != null) {
+    const parsedBedrooms = nonNegativeInt4Schema.safeParse(params.bedrooms);
+    if (!parsedBedrooms.success) return [];
     if (params.exactBedrooms) {
-      result = result.filter((p) => p.bedrooms === params.bedrooms!);
+      conditions.push(eq(properties.bedrooms, parsedBedrooms.data));
     } else {
-      result = result.filter((p) => p.bedrooms >= params.bedrooms!);
+      conditions.push(gte(properties.bedrooms, parsedBedrooms.data));
     }
   }
 
-  // Min price filter (cents)
+  // Price range filters (USD cents)
   if (params?.minPrice != null) {
-    result = result.filter((p) => p.pricePerMonth >= params.minPrice!);
+    const parsedMin = nonNegativeInt4Schema.safeParse(params.minPrice);
+    if (!parsedMin.success) return [];
+    conditions.push(gte(properties.pricePerMonth, parsedMin.data));
   }
-
-  // Max price filter (cents)
   if (params?.maxPrice != null) {
-    result = result.filter((p) => p.pricePerMonth <= params.maxPrice!);
+    const parsedMax = nonNegativeInt4Schema.safeParse(params.maxPrice);
+    if (!parsedMax.success) return [];
+    conditions.push(lte(properties.pricePerMonth, parsedMax.data));
   }
 
   // Direct booking (Instant Book) filter
   if (params?.isDirectBooking != null) {
-    result = result.filter((p) => p.isDirectBooking === params.isDirectBooking);
+    conditions.push(eq(properties.isDirectBooking, params.isDirectBooking));
   }
 
-  // Minimum verified Wi-Fi speed (Mbps)
+  // Minimum verified Wi-Fi speed (Mbps) inside jsonb workstation column
   if (params?.minWifiSpeed != null) {
-    result = result.filter(
-      (p) => (p.workstation?.wifiSpeed || 0) >= params.minWifiSpeed!
+    const parsedWifi = nonNegativeInt4Schema.safeParse(params.minWifiSpeed);
+    if (!parsedWifi.success) return [];
+    conditions.push(
+      sql`CASE WHEN (${properties.workstation}->>'wifiSpeed') ~ '^[0-9]+$' THEN (${properties.workstation}->>'wifiSpeed')::int ELSE 0 END >= ${parsedWifi.data}`
     );
   }
 
@@ -92,42 +214,85 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
   if (params?.amenities && params.amenities.length > 0) {
     for (const rawAmenity of params.amenities) {
       const amenity = rawAmenity.toLowerCase();
-      result = result.filter((p) => {
-        if (amenity === 'kitchen') return p.kitchen;
-        if (amenity === 'laundry') return p.laundry;
-        if (amenity === 'balcony') return p.balcony;
-        if (amenity === 'petfriendly' || amenity === 'pet_friendly' || amenity === 'pets') return p.petFriendly;
-        if (amenity === 'pool' || amenity === 'swimming_pool') return p.pool;
-        if (amenity === 'gym') return p.gym;
-        if (amenity === 'terrace') return p.terrace;
-        if (amenity === 'workstation') return p.workstation?.hasWorkstation;
-        return true;
-      });
+      if (amenity === 'kitchen') conditions.push(eq(properties.kitchen, true));
+      else if (amenity === 'laundry') conditions.push(eq(properties.laundry, true));
+      else if (amenity === 'balcony') conditions.push(eq(properties.balcony, true));
+      else if (amenity === 'petfriendly' || amenity === 'pet_friendly' || amenity === 'pets') {
+        conditions.push(eq(properties.petFriendly, true));
+      } else if (amenity === 'pool' || amenity === 'swimming_pool') {
+        conditions.push(eq(properties.pool, true));
+      } else if (amenity === 'gym') conditions.push(eq(properties.gym, true));
+      else if (amenity === 'terrace') conditions.push(eq(properties.terrace, true));
+      else if (amenity === 'workstation') {
+        conditions.push(
+          sql`coalesce((${properties.workstation}->>'hasWorkstation')::boolean, false) = true`
+        );
+      }
     }
   }
 
-  // Date availability filter: exclude properties with overlapping blocked dates or active reservations
+  // Date availability filter: exclude properties with overlapping blocked_dates or active reservations
   if (params?.moveIn && params?.moveOut) {
-    const { moveIn, moveOut } = params;
-    result = result.filter((property) => {
-      // Check blocked dates
-      const hasBlocked = store.blockedDates.some(
-        (b) => b.propertyId === property.id && datesOverlap(b.startDate, b.endDate, moveIn, moveOut)
-      );
-      if (hasBlocked) return false;
+    const validIn = isoDateStringSchema.safeParse(params.moveIn);
+    const validOut = isoDateStringSchema.safeParse(params.moveOut);
+    if (validIn.success && validOut.success && validIn.data < validOut.data) {
+      const moveIn = validIn.data;
+      const moveOut = validOut.data;
 
-      // Check active reservations (pending or confirmed)
-      const hasConflict = store.reservations.some(
-        (r) =>
-          r.propertyId === property.id &&
-          (r.status === 'pending' || r.status === 'confirmed') &&
-          datesOverlap(r.moveInDate, r.moveOutDate, moveIn, moveOut)
+      conditions.push(
+        notExists(
+          db
+            .select({ id: blockedDates.id })
+            .from(blockedDates)
+            .where(
+              and(
+                eq(blockedDates.propertyId, properties.id),
+                sql`${blockedDates.startDate} < ${moveOut}::date`,
+                sql`${blockedDates.endDate} > ${moveIn}::date`
+              )
+            )
+        )
       );
-      return !hasConflict;
-    });
+
+      conditions.push(
+        notExists(
+          db
+            .select({ id: reservations.id })
+            .from(reservations)
+            .where(
+              and(
+                eq(reservations.propertyId, properties.id),
+                inArray(reservations.status, ['pending', 'confirmed']),
+                sql`${reservations.moveInDate} < ${moveOut}::date`,
+                sql`${reservations.moveOutDate} > ${moveIn}::date`
+              )
+            )
+        )
+      );
+    }
   }
 
-  return result;
+  const orderClause = params?.featured
+    ? [asc(properties.featuredPosition), asc(properties.id)]
+    : [asc(properties.id)];
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  if (requireApprovedHost) {
+    const rows = await db
+      .select({ property: properties })
+      .from(properties)
+      .innerJoin(hostProfiles, eq(properties.hostId, hostProfiles.id))
+      .where(whereClause)
+      .orderBy(...orderClause);
+    return rows.map((r) => mapPropertyRow(r.property));
+  }
+
+  const rows = whereClause
+    ? await db.select().from(properties).where(whereClause).orderBy(...orderClause)
+    : await db.select().from(properties).orderBy(...orderClause);
+
+  return rows.map(mapPropertyRow);
 }
 
 /**
@@ -138,123 +303,393 @@ export async function getPropertyBySlug(
   slug: string,
   options?: { allowUnpublished?: boolean }
 ): Promise<Property | null> {
-  const store = getMockStore();
-  const property = store.properties.find((p) => p.slug === slug);
-  if (!property) return null;
+  if (!slug || typeof slug !== 'string') return null;
+  const cleanSlug = slug.trim();
+  if (!cleanSlug) return null;
 
   if (!options?.allowUnpublished) {
-    if (property.status !== 'published') return null;
-    const host = store.hosts.find((h) => h.id === property.hostId);
-    if (!host || host.status !== 'approved') return null;
+    const rows = await db
+      .select({ property: properties })
+      .from(properties)
+      .innerJoin(hostProfiles, eq(properties.hostId, hostProfiles.id))
+      .where(
+        and(
+          eq(properties.slug, cleanSlug),
+          eq(properties.status, 'published'),
+          eq(hostProfiles.status, 'approved')
+        )
+      )
+      .limit(1);
+
+    return rows.length > 0 ? mapPropertyRow(rows[0].property) : null;
   }
 
-  return { ...property };
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.slug, cleanSlug))
+    .limit(1);
+
+  return rows.length > 0 ? mapPropertyRow(rows[0]) : null;
 }
 
 /**
  * Retrieves a property by its unique ID.
  */
 export async function getPropertyById(id: number): Promise<Property | null> {
-  const store = getMockStore();
-  const property = store.properties.find((p) => p.id === id);
-  return property ? { ...property } : null;
+  const parsed = int4IdSchema.safeParse(id);
+  if (!parsed.success) return null;
+
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.id, parsed.data))
+    .limit(1);
+
+  return rows.length > 0 ? mapPropertyRow(rows[0]) : null;
 }
 
 /**
  * Lists all properties belonging to a specific host.
  */
 export async function listHostListings(hostId: number): Promise<Property[]> {
-  const store = getMockStore();
-  return store.properties
-    .filter((p) => p.hostId === hostId)
-    .map((p) => ({ ...p }));
+  const parsed = int4IdSchema.safeParse(hostId);
+  if (!parsed.success) return [];
+
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.hostId, parsed.data))
+    .orderBy(asc(properties.id));
+
+  return rows.map(mapPropertyRow);
+}
+
+async function resolveLocationId(
+  locationId?: number | null,
+  cityName?: string
+): Promise<number | null> {
+  let resolvedLocationId: number | null = locationId ?? null;
+  if (resolvedLocationId != null) {
+    const locExists = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(eq(locations.id, resolvedLocationId))
+      .limit(1);
+    if (locExists.length === 0) {
+      resolvedLocationId = null;
+    }
+  }
+  if (resolvedLocationId == null && cityName) {
+    const matchedLoc = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(eq(sql`lower(${locations.city})`, cityName.trim().toLowerCase()))
+      .limit(1);
+    resolvedLocationId = matchedLoc.length > 0 ? matchedLoc[0].id : null;
+  }
+  return resolvedLocationId;
+}
+
+function buildUpdatePayload(parsed: ReturnType<typeof adminUpdatePropertySchema.parse>) {
+  const payload: Partial<typeof properties.$inferInsert> = {
+    updatedAt: new Date(),
+  };
+
+  if (parsed.hostId !== undefined) payload.hostId = parsed.hostId;
+  if (parsed.title !== undefined) payload.title = parsed.title;
+  if (parsed.slug !== undefined) payload.slug = parsed.slug;
+  if (parsed.reference !== undefined) payload.reference = parsed.reference;
+  if (parsed.description !== undefined) {
+    payload.description = sanitizeHtml(parsed.description);
+  }
+  if (parsed.pricePerMonth !== undefined) payload.pricePerMonth = parsed.pricePerMonth;
+  if (parsed.currency !== undefined) payload.currency = parsed.currency;
+  if (parsed.locationId !== undefined) payload.locationId = parsed.locationId;
+  if (parsed.city !== undefined) payload.city = parsed.city;
+  if (parsed.country !== undefined) payload.country = parsed.country;
+  if (parsed.neighborhood !== undefined) payload.neighborhood = parsed.neighborhood;
+  if (parsed.address !== undefined) payload.address = parsed.address;
+  if (parsed.bedrooms !== undefined) payload.bedrooms = parsed.bedrooms;
+  if (parsed.bathrooms !== undefined) payload.bathrooms = parsed.bathrooms;
+  if (parsed.bedsCount !== undefined) payload.bedsCount = parsed.bedsCount;
+  if (parsed.totalSurface !== undefined) payload.totalSurface = parsed.totalSurface;
+  if (parsed.maxGuests !== undefined) payload.maxGuests = parsed.maxGuests;
+  if (parsed.kitchen !== undefined) payload.kitchen = parsed.kitchen;
+  if (parsed.laundry !== undefined) payload.laundry = parsed.laundry;
+  if (parsed.balcony !== undefined) payload.balcony = parsed.balcony;
+  if (parsed.petFriendly !== undefined) payload.petFriendly = parsed.petFriendly;
+  if (parsed.pool !== undefined) payload.pool = parsed.pool;
+  if (parsed.gym !== undefined) payload.gym = parsed.gym;
+  if (parsed.terrace !== undefined) payload.terrace = parsed.terrace;
+  if (parsed.workstation !== undefined) {
+    payload.workstation = parsed.workstation as unknown as Record<string, unknown>;
+  }
+  if (parsed.houseRules !== undefined) {
+    payload.houseRules = sanitizeHtml(parsed.houseRules);
+  }
+  if (parsed.checkInStart !== undefined) payload.checkInStart = parsed.checkInStart;
+  if (parsed.checkOut !== undefined) payload.checkOut = parsed.checkOut;
+  if (parsed.minimumStayNights !== undefined) {
+    payload.minimumStayNights = parsed.minimumStayNights;
+  }
+  if (parsed.isDirectBooking !== undefined) {
+    payload.isDirectBooking = parsed.isDirectBooking;
+  }
+  if (parsed.images !== undefined) payload.images = parsed.images;
+  if (parsed.featuredPosition !== undefined) {
+    payload.featuredPosition = parsed.featuredPosition;
+  }
+  if (parsed.status !== undefined) payload.status = parsed.status;
+  if (parsed.rejectionReason !== undefined) {
+    payload.rejectionReason = parsed.rejectionReason;
+  }
+
+  return payload;
 }
 
 /**
  * Saves a host listing (creates new draft or updates existing property).
+ * Enforces host ownership on updates to prevent IDOR.
  */
 export async function saveHostListing(
   hostId: number,
   data: Partial<Property>
 ): Promise<Property> {
-  const store = getMockStore();
+  const validHostId = int4IdSchema.parse(hostId);
 
-  if (data.id) {
-    const index = store.properties.findIndex((p) => p.id === data.id);
-    if (index === -1) {
-      throw new Error(`Property ${data.id} not found`);
+  if (data.id != null) {
+    const validId = int4IdSchema.parse(data.id);
+    const existingRows = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.id, validId))
+      .limit(1);
+
+    if (existingRows.length === 0) {
+      throw new Error(`Property ${validId} not found`);
     }
-    const existing = store.properties[index];
-    if (existing.hostId !== hostId) {
+
+    const existing = existingRows[0];
+    if (existing.hostId !== validHostId) {
       throw new Error('Unauthorized: property does not belong to this host');
     }
 
-    const updated: Property = {
-      ...existing,
-      ...data,
-      id: existing.id,
-      hostId,
-      updatedAt: new Date().toISOString(),
-    };
-    store.properties[index] = updated;
-    return { ...updated };
+    const parsed = updatePropertySchema.parse(data);
+    // Hosts cannot directly self-publish listings; require admin moderation
+    if (parsed.status === 'published' && existing.status !== 'published') {
+      throw new Error('Hosts cannot publish listings directly; submit for review instead');
+    }
+    const payload = buildUpdatePayload(parsed);
+    // Prevent hosts from self-featuring listings or overwriting admin moderation fields
+    delete payload.featuredPosition;
+    delete payload.rejectionReason;
+
+    const updatedRows = await db
+      .update(properties)
+      .set(payload)
+      .where(and(eq(properties.id, validId), eq(properties.hostId, validHostId)))
+      .returning();
+
+    return mapPropertyRow(updatedRows[0]);
   }
 
-  // Create new listing
-  const maxId = store.properties.reduce((max, p) => Math.max(max, p.id), 0);
-  const newId = maxId + 1;
-  const cleanTitleSlug = (data.title || `property-${newId}`)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-  const finalSlug = data.slug || cleanTitleSlug || `property-${newId}`;
-  const newProperty: Property = {
-    id: newId,
-    reference: `ND-PROP-${newId}`,
-    title: data.title || 'Untitled Property',
-    slug: finalSlug,
-    description: data.description || '',
-    pricePerMonth: data.pricePerMonth || 200000,
-    currency: data.currency || 'USD',
-    locationId: data.locationId || 1,
-    city: data.city || 'Madrid',
-    country: data.country || 'Spain',
-    neighborhood: data.neighborhood || '',
-    address: data.address || '',
-    bedrooms: data.bedrooms || 1,
-    bathrooms: data.bathrooms || 1,
-    totalSurface: data.totalSurface || 50,
-    maxGuests: data.maxGuests || 2,
-    bedsCount: data.bedsCount || 1,
-    kitchen: data.kitchen ?? true,
-    laundry: data.laundry ?? true,
-    balcony: data.balcony ?? false,
-    petFriendly: data.petFriendly ?? false,
-    pool: data.pool ?? false,
-    gym: data.gym ?? false,
-    terrace: data.terrace ?? false,
-    workstation: data.workstation || {
-      hasWorkstation: true,
-      desk: 'Standard Desk',
-      chair: 'Ergonomic Chair',
-      monitors: 'Ultrawide Monitor',
-      keyboard: 'Standard',
-      wifiSpeed: 300,
-    },
-    houseRules: data.houseRules || 'No smoking. Quiet hours 22:00 - 08:00.',
-    checkInStart: data.checkInStart || '15:00',
-    checkOut: data.checkOut || '11:00',
-    minimumStayNights: data.minimumStayNights || 30,
-    isDirectBooking: data.isDirectBooking ?? false,
-    images: data.images && data.images.length > 0 ? data.images : ['/seed/property/prop-madrid-1.webp'],
-    hostId,
-    status: data.status || 'draft',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+  // Create new listing inside a transaction with advisory lock (properties.id is non-serial integer PK)
+  const parsed = createPropertySchema.parse(data);
+  if (parsed.status === 'published') {
+    throw new Error('Hosts cannot publish listings directly; submit for review instead');
+  }
+  const initialStatus: PropertyStatus =
+    parsed.status === 'pending_review' ? 'pending_review' : 'draft';
+  const cityName = parsed.city || 'Madrid';
 
-  store.properties.push(newProperty);
-  return { ...newProperty };
+  // Resolve valid locationId foreign key from locations table if not explicitly provided
+  const resolvedLocationId = await resolveLocationId(parsed.locationId, cityName);
+
+  const inserted = await db.transaction(async (tx) => {
+    // Advisory lock prevents concurrent max(id)+1 collisions on non-serial integer PK
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(728391)`);
+
+    const maxRow = await tx
+      .select({ maxId: sql<number>`coalesce(max(${properties.id}), 0)` })
+      .from(properties);
+    const newId = Number(maxRow[0]?.maxId ?? 0) + 1;
+
+    const cleanTitleSlug = (parsed.title || `property-${newId}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    let finalSlug = parsed.slug || cleanTitleSlug || `property-${newId}`;
+
+    // Ensure slug uniqueness
+    const slugConflict = await tx
+      .select({ id: properties.id })
+      .from(properties)
+      .where(eq(properties.slug, finalSlug))
+      .limit(1);
+    if (slugConflict.length > 0) {
+      finalSlug = `${finalSlug}-${newId}`;
+    }
+
+    const now = new Date();
+    const rows = await tx
+      .insert(properties)
+      .values({
+        id: newId,
+        hostId: validHostId,
+        reference: parsed.reference || `ND-PROP-${newId}`,
+        title: parsed.title || 'Untitled Property',
+        slug: finalSlug,
+        description: sanitizeHtml(parsed.description ?? ''),
+        pricePerMonth: parsed.pricePerMonth ?? 200000,
+        currency: parsed.currency || 'USD',
+        locationId: resolvedLocationId,
+        city: cityName,
+        country: parsed.country || 'Spain',
+        neighborhood: parsed.neighborhood ?? '',
+        address: parsed.address ?? '',
+        bedrooms: parsed.bedrooms ?? 1,
+        bathrooms: parsed.bathrooms ?? 1,
+        bedsCount: parsed.bedsCount ?? 1,
+        totalSurface: parsed.totalSurface ?? 50,
+        maxGuests: parsed.maxGuests ?? 2,
+        kitchen: parsed.kitchen ?? true,
+        laundry: parsed.laundry ?? true,
+        balcony: parsed.balcony ?? false,
+        petFriendly: parsed.petFriendly ?? false,
+        pool: parsed.pool ?? false,
+        gym: parsed.gym ?? false,
+        terrace: parsed.terrace ?? false,
+        workstation: (parsed.workstation ?? DEFAULT_WORKSTATION) as unknown as Record<
+          string,
+          unknown
+        >,
+        houseRules: sanitizeHtml(
+          parsed.houseRules || 'No smoking. Quiet hours 22:00 - 08:00.'
+        ),
+        checkInStart: parsed.checkInStart || '15:00',
+        checkOut: parsed.checkOut || '11:00',
+        minimumStayNights: parsed.minimumStayNights ?? 30,
+        isDirectBooking: parsed.isDirectBooking ?? false,
+        images:
+          parsed.images && parsed.images.length > 0
+            ? parsed.images
+            : ['/seed/property/prop-madrid-1.webp'],
+        featuredPosition: null,
+        status: initialStatus,
+        rejectionReason: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    return rows[0];
+  });
+
+  return mapPropertyRow(inserted);
+}
+
+/**
+ * Creates a new property directly from the Admin Portal (defaults to 'published').
+ * Requires a valid hostId and enforces minimumStayNights >= 30.
+ */
+export async function createAdminProperty(
+  data: Partial<Property> & { hostId: number }
+): Promise<Property> {
+  const parsed = adminCreatePropertySchema.parse(data);
+
+  const hostExists = await db
+    .select({ id: hostProfiles.id })
+    .from(hostProfiles)
+    .where(eq(hostProfiles.id, parsed.hostId))
+    .limit(1);
+  if (hostExists.length === 0) {
+    throw new Error(`Host profile ${parsed.hostId} not found`);
+  }
+
+  const cityName = parsed.city || 'Madrid';
+  const resolvedLocationId = await resolveLocationId(parsed.locationId, cityName);
+
+  const inserted = await db.transaction(async (tx) => {
+    // Advisory lock prevents concurrent max(id)+1 collisions on non-serial integer PK
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(728391)`);
+
+    const maxRow = await tx
+      .select({ maxId: sql<number>`coalesce(max(${properties.id}), 0)` })
+      .from(properties);
+    const newId = Number(maxRow[0]?.maxId ?? 0) + 1;
+
+    const cleanTitleSlug = parsed.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    let finalSlug = parsed.slug || cleanTitleSlug || `property-${newId}`;
+
+    const slugConflict = await tx
+      .select({ id: properties.id })
+      .from(properties)
+      .where(eq(properties.slug, finalSlug))
+      .limit(1);
+    if (slugConflict.length > 0) {
+      finalSlug = `${finalSlug}-${newId}`;
+    }
+
+    const now = new Date();
+    const rows = await tx
+      .insert(properties)
+      .values({
+        id: newId,
+        hostId: parsed.hostId,
+        reference: parsed.reference || `ND-PROP-${newId}`,
+        title: parsed.title,
+        slug: finalSlug,
+        description: sanitizeHtml(parsed.description ?? ''),
+        pricePerMonth: parsed.pricePerMonth ?? 200000,
+        currency: parsed.currency || 'USD',
+        locationId: resolvedLocationId,
+        city: cityName,
+        country: parsed.country || 'Spain',
+        neighborhood: parsed.neighborhood ?? '',
+        address: parsed.address ?? '',
+        bedrooms: parsed.bedrooms ?? 1,
+        bathrooms: parsed.bathrooms ?? 1,
+        bedsCount: parsed.bedsCount ?? 1,
+        totalSurface: parsed.totalSurface ?? 50,
+        maxGuests: parsed.maxGuests ?? 2,
+        kitchen: parsed.kitchen ?? true,
+        laundry: parsed.laundry ?? true,
+        balcony: parsed.balcony ?? false,
+        petFriendly: parsed.petFriendly ?? false,
+        pool: parsed.pool ?? false,
+        gym: parsed.gym ?? false,
+        terrace: parsed.terrace ?? false,
+        workstation: (parsed.workstation ?? DEFAULT_WORKSTATION) as unknown as Record<
+          string,
+          unknown
+        >,
+        houseRules: sanitizeHtml(
+          parsed.houseRules || 'No smoking. Quiet hours 22:00 - 08:00.'
+        ),
+        checkInStart: parsed.checkInStart || '15:00',
+        checkOut: parsed.checkOut || '11:00',
+        minimumStayNights: parsed.minimumStayNights,
+        isDirectBooking: parsed.isDirectBooking ?? false,
+        images:
+          parsed.images && parsed.images.length > 0
+            ? parsed.images
+            : ['/seed/property/prop-madrid-1.webp'],
+        featuredPosition: parsed.featuredPosition ?? null,
+        status: parsed.status,
+        rejectionReason: parsed.rejectionReason ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    return rows[0];
+  });
+
+  return mapPropertyRow(inserted);
 }
 
 /**
@@ -265,38 +700,66 @@ export async function updatePropertyStatus(
   status: PropertyStatus,
   rejectionReason?: string | null
 ): Promise<Property | null> {
-  const store = getMockStore();
-  const property = store.properties.find((p) => p.id === id);
-  if (!property) return null;
+  const parsedId = int4IdSchema.safeParse(id);
+  if (!parsedId.success) return null;
+  const validStatus = propertyStatusSchema.parse(status);
 
-  property.status = status;
+  const setPayload: Partial<typeof properties.$inferInsert> = {
+    status: validStatus,
+    updatedAt: new Date(),
+  };
   if (rejectionReason !== undefined) {
-    property.rejectionReason = rejectionReason;
+    setPayload.rejectionReason = rejectionReason;
   }
-  property.updatedAt = new Date().toISOString();
-  return { ...property };
+
+  const rows = await db
+    .update(properties)
+    .set(setPayload)
+    .where(eq(properties.id, parsedId.data))
+    .returning();
+
+  return rows.length > 0 ? mapPropertyRow(rows[0]) : null;
 }
 
 /**
  * Updates a property with arbitrary partial data (admin portal).
+ * Supports reassigning hostId, sanitizing HTML, and resolving locationId when city changes.
  */
 export async function updateProperty(
   id: number,
   data: Partial<Property>
 ): Promise<Property | null> {
-  const store = getMockStore();
-  const index = store.properties.findIndex((p) => p.id === id);
-  if (index === -1) return null;
+  const parsedId = int4IdSchema.safeParse(id);
+  if (!parsedId.success) return null;
 
-  const existing = store.properties[index];
-  const updated: Property = {
-    ...existing,
-    ...data,
-    id: existing.id,
-    updatedAt: new Date().toISOString(),
-  };
-  store.properties[index] = updated;
-  return { ...updated };
+  const parsed = adminUpdatePropertySchema.parse(data);
+
+  if (parsed.hostId !== undefined) {
+    const hostExists = await db
+      .select({ id: hostProfiles.id })
+      .from(hostProfiles)
+      .where(eq(hostProfiles.id, parsed.hostId))
+      .limit(1);
+    if (hostExists.length === 0) {
+      throw new Error(`Host profile ${parsed.hostId} not found`);
+    }
+  }
+
+  const payload = buildUpdatePayload(parsed);
+
+  if (parsed.locationId !== undefined) {
+    payload.locationId = await resolveLocationId(parsed.locationId, parsed.city);
+  } else if (parsed.city !== undefined) {
+    payload.locationId = await resolveLocationId(null, parsed.city);
+  }
+
+  const rows = await db
+    .update(properties)
+    .set(payload)
+    .where(eq(properties.id, parsedId.data))
+    .returning();
+
+  return rows.length > 0 ? mapPropertyRow(rows[0]) : null;
 }
 
 /**
@@ -304,36 +767,211 @@ export async function updateProperty(
  * Top #1 becomes the 3D showcase property.
  */
 export async function reorderFeaturedProperties(orderedIds: number[]): Promise<Property[]> {
-  const store = getMockStore();
+  const validIds = featuredReorderSchema.parse(orderedIds);
+  const uniqueIds = Array.from(new Set(validIds));
 
-  // Reset featured on all properties
-  store.properties.forEach((p) => {
-    p.featuredPosition = null;
-    p.isFeatured = false;
-  });
+  const rows = await db.transaction(async (tx) => {
+    await tx.update(properties).set({ featuredPosition: null });
 
-  // Assign 1-based order
-  orderedIds.forEach((id, index) => {
-    const property = store.properties.find((p) => p.id === id);
-    if (property) {
-      property.featuredPosition = index + 1;
-      property.isFeatured = true;
+    for (let i = 0; i < uniqueIds.length; i++) {
+      await tx
+        .update(properties)
+        .set({ featuredPosition: i + 1, updatedAt: new Date() })
+        .where(eq(properties.id, uniqueIds[i]));
     }
+
+    return tx
+      .select()
+      .from(properties)
+      .where(isNotNull(properties.featuredPosition))
+      .orderBy(asc(properties.featuredPosition), asc(properties.id));
   });
 
-  return store.properties
-    .filter((p) => p.featuredPosition != null)
-    .sort((a, b) => (a.featuredPosition || 0) - (b.featuredPosition || 0))
-    .map((p) => ({ ...p }));
+  return rows.map(mapPropertyRow);
 }
 
 /**
  * Deletes a property by ID (admin portal).
+ * Blocks deletion when existing reservations reference this property.
  */
 export async function deleteProperty(id: number): Promise<boolean> {
-  const store = getMockStore();
-  const initLen = store.properties.length;
-  store.properties = store.properties.filter((p) => p.id !== id);
-  return store.properties.length < initLen;
+  const parsedId = int4IdSchema.safeParse(id);
+  if (!parsedId.success) return false;
+
+  const refRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(reservations)
+    .where(eq(reservations.propertyId, parsedId.data));
+
+  if ((refRows[0]?.count ?? 0) > 0) {
+    throw new Error(
+      'Cannot delete property with existing reservations. Please hide it instead.'
+    );
+  }
+
+  try {
+    const deleted = await db
+      .delete(properties)
+      .where(eq(properties.id, parsedId.data))
+      .returning({ id: properties.id });
+
+    return deleted.length > 0;
+  } catch (err) {
+    const code =
+      typeof err === 'object' && err !== null
+        ? (err as { code?: unknown; cause?: { code?: unknown } }).code ??
+          (err as { cause?: { code?: unknown } }).cause?.code
+        : undefined;
+    if (code === '23503') {
+      throw new Error(
+        'Cannot delete property with existing reservations. Please hide it instead.'
+      );
+    }
+    throw err;
+  }
 }
 
+export interface AdminPropertiesPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  status?: PropertyStatus | 'all';
+  city?: string;
+  hostId?: number;
+  search?: string;
+}
+
+export interface AdminPropertiesStatusCounts {
+  all: number;
+  published: number;
+  pending_review: number;
+  draft: number;
+  rejected: number;
+  hidden: number;
+}
+
+export interface AdminPropertiesPaginatedResult {
+  items: Property[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: AdminPropertiesStatusCounts;
+}
+
+function normalizePagination(page?: number, pageSize?: number) {
+  const safePage =
+    typeof page === 'number' && Number.isFinite(page)
+      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
+      : 1;
+  const rawSize =
+    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
+  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    offset: (safePage - 1) * safePageSize,
+  };
+}
+
+/**
+ * Lists properties for the Admin Portal using SQL LIMIT/OFFSET pagination,
+ * filtered COUNT(*), and global per-status counts.
+ */
+export async function listAdminPropertiesPaginated(
+  params?: AdminPropertiesPaginatedParams
+): Promise<AdminPropertiesPaginatedResult> {
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+
+  const statusCountRows = await db
+    .select({
+      status: properties.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(properties)
+    .groupBy(properties.status);
+
+  const counts: AdminPropertiesStatusCounts = {
+    all: 0,
+    published: 0,
+    pending_review: 0,
+    draft: 0,
+    rejected: 0,
+    hidden: 0,
+  };
+  for (const row of statusCountRows) {
+    const c = Number(row.count ?? 0);
+    counts.all += c;
+    if (row.status in counts && row.status !== 'all') {
+      counts[row.status as keyof Omit<AdminPropertiesStatusCounts, 'all'>] = c;
+    }
+  }
+
+  const conditions: SQL[] = [];
+
+  if (params?.status && params.status !== 'all') {
+    const validStatus = propertyStatusSchema.safeParse(params.status);
+    if (!validStatus.success) {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+    conditions.push(eq(properties.status, validStatus.data));
+  }
+
+  if (
+    typeof params?.city === 'string' &&
+    params.city.trim() &&
+    params.city.trim().toLowerCase() !== 'all'
+  ) {
+    conditions.push(
+      eq(sql`lower(${properties.city})`, params.city.trim().slice(0, 100).toLowerCase())
+    );
+  }
+
+  if (params?.hostId != null) {
+    const validHostId = int4IdSchema.safeParse(params.hostId);
+    if (!validHostId.success) {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+    conditions.push(eq(properties.hostId, validHostId.data));
+  }
+
+  if (typeof params?.search === 'string' && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
+    const searchCond = or(
+      ilike(properties.title, pattern),
+      ilike(properties.reference, pattern),
+      ilike(properties.city, pattern),
+      ilike(properties.neighborhood, pattern),
+      ilike(properties.slug, pattern)
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [totalRows, itemRows] = await Promise.all([
+    whereClause
+      ? db.select({ count: sql<number>`count(*)::int` }).from(properties).where(whereClause)
+      : db.select({ count: sql<number>`count(*)::int` }).from(properties),
+    whereClause
+      ? db
+          .select()
+          .from(properties)
+          .where(whereClause)
+          .orderBy(desc(properties.id))
+          .limit(pageSize)
+          .offset(offset)
+      : db
+          .select()
+          .from(properties)
+          .orderBy(desc(properties.id))
+          .limit(pageSize)
+          .offset(offset),
+  ]);
+
+  return {
+    items: itemRows.map(mapPropertyRow),
+    total: Number(totalRows[0]?.count ?? 0),
+    page,
+    pageSize,
+    counts,
+  };
+}

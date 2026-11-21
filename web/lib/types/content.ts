@@ -17,6 +17,8 @@ export interface TravelGuide {
   image: string;
   excerpt: string;
   content: string;
+  seoTitle?: string;
+  seoDescription?: string;
   status?: 'draft' | 'published';
   position?: number;
 }
@@ -32,6 +34,8 @@ export interface BlogPost {
   image: string;
   excerpt: string;
   content: string;
+  seoTitle?: string;
+  seoDescription?: string;
   status?: 'draft' | 'published';
   position?: number;
 }

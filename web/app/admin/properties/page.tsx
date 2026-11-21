@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { PropertyModerationTable } from '@/features/admin/property-moderation-table';
 import { FeaturedPropertiesManager } from '@/features/admin/featured-properties-manager';
-import { Building, Sparkles } from 'lucide-react';
+import { Building, Plus, Sparkles } from 'lucide-react';
 
 export default function AdminPropertiesPage() {
   const [viewMode, setViewMode] = useState<'moderation' | 'featured'>('moderation');
@@ -26,8 +27,18 @@ export default function AdminPropertiesPage() {
           </p>
         </div>
 
-        {/* View Switcher: Moderation vs Featured Manager */}
-        <div className="flex items-center gap-1.5 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl self-start sm:self-auto shrink-0">
+        {/* Actions & View Switcher: Add Property + Moderation vs Featured Manager */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0">
+          <Link
+            href="/admin/properties/new"
+            data-testid="admin-add-property-btn"
+            className="btn btn-primary btn-sm inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl"
+          >
+            <Plus className="w-4 h-4" />
+            Add New Property
+          </Link>
+
+          <div className="flex items-center gap-1.5 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
           <button
             type="button"
             onClick={() => setViewMode('moderation')}
@@ -53,6 +64,7 @@ export default function AdminPropertiesPage() {
             <Sparkles className="w-4 h-4 text-amber-500" />
             Featured on Homepage
           </button>
+          </div>
         </div>
       </div>
 

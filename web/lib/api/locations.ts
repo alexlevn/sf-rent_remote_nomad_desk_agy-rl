@@ -1,4 +1,4 @@
-import { eq, and, or, sql, asc, gte, ne } from 'drizzle-orm';
+import { eq, and, or, sql, asc, gte, ne, ilike, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { locations, categories, properties } from '@/lib/db/schema';
 import type { Location, Category } from '@/lib/types';
@@ -7,6 +7,7 @@ import {
   updateLocationSchema,
   locationReorderSchema,
 } from '@/lib/validations/location';
+import { sanitizeHtml } from '@/lib/validations/content';
 
 export interface ListLocationsOptions {
   continent?: string;
@@ -162,7 +163,9 @@ export async function saveLocation(data: Partial<Location>): Promise<Location> {
       if (validated.countryCode !== undefined) updateValues.countryCode = validated.countryCode;
       if (validated.continent !== undefined) updateValues.continent = validated.continent;
       if (validated.propertiesCount !== undefined) updateValues.propertiesCount = validated.propertiesCount;
-      if (validated.description !== undefined) updateValues.description = validated.description;
+      if (validated.description !== undefined) {
+        updateValues.description = sanitizeHtml(validated.description);
+      }
       if (validated.image !== undefined) updateValues.image = validated.image;
       if (validated.center !== undefined) updateValues.center = validated.center;
       if (validated.isActive !== undefined) updateValues.isActive = validated.isActive;
@@ -210,7 +213,7 @@ export async function saveLocation(data: Partial<Location>): Promise<Location> {
         countryCode: validated.countryCode,
         continent: validated.continent || 'Europe',
         propertiesCount: validated.propertiesCount ?? 0,
-        description: validated.description || '',
+        description: sanitizeHtml(validated.description || ''),
         image: validated.image || '/seed/location/placeholder.jpg',
         center: validated.center || [40.4168, -3.7038],
         isActive: validated.isActive ?? true,
@@ -290,4 +293,133 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
     .limit(1);
 
   return rows.length > 0 ? mapCategoryRow(rows[0]) : null;
+}
+
+export interface AdminLocationsPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  continent?: string;
+  status?: 'active' | 'inactive' | 'all';
+  search?: string;
+}
+
+export interface AdminLocationsPaginatedResult {
+  items: Location[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: {
+    all: number;
+    active: number;
+    inactive: number;
+  };
+}
+
+function escapeIlike(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function normalizePagination(page?: number, pageSize?: number) {
+  const safePage =
+    typeof page === 'number' && Number.isFinite(page)
+      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
+      : 1;
+  const rawSize =
+    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
+  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    offset: (safePage - 1) * safePageSize,
+  };
+}
+
+/**
+ * Lists locations for the Admin Portal using SQL LIMIT/OFFSET pagination,
+ * filtered COUNT(*), and global active/inactive counts.
+ */
+export async function listAdminLocationsPaginated(
+  params?: AdminLocationsPaginatedParams
+): Promise<AdminLocationsPaginatedResult> {
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+
+  const [aggRow] = await db
+    .select({
+      all: sql<number>`count(*)::int`,
+      active: sql<number>`count(*) filter (where ${locations.isActive} = true)::int`,
+      inactive: sql<number>`count(*) filter (where ${locations.isActive} = false)::int`,
+    })
+    .from(locations);
+
+  const counts = {
+    all: Number(aggRow?.all ?? 0),
+    active: Number(aggRow?.active ?? 0),
+    inactive: Number(aggRow?.inactive ?? 0),
+  };
+
+  const conditions: SQL[] = [];
+
+  if (
+    typeof params?.continent === 'string' &&
+    params.continent.trim() &&
+    params.continent.trim().toLowerCase() !== 'all'
+  ) {
+    conditions.push(
+      eq(
+        sql`lower(${locations.continent})`,
+        params.continent.trim().slice(0, 100).toLowerCase()
+      )
+    );
+  }
+
+  if (params?.status && params.status !== 'all') {
+    if (params.status === 'active') {
+      conditions.push(eq(locations.isActive, true));
+    } else if (params.status === 'inactive') {
+      conditions.push(eq(locations.isActive, false));
+    } else {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+  }
+
+  if (typeof params?.search === 'string' && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
+    const searchCond = or(
+      ilike(locations.name, pattern),
+      ilike(locations.city, pattern),
+      ilike(locations.country, pattern),
+      ilike(locations.slug, pattern)
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [totalRows, itemRows] = await Promise.all([
+    whereClause
+      ? db.select({ count: sql<number>`count(*)::int` }).from(locations).where(whereClause)
+      : db.select({ count: sql<number>`count(*)::int` }).from(locations),
+    whereClause
+      ? db
+          .select()
+          .from(locations)
+          .where(whereClause)
+          .orderBy(asc(locations.position), asc(locations.id))
+          .limit(pageSize)
+          .offset(offset)
+      : db
+          .select()
+          .from(locations)
+          .orderBy(asc(locations.position), asc(locations.id))
+          .limit(pageSize)
+          .offset(offset),
+  ]);
+
+  return {
+    items: itemRows.map(mapLocationRow),
+    total: Number(totalRows[0]?.count ?? 0),
+    page,
+    pageSize,
+    counts,
+  };
 }

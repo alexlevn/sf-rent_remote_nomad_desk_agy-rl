@@ -2,8 +2,9 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
+import { requireHost } from '@/lib/auth/guards';
 import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
-import { listProperties, updatePropertyStatus } from '@/lib/api/properties';
+import { getPropertyById, listProperties, updatePropertyStatus } from '@/lib/api/properties';
 import type { PropertyStatus } from '@/lib/types';
 import { HostListingsTable } from '@/features/host/host-listings-table';
 
@@ -38,6 +39,11 @@ export default async function HostListingsPage() {
   async function submitForReviewAction(propertyId: number) {
     'use server';
     try {
+      const { hostId } = await requireHost();
+      const target = await getPropertyById(propertyId);
+      if (!target || target.hostId !== hostId) {
+        return { success: false, error: 'Unauthorized: property does not belong to this host.' };
+      }
       const updated = await updatePropertyStatus(propertyId, 'pending_review');
       if (!updated) {
         return { success: false, error: 'Property not found.' };
@@ -58,12 +64,21 @@ export default async function HostListingsPage() {
   // Server Action to toggle property visibility (published <-> hidden)
   async function toggleHidePropertyAction(
     propertyId: number,
-    currentStatus: PropertyStatus
+    _currentStatus: PropertyStatus
   ) {
     'use server';
+    void _currentStatus;
     try {
+      const { hostId } = await requireHost();
+      const target = await getPropertyById(propertyId);
+      if (!target || target.hostId !== hostId) {
+        return { success: false, error: 'Unauthorized: property does not belong to this host.' };
+      }
+      if (target.status !== 'published' && target.status !== 'hidden') {
+        return { success: false, error: 'Only published or hidden listings can toggle visibility.' };
+      }
       const nextStatus: PropertyStatus =
-        currentStatus === 'hidden' ? 'published' : 'hidden';
+        target.status === 'hidden' ? 'published' : 'hidden';
       const updated = await updatePropertyStatus(propertyId, nextStatus);
       if (!updated) {
         return { success: false, error: 'Property not found.' };

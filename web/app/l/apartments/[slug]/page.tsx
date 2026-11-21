@@ -13,6 +13,11 @@ import {
   listReservations,
 } from '@/lib/api/reservations';
 import { listWorkstations } from '@/lib/api/workstations';
+import {
+  hasHtmlTags,
+  sanitizeHtml,
+  stripHtmlTags,
+} from '@/lib/validations/content';
 import { ImageGallery } from '@/features/property-detail/image-gallery';
 import { WorkstationSpecs } from '@/features/property-detail/workstation-specs';
 import { AmenitiesList } from '@/features/property-detail/amenities-list';
@@ -37,7 +42,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   return {
     title: `${property.title} | NomadDesk`,
-    description: property.description.slice(0, 160),
+    description: stripHtmlTags(property.description).slice(0, 160),
   };
 }
 
@@ -144,9 +149,18 @@ export default async function ApartmentDetailPage({ params }: PageProps) {
               <h2 className="text-xl font-bold text-[var(--color-text-on-light)] mb-4">
                 About This Home
               </h2>
-              <div className="prose max-w-none text-sm text-[var(--color-text-on-light-muted)] leading-relaxed whitespace-pre-line space-y-4">
-                {property.description}
-              </div>
+              {hasHtmlTags(property.description) ? (
+                <div
+                  className="rich-html-content max-w-none text-sm text-[var(--color-text-on-light-muted)] leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeHtml(property.description),
+                  }}
+                />
+              ) : (
+                <div className="prose max-w-none text-sm text-[var(--color-text-on-light-muted)] leading-relaxed whitespace-pre-line space-y-4">
+                  {property.description}
+                </div>
+              )}
             </div>
 
             {/* Amenities Grid */}
@@ -160,10 +174,19 @@ export default async function ApartmentDetailPage({ params }: PageProps) {
               <h3 className="text-base sm:text-lg font-bold text-[var(--color-text-on-light)] mb-2">
                 House Rules & Policies
               </h3>
-              <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed">
-                {property.houseRules ||
-                  'Quiet hours after 10 PM. No smoking or parties allowed. Pets require prior host approval.'}
-              </p>
+              {property.houseRules && hasHtmlTags(property.houseRules) ? (
+                <div
+                  className="rich-html-content text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeHtml(property.houseRules),
+                  }}
+                />
+              ) : (
+                <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] leading-relaxed whitespace-pre-line">
+                  {property.houseRules ||
+                    'Quiet hours after 10 PM. No smoking or parties allowed. Pets require prior host approval.'}
+                </p>
+              )}
               <div className="flex gap-6 text-xs text-[var(--color-text-on-light-muted)] mt-4 pt-3 border-t border-[var(--color-border-light)] flex-wrap font-medium">
                 <span>Check-in: {property.checkInStart || '15:00'}</span>
                 <span>Check-out: {property.checkOut || '11:00'}</span>

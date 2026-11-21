@@ -6,6 +6,8 @@ export interface WorkstationPackage {
   isIncluded: boolean;
   description: string;
   features: string[];
+  isActive?: boolean;
+  position?: number;
 }
 
 export interface WorkstationComponentOption {
@@ -14,6 +16,8 @@ export interface WorkstationComponentOption {
   pricePerMonth: number; // EUR cents
   isIncluded: boolean;
   description: string;
+  isActive?: boolean;
+  position?: number;
 }
 
 export interface WorkstationAddon {
@@ -21,6 +25,8 @@ export interface WorkstationAddon {
   name: string;
   pricePerMonth: number; // EUR cents
   description: string;
+  isActive?: boolean;
+  position?: number;
 }
 
 export interface WorkstationComponents {

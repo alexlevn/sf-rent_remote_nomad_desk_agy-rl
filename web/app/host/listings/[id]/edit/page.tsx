@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
+import { requireHost } from '@/lib/auth/guards';
 import { getHostByUserId } from '@/lib/api/hosts';
 import { listLocations } from '@/lib/api/locations';
 import { getPropertyById, saveHostListing } from '@/lib/api/properties';
@@ -65,11 +66,9 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
   ) {
     'use server';
     try {
-      if (!host) {
-        return { success: false, error: 'Host not authenticated.' };
-      }
+      const { hostId } = await requireHost();
 
-      const updated = await saveHostListing(host.id, {
+      const updated = await saveHostListing(hostId, {
         ...data,
         id: propertyId,
         status: intent,

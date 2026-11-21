@@ -1,12 +1,15 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
+import { AuthError, requireAdmin } from '@/lib/auth/guards';
+import { sanitizeHtml } from '@/lib/validations/content';
 import {
   saveLocation,
   deleteLocation,
   reorderTopCities,
   listLocations,
+  listAdminLocationsPaginated,
+  type AdminLocationsPaginatedParams,
 } from '@/lib/api/locations';
 import {
   saveWorkstationPackage,
@@ -14,13 +17,26 @@ import {
   deleteWorkstationComponent,
   saveWorkstationAddon,
   deleteWorkstationAddon,
+  reorderWorkstationItems,
   listWorkstations,
 } from '@/lib/api/workstations';
-import { saveTravelGuide, deleteTravelGuide, listTravelGuides } from '@/lib/api/guides';
-import { saveBlogPost, deleteBlogPost } from '@/lib/api/blog';
-import { saveVideo, deleteVideo, reorderVideos } from '@/lib/api/videos';
+import {
+  saveTravelGuide,
+  deleteTravelGuide,
+  listTravelGuides,
+  listAdminGuidesPaginated,
+  type AdminGuidesPaginatedParams,
+} from '@/lib/api/guides';
+import {
+  saveBlogPost,
+  deleteBlogPost,
+  listBlogPosts,
+  listAdminBlogPostsPaginated,
+  type AdminBlogPostsPaginatedParams,
+} from '@/lib/api/blog';
+import { saveVideo, deleteVideo, reorderVideos, listVideos } from '@/lib/api/videos';
 import { reorderFeaturedProperties } from '@/lib/api/properties';
-import { updateExchangeRates } from '@/lib/api/rates';
+import { getExchangeRates, updateExchangeRates } from '@/lib/api/rates';
 import type {
   Location,
   WorkstationPackage,
@@ -37,26 +53,26 @@ import type {
  * Strips dangerous executable script tags and event handlers (AC-CMS-8).
  */
 export async function sanitizeHtmlContent(html: string): Promise<string> {
-  if (!html) return '';
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\bon\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-    .replace(/javascript:/gi, '');
+  return sanitizeHtml(html);
 }
 
 /**
- * Asserts admin role. Throws 403 error if guest or host calls CMS action (AC-CMS-8).
+ * Asserts admin role directly against PostgreSQL (Risk #10).
+ * Throws 403 error if unauthenticated, guest, or host calls CMS action (AC-CMS-8).
  */
 async function assertAdminRole() {
-  const user = await getCurrentUser();
-  if (!user || user.role !== 'admin') {
-    const error = new Error('Forbidden: Admin role required.');
-    // Set 403 status property for HTTP handlers / test assertions
-    (error as unknown as { status: number; statusCode: number }).status = 403;
-    (error as unknown as { status: number; statusCode: number }).statusCode = 403;
-    throw error;
+  try {
+    return await requireAdmin();
+  } catch (err) {
+    if (err instanceof AuthError) {
+      const error = new Error('Forbidden: Admin role required.');
+      // Normalize to 403 for CMS HTTP handlers / test assertions
+      (error as unknown as { status: number; statusCode: number }).status = 403;
+      (error as unknown as { status: number; statusCode: number }).statusCode = 403;
+      throw error;
+    }
+    throw err;
   }
-  return user;
 }
 
 // ==========================================
@@ -102,6 +118,7 @@ export async function saveWorkstationPackageAction(
   revalidatePath('/workstations');
   revalidatePath('/workstations/build');
   revalidatePath('/admin/workstations');
+  revalidatePath('/l/apartments/[slug]', 'page');
   return { success: true, package: updated };
 }
 
@@ -149,21 +166,31 @@ export async function deleteWorkstationAddonAction(id: string) {
   return { success: deleted };
 }
 
+export async function reorderWorkstationItemsAction(
+  type: 'package' | 'component' | 'addon',
+  orderedIds: string[]
+) {
+  await assertAdminRole();
+  const workstations = await reorderWorkstationItems(type, orderedIds);
+  revalidatePath('/workstations');
+  revalidatePath('/workstations/build');
+  revalidatePath('/admin/workstations');
+  return { success: true, workstations };
+}
+
 // ==========================================
 // Travel Guides CMS Actions (AC-CMS-3)
 // ==========================================
 
 export async function saveTravelGuideAction(data: Partial<TravelGuide>) {
   await assertAdminRole();
-  // Sanitize content against XSS scripts / onerror
-  const sanitizedContent = data.content
-    ? await sanitizeHtmlContent(data.content)
-    : '';
+  // Sanitize content against XSS scripts / onerror without wiping content on partial updates
+  const payload: Partial<TravelGuide> = { ...data };
+  if (data.content !== undefined) {
+    payload.content = await sanitizeHtmlContent(data.content);
+  }
 
-  const guide = await saveTravelGuide({
-    ...data,
-    content: sanitizedContent,
-  });
+  const guide = await saveTravelGuide(payload);
 
   revalidatePath('/');
   revalidatePath('/travel-guide');
@@ -186,14 +213,12 @@ export async function deleteTravelGuideAction(id: number) {
 
 export async function saveBlogPostAction(data: Partial<BlogPost>) {
   await assertAdminRole();
-  const sanitizedContent = data.content
-    ? await sanitizeHtmlContent(data.content)
-    : '';
+  const payload: Partial<BlogPost> = { ...data };
+  if (data.content !== undefined) {
+    payload.content = await sanitizeHtmlContent(data.content);
+  }
 
-  const post = await saveBlogPost({
-    ...data,
-    content: sanitizedContent,
-  });
+  const post = await saveBlogPost(payload);
 
   revalidatePath('/blog');
   revalidatePath('/admin/blog');
@@ -271,6 +296,11 @@ export async function fetchWorkstationsAction() {
   return await listWorkstations();
 }
 
+export async function fetchAdminWorkstationsAction() {
+  await assertAdminRole();
+  return await listWorkstations({ includeInactive: true });
+}
+
 export async function fetchLocationsAction() {
   await assertAdminRole();
   return await listLocations({ includeInactive: true });
@@ -283,5 +313,41 @@ export async function fetchTravelGuidesAction() {
     listLocations({ includeInactive: true }),
   ]);
   return { guidesData, locsData };
+}
+
+export async function fetchBlogPostsAction() {
+  await assertAdminRole();
+  return await listBlogPosts({ includeDrafts: true, status: 'all' });
+}
+
+export async function fetchVideosAction() {
+  await assertAdminRole();
+  return await listVideos({ includeInactive: true });
+}
+
+export async function fetchExchangeRatesAction() {
+  await assertAdminRole();
+  return await getExchangeRates();
+}
+
+export async function fetchAdminLocationsPaginatedAction(
+  params?: AdminLocationsPaginatedParams
+) {
+  await assertAdminRole();
+  return await listAdminLocationsPaginated(params);
+}
+
+export async function fetchAdminGuidesPaginatedAction(
+  params?: AdminGuidesPaginatedParams
+) {
+  await assertAdminRole();
+  return await listAdminGuidesPaginated(params);
+}
+
+export async function fetchAdminBlogPostsPaginatedAction(
+  params?: AdminBlogPostsPaginatedParams
+) {
+  await assertAdminRole();
+  return await listAdminBlogPostsPaginated(params);
 }
 
