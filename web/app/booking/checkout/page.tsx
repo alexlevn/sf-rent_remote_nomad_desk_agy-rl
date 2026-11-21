@@ -123,7 +123,7 @@ export default async function BookingCheckoutPage({ searchParams }: CheckoutPage
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 sm:pt-10">
         <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[var(--color-text-on-light)] mb-2">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mb-2">
             Complete your reservation request
           </h1>
           <p className="text-sm text-[var(--color-text-on-light-muted)]">

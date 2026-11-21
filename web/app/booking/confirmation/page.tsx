@@ -64,7 +64,7 @@ export default async function BookingConfirmationPage({ searchParams }: Confirma
         </div>
 
         {/* Main Heading */}
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--color-text-on-light)] mb-3">
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-on-light)] mb-3">
           {isConfirmed ? 'Booking confirmed' : 'Request sent — the host will respond within 48 hours'}
         </h1>
 

@@ -26,7 +26,7 @@ export default async function WorkstationBuilderPage() {
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Overview</span>
           </Link>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--color-text-on-light)]">
+          <h1 className="text-3xl sm:text-4xl lg:text-[48px] lg:leading-[48px] font-medium tracking-tight text-[var(--color-text-on-light)]">
             Start with Comfort, Upgrade What Matters
           </h1>
           <p className="text-sm sm:text-base text-[var(--color-text-on-light-muted)] mt-2 max-w-2xl">

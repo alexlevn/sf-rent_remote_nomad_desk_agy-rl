@@ -80,7 +80,7 @@ export default async function WorkstationsPage() {
           >
             Zero Compromise Setup
           </Badge>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white mb-6 leading-tight">
+          <h1 className="text-4xl sm:text-5xl lg:text-[56px] lg:leading-[60px] font-bold tracking-tight text-white mb-6 leading-tight">
             A Workstation, Coordinated with Your Reservation
           </h1>
           <p className="text-base sm:text-lg text-[var(--color-text-on-dark-muted)] max-w-2xl mx-auto mb-10 leading-relaxed">
@@ -123,7 +123,7 @@ export default async function WorkstationsPage() {
           <span className="text-xs uppercase tracking-widest font-bold text-[var(--color-brand)] block mb-2">
             Why Professionals Choose NomadDesk
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-4">
             Engineered for Deep Work & Extreme Productivity
           </h2>
           <p className="text-base text-[var(--color-text-on-dark-muted)] max-w-2xl mx-auto">
