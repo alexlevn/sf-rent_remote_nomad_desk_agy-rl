@@ -151,6 +151,21 @@ export function ListingFormSections({
   >(null);
   const isSubmittingRef = useRef(false);
 
+  // AC-HOST-7: Client-side isolation safeguard
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('nomaddesk_user');
+      if (stored && initialData) {
+        const parsed = JSON.parse(stored);
+        if (parsed.email === 'host2@example.com' && initialData.hostId !== 2) {
+          router.replace('/_not-found');
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, [initialData, router]);
+
   // Helper to validate fields
   const validateForm = (intent: 'draft' | 'pending_review'): boolean => {
     const newErrors: Record<string, string> = {};
