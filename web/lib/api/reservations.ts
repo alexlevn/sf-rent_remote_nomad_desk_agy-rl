@@ -243,6 +243,17 @@ export async function addBlockedDate(data: {
     throw new Error('This blocked period overlaps with an existing blocked date range');
   }
 
+  // Prevent overlapping with existing active bookings (pending or confirmed) - AC-HOST-6
+  const bookingCollision = store.reservations.some(
+    (r) =>
+      r.propertyId === data.propertyId &&
+      (r.status === 'pending' || r.status === 'confirmed') &&
+      datesOverlap(r.moveInDate, r.moveOutDate, data.startDate, data.endDate)
+  );
+  if (bookingCollision) {
+    throw new Error('These dates overlap an existing booking');
+  }
+
   const maxId = store.blockedDates.reduce((max, b) => Math.max(max, b.id), 0);
   const newBlocked: BlockedDate = {
     id: maxId + 1,

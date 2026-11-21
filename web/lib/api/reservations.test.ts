@@ -168,6 +168,24 @@ describe('Reservations & Availability Mock API Layer', () => {
     expect(afterDel).toHaveLength(1);
   });
 
+  it('rejects blocking dates that overlap existing pending or confirmed reservation (AC-HOST-6)', async () => {
+    // 16060 has pending booking ND-SEED1 at T+40..T+70
+    const d = new Date();
+    d.setDate(d.getDate() + 45);
+    const startDate = d.toISOString().slice(0, 10);
+    d.setDate(d.getDate() + 10);
+    const endDate = d.toISOString().slice(0, 10);
+
+    await expect(
+      addBlockedDate({
+        propertyId: 16060,
+        startDate,
+        endDate,
+        reason: 'Maintenance',
+      })
+    ).rejects.toThrow('These dates overlap an existing booking');
+  });
+
   it('switches user session roles cleanly', async () => {
     const guestUser = await switchRole('guest');
     expect(guestUser.role).toBe('guest');
