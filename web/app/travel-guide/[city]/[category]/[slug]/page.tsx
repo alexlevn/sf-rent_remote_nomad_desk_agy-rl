@@ -28,8 +28,8 @@ export async function generateMetadata({
   }
 
   return {
-    title: `${guide.title} | NomadDesk Travel Guide`,
-    description: guide.excerpt,
+    title: guide.seoTitle?.trim() || `${guide.title} | NomadDesk Travel Guide`,
+    description: guide.seoDescription?.trim() || guide.excerpt,
   };
 }
 

@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
+import React, { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import Link from 'next/link';
 import type { TravelGuide, Location } from '@/lib/types';
 import {
   saveTravelGuideAction,
   deleteTravelGuideAction,
-  fetchTravelGuidesAction,
+  fetchAdminGuidesPaginatedAction,
+  fetchLocationsAction,
 } from '@/app/admin/cms-actions';
-import { CmsRichEditorMock } from '@/features/admin/cms-rich-editor-mock';
+import { TiptapEditor } from '@/features/admin/tiptap-editor';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   BookOpen,
   FileText,
@@ -20,74 +22,108 @@ import {
   Trash2,
   ArrowLeft,
   Sparkles,
+  X,
 } from 'lucide-react';
 
 const CATEGORIES = ['Activities', 'Coworking', 'Neighborhoods', 'Cost of Living', 'City Guide'];
+const PAGE_SIZE = 20;
 
 export default function AdminGuidesPage() {
   const [guides, setGuides] = useState<TravelGuide[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ all: 0, published: 0, draft: 0 });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Editor mode state
   const [isEditing, setIsEditing] = useState(false);
   const [currentGuide, setCurrentGuide] = useState<Partial<TravelGuide> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
   const isActionRunningRef = useRef(false);
-
-  const fetchData = async () => {
-    try {
-      const { guidesData, locsData } = await fetchTravelGuidesAction();
-
-      startTransition(() => {
-        setGuides(guidesData);
-        setLocations(locsData);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
+  const requestIdRef = useRef(0);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetchData();
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
+  }, []);
 
-  const filteredGuides = useMemo(() => {
-    let result = [...guides];
+  // Load locations once for filter and editor city dropdown
+  useEffect(() => {
+    let active = true;
+    fetchLocationsAction()
+      .then((locsData) => {
+        if (!active) return;
+        startTransition(() => {
+          setLocations(locsData);
+        });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (g) =>
-          g.title.toLowerCase().includes(q) ||
-          g.city.toLowerCase().includes(q) ||
-          g.category.toLowerCase().includes(q)
-      );
-    }
+  // Debounce search (250ms) and reset page only when trimmed query changes
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === debouncedSearch) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearch(trimmed);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, debouncedSearch]);
 
-    if (cityFilter !== 'all') {
-      result = result.filter((g) => g.city.toLowerCase() === cityFilter.toLowerCase());
-    }
+  const fetchGuidesPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const res = await fetchAdminGuidesPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          city: cityFilter !== 'all' ? cityFilter : undefined,
+          status: statusFilter,
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setGuides(res.items);
+          setTotal(res.total);
+          setCounts(res.counts);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setActionError(err instanceof Error ? err.message : 'Failed to load travel guides.');
+          setLoading(false);
+        });
+      }
+    },
+    [cityFilter, statusFilter, debouncedSearch]
+  );
 
-    if (statusFilter !== 'all') {
-      result = result.filter((g) => g.status === statusFilter);
-    }
-
-    return result.sort((a, b) => (b.id || 0) - (a.id || 0));
-  }, [guides, search, cityFilter, statusFilter]);
+  useEffect(() => {
+    fetchGuidesPage(page);
+  }, [fetchGuidesPage, page]);
 
   const handleOpenNew = () => {
     setCurrentGuide({
@@ -99,10 +135,13 @@ export default function AdminGuidesPage() {
       featured: false,
       image: '/seed/guide/placeholder.webp',
       excerpt: '',
+      seoTitle: '',
+      seoDescription: '',
       content: '<h2>Neighborhood Overview</h2><p>Start writing your guide content here...</p>',
       status: 'published',
     });
     setFormError(null);
+    setActionError(null);
     setIsEditing(true);
   };
 
@@ -110,6 +149,7 @@ export default function AdminGuidesPage() {
     // Preserve seed content exactly (AC-CMS-3)
     setCurrentGuide({ ...guide });
     setFormError(null);
+    setActionError(null);
     setIsEditing(true);
   };
 
@@ -130,6 +170,8 @@ export default function AdminGuidesPage() {
       const payload: Partial<TravelGuide> = {
         ...currentGuide,
         status: finalStatus,
+        seoTitle: currentGuide.seoTitle?.trim() || '',
+        seoDescription: currentGuide.seoDescription?.trim() || '',
         slug:
           currentGuide.slug ||
           currentGuide.title
@@ -146,7 +188,7 @@ export default function AdminGuidesPage() {
       );
       setIsEditing(false);
       setCurrentGuide(null);
-      await fetchData();
+      await fetchGuidesPage(page);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save travel guide.');
     } finally {
@@ -159,13 +201,19 @@ export default function AdminGuidesPage() {
     if (!confirm('Are you sure you want to delete this guide article?')) return;
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setActionError(null);
 
     try {
       await deleteTravelGuideAction(id);
       showToast('Travel guide article removed.');
-      await fetchData();
+      const nextPage = guides.length === 1 && page > 1 ? page - 1 : page;
+      if (nextPage !== page) {
+        setPage(nextPage);
+      } else {
+        await fetchGuidesPage(nextPage);
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete guide');
+      setActionError(err instanceof Error ? err.message : 'Failed to delete guide.');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -189,7 +237,7 @@ export default function AdminGuidesPage() {
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-[var(--color-brand)] text-[var(--color-brand)] cursor-pointer"
         >
           <BookOpen className="w-4 h-4" />
-          <span>Travel Guides ({guides.length})</span>
+          <span>Travel Guides ({counts.all})</span>
         </button>
         <Link
           href="/admin/blog"
@@ -224,6 +272,23 @@ export default function AdminGuidesPage() {
             </button>
           </div>
 
+          {actionError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionError(null)}
+                aria-label="Dismiss error"
+                className="p-1 rounded hover:bg-red-100 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Filters Bar */}
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-4 shadow-2xs space-y-3">
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
@@ -240,8 +305,12 @@ export default function AdminGuidesPage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <select
+                  aria-label="Filter by city"
                   value={cityFilter}
-                  onChange={(e) => setCityFilter(e.target.value)}
+                  onChange={(e) => {
+                    setCityFilter(e.target.value);
+                    setPage(1);
+                  }}
                   className="text-xs px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
                 >
                   <option value="all">All Cities</option>
@@ -253,13 +322,17 @@ export default function AdminGuidesPage() {
                 </select>
 
                 <select
+                  aria-label="Filter by status"
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'published' | 'draft')}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as 'all' | 'published' | 'draft');
+                    setPage(1);
+                  }}
                   className="text-xs px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
                 >
-                  <option value="all">All Statuses</option>
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
+                  <option value="all">All Statuses ({counts.all})</option>
+                  <option value="published">Published ({counts.published})</option>
+                  <option value="draft">Draft ({counts.draft})</option>
                 </select>
               </div>
             </div>
@@ -269,7 +342,7 @@ export default function AdminGuidesPage() {
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl shadow-2xs overflow-hidden">
             {loading ? (
               <div className="p-8 text-center text-xs text-neutral-400">Loading guides...</div>
-            ) : filteredGuides.length === 0 ? (
+            ) : guides.length === 0 ? (
               <div className="p-12 text-center">
                 <BookOpen className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
                 <div className="text-sm font-semibold text-neutral-700">No travel guides found</div>
@@ -288,7 +361,7 @@ export default function AdminGuidesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border-light)]">
-                    {filteredGuides.map((guide) => (
+                    {guides.map((guide) => (
                       <tr
                         key={guide.id}
                         data-testid={`guide-row-${guide.id}`}
@@ -359,6 +432,15 @@ export default function AdminGuidesPage() {
                 </table>
               </div>
             )}
+
+            <PaginationBar
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              onPageChange={setPage}
+              disabled={loading}
+              itemLabel="guides"
+            />
           </div>
         </div>
       ) : (
@@ -417,22 +499,22 @@ export default function AdminGuidesPage() {
                   />
                 </div>
 
-                {/* Rich Editor Mock with Visual and HTML tabs */}
+                {/* Rich WYSIWYG Tiptap Editor */}
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
                     Article Body (Rich WYSIWYG Editor)
                   </label>
-                  <CmsRichEditorMock
+                  <TiptapEditor
                     value={currentGuide?.content || ''}
                     onChange={(val) => setCurrentGuide((prev) => (prev ? { ...prev, content: val } : null))}
-                    placeholder="Start typing your article, H2 headings, bullet lists, links, or embed images..."
+                    placeholder="Start typing your article, H2 headings, bullet lists, links, tables, or embed media..."
                     minHeight="360px"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Right 30%: Publishing card, Destination, Category, Featured */}
+            {/* Right 30%: Publishing card, Destination, Category, Featured, SEO */}
             <div className="space-y-5">
               {/* Publishing Controls */}
               <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-2xs space-y-4">
@@ -568,6 +650,47 @@ export default function AdminGuidesPage() {
                     placeholder="auto-generated-from-title"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
                   />
+                </div>
+              </div>
+
+              {/* SEO Metadata Card */}
+              <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-2xs space-y-4 text-xs">
+                <h3 className="font-bold text-sm text-[var(--color-text-on-light)] pb-2 border-b border-[var(--color-border-light)]">
+                  SEO Metadata
+                </h3>
+
+                <div>
+                  <label className="block font-semibold text-neutral-700 mb-1">SEO Title</label>
+                  <input
+                    type="text"
+                    maxLength={160}
+                    value={currentGuide?.seoTitle || ''}
+                    onChange={(e) => setCurrentGuide((prev) => (prev ? { ...prev, seoTitle: e.target.value } : null))}
+                    placeholder="Defaults to article title if left blank"
+                    data-testid="guide-seo-title-input"
+                    className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                  />
+                  <span className="text-[10px] text-neutral-400 block mt-1">
+                    {(currentGuide?.seoTitle || '').length} / 160 chars
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-neutral-700 mb-1">SEO Meta Description</label>
+                  <textarea
+                    rows={3}
+                    maxLength={320}
+                    value={currentGuide?.seoDescription || ''}
+                    onChange={(e) =>
+                      setCurrentGuide((prev) => (prev ? { ...prev, seoDescription: e.target.value } : null))
+                    }
+                    placeholder="Defaults to excerpt if left blank (150–160 chars recommended)"
+                    data-testid="guide-seo-description-input"
+                    className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] resize-none"
+                  />
+                  <span className="text-[10px] text-neutral-400 block mt-1">
+                    {(currentGuide?.seoDescription || '').length} / 320 chars
+                  </span>
                 </div>
               </div>
             </div>

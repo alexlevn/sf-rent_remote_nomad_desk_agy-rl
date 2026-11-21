@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
+import React, { useState, useEffect, useCallback, useRef, startTransition } from 'react';
 import Link from 'next/link';
 import type { BlogPost } from '@/lib/types';
 import {
   saveBlogPostAction,
   deleteBlogPostAction,
-  fetchBlogPostsAction,
+  fetchAdminBlogPostsPaginatedAction,
 } from '@/app/admin/cms-actions';
-import { CmsRichEditorMock } from '@/features/admin/cms-rich-editor-mock';
+import { TiptapEditor } from '@/features/admin/tiptap-editor';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   FileText,
   BookOpen,
@@ -19,6 +20,7 @@ import {
   ExternalLink,
   Trash2,
   ArrowLeft,
+  X,
 } from 'lucide-react';
 
 const BLOG_CATEGORIES = [
@@ -28,68 +30,87 @@ const BLOG_CATEGORIES = [
   'Cost Guides',
   'Digital Nomad Lifestyle',
 ];
+const PAGE_SIZE = 20;
 
 export default function AdminBlogPage() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ all: 0, published: 0, draft: 0 });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Editor mode state
   const [isEditing, setIsEditing] = useState(false);
   const [currentPost, setCurrentPost] = useState<Partial<BlogPost> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const isActionRunningRef = useRef(false);
 
-  const fetchPosts = async () => {
-    try {
-      const data = await fetchBlogPostsAction();
-      startTransition(() => {
-        setPosts(data);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
+  const isActionRunningRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetchPosts();
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
+  }, []);
 
-  const filteredPosts = useMemo(() => {
-    let result = [...posts];
+  // Debounce search (250ms) and reset page only when trimmed query changes
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === debouncedSearch) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearch(trimmed);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, debouncedSearch]);
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.title.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q) ||
-          p.author.toLowerCase().includes(q)
-      );
-    }
+  const fetchPostsPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const res = await fetchAdminBlogPostsPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
+          status: statusFilter,
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setPosts(res.items);
+          setTotal(res.total);
+          setCounts(res.counts);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setActionError(err instanceof Error ? err.message : 'Failed to load blog posts.');
+          setLoading(false);
+        });
+      }
+    },
+    [categoryFilter, statusFilter, debouncedSearch]
+  );
 
-    if (categoryFilter !== 'all') {
-      result = result.filter((p) => p.category.toLowerCase() === categoryFilter.toLowerCase());
-    }
-
-    if (statusFilter !== 'all') {
-      result = result.filter((p) => p.status === statusFilter);
-    }
-
-    return result.sort((a, b) => (b.id || 0) - (a.id || 0));
-  }, [posts, search, categoryFilter, statusFilter]);
+  useEffect(() => {
+    fetchPostsPage(page);
+  }, [fetchPostsPage, page]);
 
   const handleOpenNew = () => {
     setCurrentPost({
@@ -101,10 +122,13 @@ export default function AdminBlogPage() {
       author: 'NomadDesk Editorial Team',
       image: '/seed/blog/blog-nomad-gear.webp',
       excerpt: '',
+      seoTitle: '',
+      seoDescription: '',
       content: '<h2>Introduction</h2><p>Share your insights and tips for remote professionals...</p>',
       status: 'published',
     });
     setFormError(null);
+    setActionError(null);
     setIsEditing(true);
   };
 
@@ -112,6 +136,7 @@ export default function AdminBlogPage() {
     // Preserve seed content exactly (AC-CMS-3)
     setCurrentPost({ ...post });
     setFormError(null);
+    setActionError(null);
     setIsEditing(true);
   };
 
@@ -132,6 +157,8 @@ export default function AdminBlogPage() {
       const payload: Partial<BlogPost> = {
         ...currentPost,
         status: finalStatus,
+        seoTitle: currentPost.seoTitle?.trim() || '',
+        seoDescription: currentPost.seoDescription?.trim() || '',
         slug:
           currentPost.slug ||
           currentPost.title
@@ -148,7 +175,7 @@ export default function AdminBlogPage() {
       );
       setIsEditing(false);
       setCurrentPost(null);
-      await fetchPosts();
+      await fetchPostsPage(page);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save blog post.');
     } finally {
@@ -161,13 +188,19 @@ export default function AdminBlogPage() {
     if (!confirm('Are you sure you want to delete this blog post?')) return;
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setActionError(null);
 
     try {
       await deleteBlogPostAction(id);
       showToast('Blog article deleted.');
-      await fetchPosts();
+      const nextPage = posts.length === 1 && page > 1 ? page - 1 : page;
+      if (nextPage !== page) {
+        setPage(nextPage);
+      } else {
+        await fetchPostsPage(nextPage);
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete post');
+      setActionError(err instanceof Error ? err.message : 'Failed to delete post.');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -198,7 +231,7 @@ export default function AdminBlogPage() {
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-[var(--color-brand)] text-[var(--color-brand)] cursor-pointer"
         >
           <FileText className="w-4 h-4" />
-          <span>Blog Posts ({posts.length})</span>
+          <span>Blog Posts ({counts.all})</span>
         </button>
       </div>
 
@@ -226,6 +259,23 @@ export default function AdminBlogPage() {
             </button>
           </div>
 
+          {actionError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionError(null)}
+                aria-label="Dismiss error"
+                className="p-1 rounded hover:bg-red-100 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Filters Bar */}
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-4 shadow-2xs space-y-3">
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
@@ -242,8 +292,12 @@ export default function AdminBlogPage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <select
+                  aria-label="Filter by category"
                   value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value);
+                    setPage(1);
+                  }}
                   className="text-xs px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
                 >
                   <option value="all">All Categories</option>
@@ -255,13 +309,17 @@ export default function AdminBlogPage() {
                 </select>
 
                 <select
+                  aria-label="Filter by status"
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'published' | 'draft')}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as 'all' | 'published' | 'draft');
+                    setPage(1);
+                  }}
                   className="text-xs px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
                 >
-                  <option value="all">All Statuses</option>
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
+                  <option value="all">All Statuses ({counts.all})</option>
+                  <option value="published">Published ({counts.published})</option>
+                  <option value="draft">Draft ({counts.draft})</option>
                 </select>
               </div>
             </div>
@@ -271,7 +329,7 @@ export default function AdminBlogPage() {
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl shadow-2xs overflow-hidden">
             {loading ? (
               <div className="p-8 text-center text-xs text-neutral-400">Loading blog posts...</div>
-            ) : filteredPosts.length === 0 ? (
+            ) : posts.length === 0 ? (
               <div className="p-12 text-center">
                 <FileText className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
                 <div className="text-sm font-semibold text-neutral-700">No blog articles found</div>
@@ -290,7 +348,7 @@ export default function AdminBlogPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border-light)]">
-                    {filteredPosts.map((post) => (
+                    {posts.map((post) => (
                       <tr
                         key={post.id}
                         data-testid={`post-row-${post.id}`}
@@ -351,6 +409,15 @@ export default function AdminBlogPage() {
                 </table>
               </div>
             )}
+
+            <PaginationBar
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={total}
+              onPageChange={setPage}
+              disabled={loading}
+              itemLabel="posts"
+            />
           </div>
         </div>
       ) : (
@@ -413,17 +480,17 @@ export default function AdminBlogPage() {
                   <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
                     Article Body (Rich WYSIWYG Editor)
                   </label>
-                  <CmsRichEditorMock
+                  <TiptapEditor
                     value={currentPost?.content || ''}
                     onChange={(val) => setCurrentPost((prev) => (prev ? { ...prev, content: val } : null))}
-                    placeholder="Start typing your article, H2 headings, bullet lists, links, or embed images..."
+                    placeholder="Start typing your article, H2 headings, bullet lists, links, tables, or embed media..."
                     minHeight="360px"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Right 30%: Publishing card, Taxonomy, Author */}
+            {/* Right 30%: Publishing card, Taxonomy, Author, SEO */}
             <div className="space-y-5">
               {/* Publishing Controls */}
               <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-2xs space-y-4">
@@ -545,6 +612,47 @@ export default function AdminBlogPage() {
                     placeholder="auto-generated-from-title"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
                   />
+                </div>
+              </div>
+
+              {/* SEO Metadata Card */}
+              <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-2xs space-y-4 text-xs">
+                <h3 className="font-bold text-sm text-[var(--color-text-on-light)] pb-2 border-b border-[var(--color-border-light)]">
+                  SEO Metadata
+                </h3>
+
+                <div>
+                  <label className="block font-semibold text-neutral-700 mb-1">SEO Title</label>
+                  <input
+                    type="text"
+                    maxLength={160}
+                    value={currentPost?.seoTitle || ''}
+                    onChange={(e) => setCurrentPost((prev) => (prev ? { ...prev, seoTitle: e.target.value } : null))}
+                    placeholder="Defaults to post title if left blank"
+                    data-testid="post-seo-title-input"
+                    className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                  />
+                  <span className="text-[10px] text-neutral-400 block mt-1">
+                    {(currentPost?.seoTitle || '').length} / 160 chars
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-neutral-700 mb-1">SEO Meta Description</label>
+                  <textarea
+                    rows={3}
+                    maxLength={320}
+                    value={currentPost?.seoDescription || ''}
+                    onChange={(e) =>
+                      setCurrentPost((prev) => (prev ? { ...prev, seoDescription: e.target.value } : null))
+                    }
+                    placeholder="Defaults to excerpt if left blank (150–160 chars recommended)"
+                    data-testid="post-seo-description-input"
+                    className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] resize-none"
+                  />
+                  <span className="text-[10px] text-neutral-400 block mt-1">
+                    {(currentPost?.seoDescription || '').length} / 320 chars
+                  </span>
                 </div>
               </div>
             </div>

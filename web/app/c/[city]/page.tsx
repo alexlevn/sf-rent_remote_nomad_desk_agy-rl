@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getLocationBySlug } from '@/lib/api/locations';
 import { listProperties } from '@/lib/api/properties';
+import { stripHtmlTags } from '@/lib/validations/content';
 import { CityViewContainer } from '@/features/city/city-view-container';
 import type { FilterState } from '@/features/city/filter-bar';
 
@@ -24,9 +25,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   const cityName = location.name || location.city;
+  const cleanDescription = location.description ? stripHtmlTags(location.description) : '';
   return {
     title: `Furnished Apartments in ${cityName}, ${location.country} | NomadDesk Split View`,
-    description: `Browse verified monthly furnished apartments in ${cityName} with dedicated ergonomic workstations and certified high-speed fiber internet for digital nomads.`,
+    description:
+      cleanDescription ||
+      `Browse verified monthly furnished apartments in ${cityName} with dedicated ergonomic workstations and certified high-speed fiber internet for digital nomads.`,
   };
 }
 

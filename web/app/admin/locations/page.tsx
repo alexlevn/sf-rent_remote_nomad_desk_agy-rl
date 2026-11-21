@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
+import React, { useState, useEffect, useCallback, useRef, startTransition } from 'react';
+import Link from 'next/link';
 import type { Location } from '@/lib/types';
 import {
   saveLocationAction,
   deleteLocationAction,
-  fetchLocationsAction,
+  fetchAdminLocationsPaginatedAction,
 } from '@/app/admin/cms-actions';
+import { TiptapEditor } from '@/features/admin/tiptap-editor';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   MapPin,
   Search,
@@ -19,6 +22,7 @@ import {
   AlertCircle,
   Globe,
   Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 
 const CONTINENTS = [
@@ -29,78 +33,87 @@ const CONTINENTS = [
   'Central America',
   'Asia',
 ];
+const PAGE_SIZE = 20;
 
 export default function AdminLocationsPage() {
   const [locations, setLocations] = useState<Location[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ all: 0, active: 0, inactive: 0 });
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [continentFilter, setContinentFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'hidden'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Edit/Add modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<Partial<Location> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const isActionRunningRef = useRef(false);
 
-  const fetchLocations = async () => {
-    try {
-      const data = await fetchLocationsAction();
-      startTransition(() => {
-        setLocations(data);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
+  const isActionRunningRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetchLocations();
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
+  }, []);
 
-  // Filtered destinations
-  const filteredLocations = useMemo(() => {
-    let result = [...locations];
+  // Debounce search (250ms) and reset page only when trimmed query changes
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed === debouncedSearch) return;
+    const timer = setTimeout(() => {
+      setDebouncedSearch(trimmed);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search, debouncedSearch]);
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.name.toLowerCase().includes(q) ||
-          l.city.toLowerCase().includes(q) ||
-          l.country.toLowerCase().includes(q) ||
-          l.slug.toLowerCase().includes(q)
-      );
-    }
+  const fetchLocationsPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const res = await fetchAdminLocationsPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          continent: continentFilter !== 'All' ? continentFilter : undefined,
+          status: statusFilter === 'hidden' ? 'inactive' : statusFilter,
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setLocations(res.items);
+          setTotal(res.total);
+          setCounts(res.counts);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setActionError(err instanceof Error ? err.message : 'Failed to load destinations.');
+          setLoading(false);
+        });
+      }
+    },
+    [continentFilter, statusFilter, debouncedSearch]
+  );
 
-    if (continentFilter !== 'All') {
-      result = result.filter((l) => l.continent === continentFilter);
-    }
-
-    if (statusFilter === 'active') {
-      result = result.filter((l) => l.isActive !== false);
-    } else if (statusFilter === 'hidden') {
-      result = result.filter((l) => l.isActive === false);
-    }
-
-    // Sort: top cities first (position <= 8), then by name
-    return result.sort((a, b) => {
-      const posA = a.position != null && a.position <= 8 ? a.position : 999;
-      const posB = b.position != null && b.position <= 8 ? b.position : 999;
-      if (posA !== posB) return posA - posB;
-      return a.name.localeCompare(b.name);
-    });
-  }, [locations, search, continentFilter, statusFilter]);
+  useEffect(() => {
+    fetchLocationsPage(page);
+  }, [fetchLocationsPage, page]);
 
   const handleOpenAdd = () => {
     setEditingLocation({
@@ -118,25 +131,35 @@ export default function AdminLocationsPage() {
       position: undefined,
     });
     setFormError(null);
+    setActionError(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (loc: Location) => {
     setEditingLocation({ ...loc });
     setFormError(null);
+    setActionError(null);
     setIsModalOpen(true);
   };
 
   const handleToggleActive = async (loc: Location) => {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setActionError(null);
     try {
       const nextActive = loc.isActive === false;
       await saveLocationAction({ id: loc.id, isActive: nextActive });
       showToast(`${loc.name} is now ${nextActive ? 'visible' : 'hidden'} across platform.`);
-      await fetchLocations();
+      const willDropRow =
+        (statusFilter === 'active' && !nextActive) || (statusFilter === 'hidden' && nextActive);
+      const nextPage = willDropRow && locations.length === 1 && page > 1 ? page - 1 : page;
+      if (nextPage !== page) {
+        setPage(nextPage);
+      } else {
+        await fetchLocationsPage(nextPage);
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update visibility');
+      setActionError(err instanceof Error ? err.message : 'Failed to update visibility.');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -172,7 +195,7 @@ export default function AdminLocationsPage() {
       );
       setIsModalOpen(false);
       setEditingLocation(null);
-      await fetchLocations();
+      await fetchLocationsPage(page);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save location.');
     } finally {
@@ -185,15 +208,21 @@ export default function AdminLocationsPage() {
     if (!confirm('Are you sure you want to delete this destination?')) return;
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setFormError(null);
 
     try {
       await deleteLocationAction(id);
       showToast('Destination deleted.');
       setIsModalOpen(false);
       setEditingLocation(null);
-      await fetchLocations();
+      const nextPage = locations.length === 1 && page > 1 ? page - 1 : page;
+      if (nextPage !== page) {
+        setPage(nextPage);
+      } else {
+        await fetchLocationsPage(nextPage);
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Cannot delete destination');
+      setFormError(err instanceof Error ? err.message : 'Cannot delete destination.');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -221,7 +250,7 @@ export default function AdminLocationsPage() {
             Destinations &amp; Top Cities Management
           </h1>
           <p className="text-xs md:text-sm text-[var(--color-text-on-light-muted)] mt-1">
-            Manage 34 remote work destinations, customize map coordinates, and configure top cities order on the homepage.
+            Manage {counts.all} remote work destinations, customize map coordinates, and configure top cities order on the homepage.
           </p>
         </div>
 
@@ -235,6 +264,23 @@ export default function AdminLocationsPage() {
           <span>Add New Destination</span>
         </button>
       </div>
+
+      {actionError && (
+        <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error"
+            className="p-1 rounded hover:bg-red-100 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-4 shadow-2xs space-y-4">
@@ -255,8 +301,12 @@ export default function AdminLocationsPage() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Continent filter */}
             <select
+              aria-label="Filter by continent"
               value={continentFilter}
-              onChange={(e) => setContinentFilter(e.target.value)}
+              onChange={(e) => {
+                setContinentFilter(e.target.value);
+                setPage(1);
+              }}
               className="text-xs px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
             >
               {CONTINENTS.map((c) => (
@@ -268,13 +318,17 @@ export default function AdminLocationsPage() {
 
             {/* Status filter */}
             <select
+              aria-label="Filter by status"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'hidden')}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as 'all' | 'active' | 'hidden');
+                setPage(1);
+              }}
               className="text-xs px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
             >
-              <option value="all">All Status</option>
-              <option value="active">Visible Only</option>
-              <option value="hidden">Hidden Only</option>
+              <option value="all">All Status ({counts.all})</option>
+              <option value="active">Visible Only ({counts.active})</option>
+              <option value="hidden">Hidden Only ({counts.inactive})</option>
             </select>
           </div>
         </div>
@@ -284,7 +338,7 @@ export default function AdminLocationsPage() {
       <div className="bg-white border border-[var(--color-border-light)] rounded-2xl shadow-2xs overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-xs text-neutral-400">Loading destinations...</div>
-        ) : filteredLocations.length === 0 ? (
+        ) : locations.length === 0 ? (
           <div className="p-12 text-center">
             <Globe className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
             <div className="text-sm font-semibold text-neutral-700">No destinations found</div>
@@ -305,7 +359,7 @@ export default function AdminLocationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-light)]">
-                {filteredLocations.map((loc) => {
+                {locations.map((loc) => {
                   const isTop = loc.position != null && loc.position <= 8;
                   const isHidden = loc.isActive === false;
 
@@ -358,10 +412,24 @@ export default function AdminLocationsPage() {
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {!isHidden && (
+                            <Link
+                              href={`/c/furnished-apartments-${loc.slug}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="View on Web"
+                              aria-label={`View ${loc.name || loc.city} on web`}
+                              data-testid={`view-location-${loc.slug}`}
+                              className="p-1.5 rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleToggleActive(loc)}
                             title={isHidden ? 'Show destination' : 'Hide destination'}
+                            aria-label={isHidden ? `Show ${loc.name || loc.city}` : `Hide ${loc.name || loc.city}`}
                             data-testid={`toggle-active-${loc.slug}`}
                             className="p-1.5 rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                           >
@@ -384,12 +452,21 @@ export default function AdminLocationsPage() {
             </table>
           </div>
         )}
+
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+          disabled={loading}
+          itemLabel="destinations"
+        />
       </div>
 
       {/* Modal: Add / Edit Destination */}
       {isModalOpen && editingLocation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
             <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-lg font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-[var(--color-brand)]" />
@@ -398,6 +475,7 @@ export default function AdminLocationsPage() {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
+                aria-label="Close modal"
                 className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -514,14 +592,15 @@ export default function AdminLocationsPage() {
 
               <div>
                 <label className="block font-semibold text-neutral-700 mb-1">Description</label>
-                <textarea
-                  rows={2}
+                <TiptapEditor
                   value={editingLocation.description || ''}
-                  onChange={(e) =>
-                    setEditingLocation((prev) => ({ ...prev, description: e.target.value }))
+                  onChange={(val) =>
+                    setEditingLocation((prev) => (prev ? { ...prev, description: val } : null))
                   }
-                  placeholder="Short summary for city card and meta..."
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] resize-none"
+                  label="Destination Description"
+                  placeholder="Write a city overview for the destination page and SEO meta..."
+                  minHeight="160px"
+                  testIdPrefix="location-description-editor"
                 />
               </div>
 
@@ -622,7 +701,9 @@ export default function AdminLocationsPage() {
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Delete</span>
                   </button>
-                ) : <div />}
+                ) : (
+                  <div />
+                )}
 
                 <div className="flex items-center gap-2">
                   <button

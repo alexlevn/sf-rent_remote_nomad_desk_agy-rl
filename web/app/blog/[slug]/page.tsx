@@ -32,8 +32,8 @@ export async function generateMetadata({
   }
 
   return {
-    title: `${post.title} | NomadDesk Blog`,
-    description: post.excerpt,
+    title: post.seoTitle?.trim() || `${post.title} | NomadDesk Blog`,
+    description: post.seoDescription?.trim() || post.excerpt,
   };
 }
 
