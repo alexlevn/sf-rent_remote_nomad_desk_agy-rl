@@ -17,10 +17,10 @@ import {
   listWorkstations,
 } from '@/lib/api/workstations';
 import { saveTravelGuide, deleteTravelGuide, listTravelGuides } from '@/lib/api/guides';
-import { saveBlogPost, deleteBlogPost } from '@/lib/api/blog';
-import { saveVideo, deleteVideo, reorderVideos } from '@/lib/api/videos';
+import { saveBlogPost, deleteBlogPost, listBlogPosts } from '@/lib/api/blog';
+import { saveVideo, deleteVideo, reorderVideos, listVideos } from '@/lib/api/videos';
 import { reorderFeaturedProperties } from '@/lib/api/properties';
-import { updateExchangeRates } from '@/lib/api/rates';
+import { getExchangeRates, updateExchangeRates } from '@/lib/api/rates';
 import type {
   Location,
   WorkstationPackage,
@@ -283,5 +283,20 @@ export async function fetchTravelGuidesAction() {
     listLocations({ includeInactive: true }),
   ]);
   return { guidesData, locsData };
+}
+
+export async function fetchBlogPostsAction() {
+  await assertAdminRole();
+  return await listBlogPosts({ includeDrafts: true, status: 'all' });
+}
+
+export async function fetchVideosAction() {
+  await assertAdminRole();
+  return await listVideos({ includeInactive: true });
+}
+
+export async function fetchExchangeRatesAction() {
+  await assertAdminRole();
+  return await getExchangeRates();
 }
 

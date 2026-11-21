@@ -3,8 +3,11 @@
 import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
 import Link from 'next/link';
 import type { BlogPost } from '@/lib/types';
-import { listBlogPosts } from '@/lib/api/blog';
-import { saveBlogPostAction, deleteBlogPostAction } from '@/app/admin/cms-actions';
+import {
+  saveBlogPostAction,
+  deleteBlogPostAction,
+  fetchBlogPostsAction,
+} from '@/app/admin/cms-actions';
 import { CmsRichEditorMock } from '@/features/admin/cms-rich-editor-mock';
 import {
   FileText,
@@ -43,7 +46,7 @@ export default function AdminBlogPage() {
 
   const fetchPosts = async () => {
     try {
-      const data = await listBlogPosts({ includeDrafts: true, status: 'all' });
+      const data = await fetchBlogPostsAction();
       startTransition(() => {
         setPosts(data);
         setLoading(false);

@@ -1,8 +1,47 @@
+import { eq, and, asc, sql } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { travelGuides } from '@/lib/db/schema';
 import type { TravelGuide } from '@/lib/types';
-import { getMockStore } from './mock/seed-data';
+import {
+  createTravelGuideSchema,
+  updateTravelGuideSchema,
+  positiveIntIdSchema,
+  sanitizeHtml,
+} from '@/lib/validations/content';
+
+function mapGuideRow(row: typeof travelGuides.$inferSelect): TravelGuide {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    city: row.city,
+    category: row.category || 'City Guide',
+    publishDate: row.createdAt.toISOString().slice(0, 10),
+    featured: row.isFeatured,
+    image: row.coverImage || '/seed/guide/placeholder.webp',
+    excerpt: row.excerpt || '',
+    content: row.content || '',
+    status: row.status === 'draft' ? 'draft' : 'published',
+    position: row.position,
+  };
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function parsePublishDate(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
 
 /**
- * Lists travel guides with optional city, featured, and status filters.
+ * Lists travel guides from PostgreSQL with optional city, featured, and status filters.
+ * Public callers see only published guides by default.
  */
 export async function listTravelGuides(params?: {
   city?: string;
@@ -10,82 +49,155 @@ export async function listTravelGuides(params?: {
   status?: string;
   includeDrafts?: boolean;
 }): Promise<TravelGuide[]> {
-  const store = getMockStore();
-  let result = [...store.guides];
+  const conditions = [];
 
   if (!params?.includeDrafts && !params?.status) {
-    result = result.filter((g) => g.status !== 'draft');
+    conditions.push(eq(travelGuides.status, 'published'));
   } else if (params?.status && params.status !== 'all') {
-    result = result.filter((g) => g.status === params.status);
+    conditions.push(eq(travelGuides.status, params.status));
   }
 
   if (params?.city && params.city !== 'all') {
-    const q = params.city.toLowerCase();
-    result = result.filter((g) => g.city.toLowerCase() === q);
+    conditions.push(eq(sql`lower(${travelGuides.city})`, params.city.trim().toLowerCase()));
   }
 
   if (params?.featured != null) {
-    result = result.filter((g) => g.featured === params.featured);
+    conditions.push(eq(travelGuides.isFeatured, params.featured));
   }
 
-  return result.map((g) => ({ ...g }));
+  const query = db.select().from(travelGuides);
+  const rows =
+    conditions.length > 0
+      ? await query.where(and(...conditions)).orderBy(asc(travelGuides.position), asc(travelGuides.id))
+      : await query.orderBy(asc(travelGuides.position), asc(travelGuides.id));
+
+  return rows.map(mapGuideRow);
 }
 
 /**
  * Retrieves a travel guide article by URL slug.
+ * Defaults to published guides only so draft articles are not exposed on public routes.
  */
-export async function getTravelGuideBySlug(slug: string): Promise<TravelGuide | null> {
-  const store = getMockStore();
-  const guide = store.guides.find((g) => g.slug === slug);
-  return guide ? { ...guide } : null;
+export async function getTravelGuideBySlug(
+  slug: string,
+  options?: { includeDrafts?: boolean }
+): Promise<TravelGuide | null> {
+  if (!slug || typeof slug !== 'string') return null;
+  const cleanSlug = slug.trim();
+  if (!cleanSlug) return null;
+
+  const conditions = [eq(travelGuides.slug, cleanSlug)];
+  if (!options?.includeDrafts) {
+    conditions.push(eq(travelGuides.status, 'published'));
+  }
+
+  const rows = await db
+    .select()
+    .from(travelGuides)
+    .where(and(...conditions))
+    .limit(1);
+
+  return rows.length > 0 ? mapGuideRow(rows[0]) : null;
 }
 
 /**
  * Saves travel guide changes or creates a new article (admin CMS).
  */
 export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<TravelGuide> {
-  const store = getMockStore();
-  if (data.id) {
-    const idx = store.guides.findIndex((g) => g.id === data.id);
-    if (idx !== -1) {
-      store.guides[idx] = { ...store.guides[idx], ...data };
-      return { ...store.guides[idx] };
+  if (data.id !== undefined) {
+    const parsed = updateTravelGuideSchema.parse(data);
+    const existing = await db
+      .select()
+      .from(travelGuides)
+      .where(eq(travelGuides.id, parsed.id))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const updateValues: Partial<typeof travelGuides.$inferInsert> = {};
+
+      if (parsed.title !== undefined) {
+        updateValues.title = parsed.title;
+        updateValues.seoTitle = parsed.title;
+      }
+      if (parsed.slug !== undefined) updateValues.slug = parsed.slug;
+      if (parsed.city !== undefined) updateValues.city = parsed.city;
+      if (parsed.category !== undefined) updateValues.category = parsed.category;
+      if (parsed.featured !== undefined) updateValues.isFeatured = parsed.featured;
+      if (parsed.image !== undefined) updateValues.coverImage = parsed.image;
+      if (parsed.excerpt !== undefined) {
+        updateValues.excerpt = parsed.excerpt;
+        updateValues.seoDescription = parsed.excerpt;
+      }
+      if (parsed.content !== undefined) {
+        updateValues.content = sanitizeHtml(parsed.content);
+      }
+      if (parsed.status !== undefined) updateValues.status = parsed.status;
+      if (parsed.position !== undefined) updateValues.position = parsed.position;
+
+      const parsedDate = parsePublishDate(parsed.publishDate);
+      if (parsedDate) updateValues.createdAt = parsedDate;
+
+      if (Object.keys(updateValues).length === 0) {
+        return mapGuideRow(existing[0]);
+      }
+
+      const [updated] = await db
+        .update(travelGuides)
+        .set(updateValues)
+        .where(eq(travelGuides.id, parsed.id))
+        .returning();
+
+      return mapGuideRow(updated);
     }
   }
 
-  const maxId = store.guides.reduce((max, g) => Math.max(max, g.id), 0);
-  const newGuide: TravelGuide = {
-    id: maxId + 1,
+  const parsed = createTravelGuideSchema.parse({
+    ...data,
     title: data.title || 'Untitled Guide',
-    slug:
-      data.slug ||
-      (data.title
-        ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-        : `guide-${maxId + 1}`),
-    city: data.city || 'Barcelona',
-    category: data.category || 'City Guide',
-    publishDate: data.publishDate || new Date().toISOString().slice(0, 10),
-    featured: data.featured ?? false,
-    image: data.image || '/seed/guide/placeholder.webp',
-    excerpt: data.excerpt || '',
-    content: data.content || '',
-    status: data.status || 'published',
-    position: data.position ?? maxId + 1,
-  };
+  });
 
-  store.guides.push(newGuide);
-  return { ...newGuide };
+  const [maxPosRow] = await db
+    .select({ maxPos: sql<number>`coalesce(max(${travelGuides.position}), 0)` })
+    .from(travelGuides);
+  const nextPosition = parsed.position ?? Number(maxPosRow?.maxPos ?? 0) + 1;
+
+  const baseSlug = parsed.slug || slugify(parsed.title) || `guide-${nextPosition}`;
+  const sanitizedContent = sanitizeHtml(parsed.content);
+  const createdAt = parsePublishDate(parsed.publishDate) ?? new Date();
+
+  const [created] = await db
+    .insert(travelGuides)
+    .values({
+      slug: baseSlug,
+      title: parsed.title,
+      city: parsed.city,
+      category: parsed.category,
+      excerpt: parsed.excerpt,
+      content: sanitizedContent,
+      coverImage: parsed.image,
+      isFeatured: parsed.featured,
+      status: parsed.status,
+      seoTitle: parsed.title,
+      seoDescription: parsed.excerpt,
+      position: nextPosition,
+      createdAt,
+    })
+    .returning();
+
+  return mapGuideRow(created);
 }
 
 /**
  * Deletes a travel guide article by ID.
  */
 export async function deleteTravelGuide(id: number): Promise<boolean> {
-  const store = getMockStore();
-  const idx = store.guides.findIndex((g) => g.id === id);
-  if (idx !== -1) {
-    store.guides.splice(idx, 1);
-    return true;
-  }
-  return false;
+  const parsedId = positiveIntIdSchema.safeParse(id);
+  if (!parsedId.success) return false;
+
+  const deleted = await db
+    .delete(travelGuides)
+    .where(eq(travelGuides.id, parsedId.data))
+    .returning({ id: travelGuides.id });
+
+  return deleted.length > 0;
 }

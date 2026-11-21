@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, startTransition } from 'react';
+import React, { useState, useEffect, useRef, startTransition } from 'react';
 import { useCurrency } from '@/context/currency-context';
-import { getExchangeRates } from '@/lib/api/rates';
-import { updateExchangeRatesAction } from '@/app/admin/cms-actions';
+import {
+  fetchExchangeRatesAction,
+  updateExchangeRatesAction,
+} from '@/app/admin/cms-actions';
 import type { ExchangeRates } from '@/lib/types';
 import {
   Coins,
@@ -22,27 +24,39 @@ export function CurrencyRatesForm() {
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasEditedRef = useRef(false);
 
-  // Load existing rates on mount
+  // Load existing rates once on mount without clobbering user edits in flight
   useEffect(() => {
+    let cancelled = false;
     async function loadRates() {
       try {
-        const rates = await getExchangeRates();
+        const rates = await fetchExchangeRatesAction();
+        if (cancelled) return;
         startTransition(() => {
-          setEurRate(rates.EUR_USD.toString());
-          setGbpRate(rates.GBP_USD.toString());
+          if (!hasEditedRef.current) {
+            setEurRate(rates.EUR_USD.toString());
+            setGbpRate(rates.GBP_USD.toString());
+          }
           setLoading(false);
         });
       } catch {
+        if (cancelled) return;
         startTransition(() => {
-          setEurRate(currentContextRates.EUR_USD.toString());
-          setGbpRate(currentContextRates.GBP_USD.toString());
+          if (!hasEditedRef.current) {
+            setEurRate(currentContextRates.EUR_USD.toString());
+            setGbpRate(currentContextRates.GBP_USD.toString());
+          }
           setLoading(false);
         });
       }
     }
     loadRates();
-  }, [currentContextRates]);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,7 +161,10 @@ export function CurrencyRatesForm() {
               <input
                 type="text"
                 value={eurRate}
-                onChange={(e) => setEurRate(e.target.value)}
+                onChange={(e) => {
+                  hasEditedRef.current = true;
+                  setEurRate(e.target.value);
+                }}
                 placeholder="1.08"
                 data-testid="eur-rate-input"
                 className="w-full px-4 py-2.5 bg-neutral-50 border border-[var(--color-border-light)] rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-brand)] focus:bg-white transition-all font-mono"
@@ -170,7 +187,10 @@ export function CurrencyRatesForm() {
               <input
                 type="text"
                 value={gbpRate}
-                onChange={(e) => setGbpRate(e.target.value)}
+                onChange={(e) => {
+                  hasEditedRef.current = true;
+                  setGbpRate(e.target.value);
+                }}
                 placeholder="1.26"
                 className="w-full px-4 py-2.5 bg-neutral-50 border border-[var(--color-border-light)] rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-brand)] focus:bg-white transition-all font-mono"
               />
