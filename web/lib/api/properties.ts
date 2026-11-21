@@ -274,3 +274,64 @@ export async function updatePropertyStatus(
   property.updatedAt = new Date().toISOString();
   return { ...property };
 }
+
+/**
+ * Updates a property with arbitrary partial data (admin portal).
+ */
+export async function updateProperty(
+  id: number,
+  data: Partial<Property>
+): Promise<Property | null> {
+  const store = getMockStore();
+  const index = store.properties.findIndex((p) => p.id === id);
+  if (index === -1) return null;
+
+  const existing = store.properties[index];
+  const updated: Property = {
+    ...existing,
+    ...data,
+    id: existing.id,
+    updatedAt: new Date().toISOString(),
+  };
+  store.properties[index] = updated;
+  return { ...updated };
+}
+
+/**
+ * Reorders featured properties on the homepage (AC-CMS-4, D20).
+ * Top #1 becomes the 3D showcase property.
+ */
+export async function reorderFeaturedProperties(orderedIds: number[]): Promise<Property[]> {
+  const store = getMockStore();
+
+  // Reset featured on all properties
+  store.properties.forEach((p) => {
+    p.featuredPosition = null;
+    p.isFeatured = false;
+  });
+
+  // Assign 1-based order
+  orderedIds.forEach((id, index) => {
+    const property = store.properties.find((p) => p.id === id);
+    if (property) {
+      property.featuredPosition = index + 1;
+      property.isFeatured = true;
+    }
+  });
+
+  return store.properties
+    .filter((p) => p.featuredPosition != null)
+    .sort((a, b) => (a.featuredPosition || 0) - (b.featuredPosition || 0))
+    .map((p) => ({ ...p }));
+}
+
+/**
+ * Deletes a property by ID (admin portal).
+ */
+export async function deleteProperty(id: number): Promise<boolean> {
+  const store = getMockStore();
+  const initLen = store.properties.length;
+  store.properties = store.properties.filter((p) => p.id !== id);
+  return store.properties.length < initLen;
+}
+
