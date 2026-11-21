@@ -83,26 +83,33 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
     };
   }, []);
 
-  // Debounce search (250ms) and reset page to 1
+  const closeDrawer = useCallback(() => {
+    drawerRequestIdRef.current += 1;
+    setDrawerUser(null);
+  }, []);
+
+  // Debounce search (250ms) and reset page to 1 only when the trimmed query changes
   useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === debouncedSearch) return;
     const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
+      setDebouncedSearch(trimmed);
       setPage(1);
     }, 250);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, debouncedSearch]);
 
   // Close drawer on Escape key
   useEffect(() => {
     if (!drawerUser) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setDrawerUser(null);
+        closeDrawer();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [drawerUser]);
+  }, [drawerUser, closeDrawer]);
 
   const fetchPage = useCallback(
     async (targetPage: number) => {
@@ -191,6 +198,18 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
   // Global admin count from SQL counts (server also enforces active-admin protection)
   const adminCount = counts.admin;
 
+  const reloadAfterMutation = async () => {
+    const nextPage =
+      users.length <= 1 && page > 1 && (roleFilter !== 'all' || statusFilter !== 'all')
+        ? page - 1
+        : page;
+    if (nextPage !== page) {
+      setPage(nextPage);
+    } else {
+      await fetchPage(page);
+    }
+  };
+
   // Handle Role Change (Promote / Demote)
   const handleRoleChange = async (targetUser: User, newRole: UserRole) => {
     if (isActionRunningRef.current) return;
@@ -209,7 +228,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           ? `User ${targetUser.email} promoted to Administrator.`
           : `Administrator ${targetUser.email} demoted to Guest.`
       );
-      await fetchPage(page);
+      await reloadAfterMutation();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to update user role');
     } finally {
@@ -241,7 +260,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           ? `Account for ${targetUser.email} has been activated.`
           : `Account for ${targetUser.email} has been suspended.`
       );
-      await fetchPage(page);
+      await reloadAfterMutation();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to update account status');
     } finally {
@@ -352,6 +371,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
 
           {/* Status Filter Dropdown */}
           <select
+            aria-label="Filter by account status"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value as 'all' | 'active' | 'suspended');
@@ -578,7 +598,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setDrawerUser(null);
+              closeDrawer();
             }
           }}
         >
@@ -605,7 +625,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                 </div>
                 <button
                   type="button"
-                  onClick={() => setDrawerUser(null)}
+                  onClick={closeDrawer}
                   aria-label="Close reservations drawer"
                   className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
                 >
@@ -690,7 +710,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
             <div className="pt-4 border-t border-[var(--color-border-light)] flex items-center justify-end">
               <button
                 type="button"
-                onClick={() => setDrawerUser(null)}
+                onClick={closeDrawer}
                 className="btn btn-outline btn-sm text-xs"
               >
                 Close

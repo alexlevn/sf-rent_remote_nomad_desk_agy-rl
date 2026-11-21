@@ -69,6 +69,7 @@ export default function AdminDashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const statsRequestIdRef = useRef(0);
+  const queuesRequestIdRef = useRef(0);
   const isActionRunningRef = useRef(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -92,18 +93,21 @@ export default function AdminDashboardPage() {
   }, []);
 
   const loadQueues = useCallback(async () => {
+    const reqId = ++queuesRequestIdRef.current;
     try {
       const [hostsPage, propsPage, allUsers] = await Promise.all([
         fetchAdminHostsPaginatedAction({ status: 'pending', page: 1, pageSize: 10 }),
         fetchAdminPropertiesPaginatedAction({ status: 'pending_review', page: 1, pageSize: 10 }),
         fetchAdminUsersAction(),
       ]);
+      if (reqId !== queuesRequestIdRef.current) return;
       startTransition(() => {
         setPendingHosts(hostsPage.items);
         setPendingProperties(propsPage.items);
         setUsers(allUsers);
       });
     } catch (err) {
+      if (reqId !== queuesRequestIdRef.current) return;
       startTransition(() => {
         setErrorMessage(err instanceof Error ? err.message : 'Failed to load approval queues');
       });
@@ -313,9 +317,9 @@ export default function AdminDashboardPage() {
             <div>
               <h2 className="text-base md:text-lg font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <span>Queue: Host Membership Applications Awaiting Approval</span>
-                {pendingHosts.length > 0 && (
+                {(dashboardStats?.pendingHosts ?? pendingHosts.length) > 0 && (
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-[var(--color-brand)]">
-                    {pendingHosts.length} pending
+                    {dashboardStats?.pendingHosts ?? pendingHosts.length} pending
                   </span>
                 )}
               </h2>
@@ -413,9 +417,9 @@ export default function AdminDashboardPage() {
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                   <span>Property Moderation Queue</span>
-                  {pendingProperties.length > 0 && (
+                  {(dashboardStats?.pendingProperties ?? pendingProperties.length) > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                      {pendingProperties.length} pending
+                      {dashboardStats?.pendingProperties ?? pendingProperties.length} pending
                     </span>
                   )}
                 </h3>

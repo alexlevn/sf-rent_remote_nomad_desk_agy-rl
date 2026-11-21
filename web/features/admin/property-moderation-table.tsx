@@ -96,14 +96,16 @@ export function PropertyModerationTable() {
     };
   }, []);
 
-  // Debounce keyword search (250ms) and reset page to 1
+  // Debounce keyword search (250ms) and reset page to 1 only when the trimmed query changes
   useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === debouncedSearch) return;
     const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
+      setDebouncedSearch(trimmed);
       setPage(1);
     }, 250);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, debouncedSearch]);
 
   const fetchPage = useCallback(
     async (targetPage: number) => {

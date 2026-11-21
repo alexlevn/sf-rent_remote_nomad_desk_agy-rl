@@ -99,14 +99,16 @@ export function AllReservationsTable() {
     };
   }, []);
 
-  // Debounce keyword search (250ms) and reset page to 1
+  // Debounce keyword search (250ms) and reset page to 1 only when the trimmed query changes
   useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed === debouncedSearch) return;
     const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
+      setDebouncedSearch(trimmed);
       setPage(1);
     }, 250);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, debouncedSearch]);
 
   const fetchPage = useCallback(
     async (targetPage: number) => {
@@ -200,7 +202,11 @@ export function AllReservationsTable() {
       showToast(`Reservation #${voidingReservation.code} cancelled by Admin. Refund processed.`);
       const resId = voidingReservation.id;
       setVoidingReservation(null);
-      await fetchPage(page);
+      if (reservations.length <= 1 && page > 1 && statusFilter !== 'all') {
+        setPage(page - 1);
+      } else {
+        await fetchPage(page);
+      }
       if (selectedReservation?.id === resId) {
         setSelectedReservation((prev) =>
           prev
@@ -358,6 +364,7 @@ export function AllReservationsTable() {
           {/* Status Filter */}
           <div>
             <select
+              aria-label="Filter by status"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -378,6 +385,7 @@ export function AllReservationsTable() {
           {/* Host Filter */}
           <div>
             <select
+              aria-label="Filter by host"
               value={hostFilter}
               onChange={(e) => {
                 setHostFilter(e.target.value);
