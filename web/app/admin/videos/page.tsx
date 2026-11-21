@@ -52,11 +52,13 @@ export default function AdminVideosPage() {
     fetchVideos();
   }, []);
 
-  // Close reel modal on Escape key
+  // Close reel modal on Escape key (skip if a nested dialog handled it or save is in flight)
   useEffect(() => {
     if (!isModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsModalOpen(false);
+      if (e.key === 'Escape' && !e.defaultPrevented && !isActionRunningRef.current) {
+        setIsModalOpen(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);

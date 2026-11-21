@@ -35,6 +35,7 @@ import {
 
 const MAX_FEATURE_LENGTH = 80;
 const MAX_FEATURES_COUNT = 12;
+const MAX_EUR_PRICE = 21_474_836; // Keeps cents (price * 100) within Postgres INT4_MAX
 
 export default function AdminWorkstationsPage() {
   const [data, setData] = useState<WorkstationData | null>(null);
@@ -97,11 +98,11 @@ export default function AdminWorkstationsPage() {
     fetchWorkstations();
   }, [fetchWorkstations]);
 
-  // Close active modal on Escape key
+  // Close active modal on Escape key (skip while a save request is in flight)
   useEffect(() => {
     if (!isPkgModalOpen && !isCompModalOpen && !isAddonModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !e.defaultPrevented && !isActionRunningRef.current) {
         setIsPkgModalOpen(false);
         setIsCompModalOpen(false);
         setIsAddonModalOpen(false);
@@ -173,7 +174,12 @@ export default function AdminWorkstationsPage() {
     e.preventDefault();
     if (!editingPkg || isSubmitting || isActionRunningRef.current) return;
 
-    if (pkgPriceEUR === '' || !Number.isFinite(pkgPriceEUR) || pkgPriceEUR < 0) {
+    if (
+      pkgPriceEUR === '' ||
+      !Number.isFinite(pkgPriceEUR) ||
+      pkgPriceEUR < 0 ||
+      pkgPriceEUR > MAX_EUR_PRICE
+    ) {
       setFormError('Please enter a valid monthly price in EUR.');
       return;
     }
@@ -281,7 +287,12 @@ export default function AdminWorkstationsPage() {
     e.preventDefault();
     if (!editingComp || !editingComp.name || isSubmitting || isActionRunningRef.current) return;
 
-    if (compPriceEUR === '' || !Number.isFinite(compPriceEUR) || compPriceEUR < 0) {
+    if (
+      compPriceEUR === '' ||
+      !Number.isFinite(compPriceEUR) ||
+      compPriceEUR < 0 ||
+      compPriceEUR > MAX_EUR_PRICE
+    ) {
       setFormError('Please enter a valid monthly upgrade price in EUR (0 for included).');
       return;
     }
@@ -413,7 +424,12 @@ export default function AdminWorkstationsPage() {
     e.preventDefault();
     if (!editingAddon || !editingAddon.name || isSubmitting || isActionRunningRef.current) return;
 
-    if (addonPriceEUR === '' || !Number.isFinite(addonPriceEUR) || addonPriceEUR < 0) {
+    if (
+      addonPriceEUR === '' ||
+      !Number.isFinite(addonPriceEUR) ||
+      addonPriceEUR < 0 ||
+      addonPriceEUR > MAX_EUR_PRICE
+    ) {
       setFormError('Please enter a valid monthly add-on price in EUR.');
       return;
     }
@@ -1095,9 +1111,12 @@ export default function AdminWorkstationsPage() {
                   currencySymbol="€"
                   suffix="/ mo"
                   min={0}
+                  max={MAX_EUR_PRICE}
                   required
                   testId="pkg-price-input"
-                  ariaInvalid={pkgPriceEUR === '' && formError !== null}
+                  ariaInvalid={
+                    (pkgPriceEUR === '' || pkgPriceEUR > MAX_EUR_PRICE) && formError !== null
+                  }
                 />
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Changes update /workstations, Builder, and widget immediately. Existing bookings retain their original rate.
@@ -1118,11 +1137,11 @@ export default function AdminWorkstationsPage() {
                 <div className="flex items-center justify-between mb-1">
                   <label
                     htmlFor="pkg-feature-input"
-                    className="block font-semibold text-neutral-700"
+                    className="block font-semibold text-[var(--color-text-on-light)]"
                   >
                     Included Features
                   </label>
-                  <span className="text-[11px] text-neutral-400">
+                  <span className="text-[11px] text-[var(--color-text-on-light-muted)]">
                     {(editingPkg.features ?? []).length}/{MAX_FEATURES_COUNT}
                   </span>
                 </div>
@@ -1130,13 +1149,13 @@ export default function AdminWorkstationsPage() {
                 {(editingPkg.features ?? []).length > 0 && (
                   <div
                     data-testid="pkg-features-list"
-                    className="flex flex-wrap gap-1.5 mb-2 p-2.5 rounded-xl border border-[var(--color-border-light)] bg-neutral-50/70"
+                    className="flex flex-wrap gap-1.5 mb-2 p-2.5 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-muted)]"
                   >
                     {(editingPkg.features ?? []).map((feat, idx) => (
                       <span
                         key={`${feat}-${idx}`}
                         data-testid={`pkg-feature-chip-${idx}`}
-                        className="inline-flex items-center gap-1.5 max-w-full rounded-full border border-[var(--color-border-light)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--color-text-on-light)] shadow-2xs"
+                        className="inline-flex items-center gap-1.5 max-w-full rounded-full border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] px-2.5 py-1 text-xs font-medium text-[var(--color-text-on-light)] shadow-2xs"
                       >
                         <span className="truncate">{feat}</span>
                         <button
@@ -1144,7 +1163,7 @@ export default function AdminWorkstationsPage() {
                           onClick={() => handleRemoveFeature(idx)}
                           aria-label={`Remove feature ${feat}`}
                           data-testid={`pkg-feature-remove-${idx}`}
-                          className="inline-flex items-center justify-center rounded-full p-0.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer shrink-0"
+                          className="inline-flex items-center justify-center rounded-full p-0.5 text-[var(--color-text-on-light-muted)] hover:bg-[var(--color-error-bg)] hover:text-[var(--color-error)] transition-colors cursor-pointer shrink-0"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1166,7 +1185,7 @@ export default function AdminWorkstationsPage() {
                     placeholder="Type a feature and press Enter..."
                     data-testid="pkg-feature-input"
                     aria-invalid={featureError ? true : undefined}
-                    className="flex-1 min-w-0 min-h-10 px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                    className="flex-1 min-w-0 min-h-10 px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] text-xs text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                   />
                   <button
                     type="button"
@@ -1184,12 +1203,12 @@ export default function AdminWorkstationsPage() {
                   <p
                     role="alert"
                     data-testid="pkg-feature-error"
-                    className="text-[11px] text-red-600 mt-1"
+                    className="text-[11px] text-[var(--color-error)] mt-1"
                   >
                     {featureError}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-neutral-400 mt-1">
+                  <p className="text-[11px] text-[var(--color-text-on-light-muted)] mt-1">
                     Press Enter or click Add to include a feature (max {MAX_FEATURE_LENGTH} chars, up to {MAX_FEATURES_COUNT} items).
                   </p>
                 )}
@@ -1296,9 +1315,12 @@ export default function AdminWorkstationsPage() {
                   suffix="/ mo"
                   placeholder="0 for included base hardware"
                   min={0}
+                  max={MAX_EUR_PRICE}
                   required
                   testId="comp-price-input"
-                  ariaInvalid={compPriceEUR === '' && formError !== null}
+                  ariaInvalid={
+                    (compPriceEUR === '' || compPriceEUR > MAX_EUR_PRICE) && formError !== null
+                  }
                 />
               </div>
 
@@ -1398,9 +1420,12 @@ export default function AdminWorkstationsPage() {
                   suffix="/ mo"
                   placeholder="20"
                   min={0}
+                  max={MAX_EUR_PRICE}
                   required
                   testId="addon-price-input"
-                  ariaInvalid={addonPriceEUR === '' && formError !== null}
+                  ariaInvalid={
+                    (addonPriceEUR === '' || addonPriceEUR > MAX_EUR_PRICE) && formError !== null
+                  }
                 />
               </div>
 
