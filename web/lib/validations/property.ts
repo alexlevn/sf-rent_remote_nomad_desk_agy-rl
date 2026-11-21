@@ -23,7 +23,13 @@ export const propertyWorkstationSchema = z.object({
 
 export const isoDateStringSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD');
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD')
+  .refine((val) => {
+    const d = new Date(`${val}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === val;
+  }, 'Invalid calendar date');
+
+export const nonNegativeInt4Schema = z.number().int().min(0).max(INT4_MAX);
 
 // Separate create and update schemas to avoid .default() applying on partial updates
 export const createPropertySchema = z.object({

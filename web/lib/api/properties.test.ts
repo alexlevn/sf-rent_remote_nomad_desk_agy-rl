@@ -282,4 +282,18 @@ describe('Properties & Favorites DB API Suite', () => {
       await setUserFavorites(testUserId, originalFavs);
     }
   });
+
+  it('safely handles malformed numeric and calendar-date filter inputs without crashing', async () => {
+    expect(await listProperties({ bedrooms: Number.NaN })).toEqual([]);
+    expect(await listProperties({ minPrice: 9999999999999 })).toEqual([]);
+    expect(await listProperties({ minWifiSpeed: -10 })).toEqual([]);
+
+    // Invalid calendar date (Feb 30) is ignored safely instead of throwing Postgres date error
+    const withBadDate = await listProperties({
+      city: 'Madrid',
+      moveIn: '2026-02-30',
+      moveOut: '2026-03-30',
+    });
+    expect(withBadDate).toHaveLength(2);
+  });
 });

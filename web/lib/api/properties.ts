@@ -31,6 +31,7 @@ import {
   featuredReorderSchema,
   int4IdSchema,
   isoDateStringSchema,
+  nonNegativeInt4Schema,
   propertyStatusSchema,
   updatePropertySchema,
 } from '@/lib/validations/property';
@@ -170,19 +171,25 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
 
   // Bedrooms filter (exact or minimum)
   if (params?.bedrooms != null) {
+    const parsedBedrooms = nonNegativeInt4Schema.safeParse(params.bedrooms);
+    if (!parsedBedrooms.success) return [];
     if (params.exactBedrooms) {
-      conditions.push(eq(properties.bedrooms, params.bedrooms));
+      conditions.push(eq(properties.bedrooms, parsedBedrooms.data));
     } else {
-      conditions.push(gte(properties.bedrooms, params.bedrooms));
+      conditions.push(gte(properties.bedrooms, parsedBedrooms.data));
     }
   }
 
   // Price range filters (USD cents)
   if (params?.minPrice != null) {
-    conditions.push(gte(properties.pricePerMonth, params.minPrice));
+    const parsedMin = nonNegativeInt4Schema.safeParse(params.minPrice);
+    if (!parsedMin.success) return [];
+    conditions.push(gte(properties.pricePerMonth, parsedMin.data));
   }
   if (params?.maxPrice != null) {
-    conditions.push(lte(properties.pricePerMonth, params.maxPrice));
+    const parsedMax = nonNegativeInt4Schema.safeParse(params.maxPrice);
+    if (!parsedMax.success) return [];
+    conditions.push(lte(properties.pricePerMonth, parsedMax.data));
   }
 
   // Direct booking (Instant Book) filter
@@ -192,8 +199,10 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
 
   // Minimum verified Wi-Fi speed (Mbps) inside jsonb workstation column
   if (params?.minWifiSpeed != null) {
+    const parsedWifi = nonNegativeInt4Schema.safeParse(params.minWifiSpeed);
+    if (!parsedWifi.success) return [];
     conditions.push(
-      sql`CASE WHEN (${properties.workstation}->>'wifiSpeed') ~ '^[0-9]+$' THEN (${properties.workstation}->>'wifiSpeed')::int ELSE 0 END >= ${params.minWifiSpeed}`
+      sql`CASE WHEN (${properties.workstation}->>'wifiSpeed') ~ '^[0-9]+$' THEN (${properties.workstation}->>'wifiSpeed')::int ELSE 0 END >= ${parsedWifi.data}`
     );
   }
 
@@ -433,6 +442,9 @@ export async function saveHostListing(
 
     const parsed = updatePropertySchema.parse(data);
     const payload = buildUpdatePayload(parsed);
+    // Prevent hosts from self-featuring listings or overwriting admin moderation fields
+    delete payload.featuredPosition;
+    delete payload.rejectionReason;
 
     const updatedRows = await db
       .update(properties)
@@ -535,9 +547,9 @@ export async function saveHostListing(
           parsed.images && parsed.images.length > 0
             ? parsed.images
             : ['/seed/property/prop-madrid-1.webp'],
-        featuredPosition: parsed.featuredPosition ?? null,
+        featuredPosition: null,
         status: parsed.status || 'draft',
-        rejectionReason: parsed.rejectionReason ?? null,
+        rejectionReason: null,
         createdAt: now,
         updatedAt: now,
       })
