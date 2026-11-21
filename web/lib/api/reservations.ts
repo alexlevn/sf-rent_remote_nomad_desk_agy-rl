@@ -308,6 +308,18 @@ export async function createReservation(
         throw new Error('This property is not currently available for booking');
       }
 
+      // Ensure host account is approved and not suspended (AC-LIST-6, Risk #6)
+      if (property.hostId != null) {
+        const hostStatusRows = await tx
+          .select({ status: hostProfiles.status })
+          .from(hostProfiles)
+          .where(eq(hostProfiles.id, property.hostId))
+          .limit(1);
+        if (hostStatusRows.length > 0 && hostStatusRows[0].status !== 'approved') {
+          throw new Error('This property is not currently available for booking');
+        }
+      }
+
       // Validate minimum stay requirement
       const nights = calculateNights(valid.moveInDate, valid.moveOutDate);
       const minStay = property.minimumStayNights || BOOKING_RULES.minimumStayNights;
@@ -386,8 +398,18 @@ export async function createReservation(
         rates
       );
 
-      // 5. Authorize payment via MockPaymentDriver
-      const bookingCode = `ND-${randomInt(10000, 100000)}`;
+      // 5. Generate collision-free booking code and authorize payment via MockPaymentDriver
+      let bookingCode = `ND-${randomInt(10000, 100000)}`;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const dup = await tx
+          .select({ id: reservations.id })
+          .from(reservations)
+          .where(eq(reservations.code, bookingCode))
+          .limit(1);
+        if (dup.length === 0) break;
+        bookingCode = `ND-${randomInt(10000, 100000)}`;
+      }
+
       const authResult = await paymentDriver.authorize(
         pricing.totalAmountUSD,
         'USD',
@@ -550,25 +572,27 @@ export async function updateReservationStatus(
   const paymentDriver = getPaymentDriver();
   const paymentRef = existing.paymentRef || `mock_txn_res_${existing.id}`;
 
-  // Guard against accepting an expired 48h pending request (Risk #9)
+  // Guard against transitioning an expired 48h pending request (Risk #9)
   if (
     existing.status === 'pending' &&
     existing.respondBy &&
     existing.respondBy.getTime() < Date.now()
   ) {
     await paymentDriver.void(paymentRef).catch(() => undefined);
-    await db
+    const expiredRows = await db
       .update(reservations)
       .set({
         status: 'expired',
         paymentStatus: 'voided',
         updatedAt: new Date(),
       })
-      .where(eq(reservations.id, validId));
+      .where(eq(reservations.id, validId))
+      .returning();
 
-    if (status === 'confirmed') {
-      throw new Error('Reservation request has expired (48h response window passed)');
+    if (status === 'expired') {
+      return mapReservationRow(expiredRows[0]);
     }
+    throw new Error('Reservation request has expired (48h response window passed)');
   }
 
   // Enforce valid reservation lifecycle transitions
