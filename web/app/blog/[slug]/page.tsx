@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { getBlogPostBySlug, listBlogPosts } from '@/lib/api/blog';
+import { sanitizeHtml } from '@/lib/validations/content';
 import { Badge } from '@/components/ui/badge';
 import { ArticleLayout } from '@/features/content/article-layout';
 
@@ -164,12 +165,9 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
 
         {post.content.includes('<') ? (
           <div
-            className="prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
+            className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
             dangerouslySetInnerHTML={{
-              __html: post.content
-                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-                .replace(/\bon\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-                .replace(/javascript:/gi, ''),
+              __html: sanitizeHtml(post.content),
             }}
           />
         ) : (

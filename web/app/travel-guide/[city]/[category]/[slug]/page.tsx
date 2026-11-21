@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getTravelGuideBySlug } from '@/lib/api/guides';
 import { listProperties } from '@/lib/api/properties';
+import { sanitizeHtml } from '@/lib/validations/content';
 import { ArticleLayout } from '@/features/content/article-layout';
 import { SuggestedApartments } from '@/features/content/suggested-apartments';
 
@@ -138,12 +139,9 @@ export default async function TravelGuideDetailPage({
         </p>
         {guide.content.includes('<') ? (
           <div
-            className="prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
+            className="rich-html-content prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
             dangerouslySetInnerHTML={{
-              __html: guide.content
-                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-                .replace(/\bon\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-                .replace(/javascript:/gi, ''),
+              __html: sanitizeHtml(guide.content),
             }}
           />
         ) : (
