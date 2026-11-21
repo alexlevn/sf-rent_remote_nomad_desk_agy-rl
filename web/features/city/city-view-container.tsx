@@ -223,7 +223,7 @@ export function CityViewContainer({
         <div className="listing-list flex-1 p-4 sm:p-6 lg:p-8 lg:max-w-[950px] lg:w-[55%]">
           {/* List Title & Sort Header */}
           <div className="flex items-center justify-between mb-6">
-            <h1 className="h3 text-xl font-bold text-[var(--color-text-on-light)]">
+            <h1 className="text-2xl sm:text-[32px] sm:leading-[32px] font-bold text-[var(--color-text-on-light)]">
               Furnished Monthly Stays in {city.name || city.city}
             </h1>
             <div className="text-xs text-[var(--color-text-on-light-muted)]">

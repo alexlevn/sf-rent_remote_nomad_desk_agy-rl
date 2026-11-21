@@ -22,7 +22,7 @@ export default async function DestinationsPage() {
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[rgba(217,72,41,0.3)] mb-3">
               {DESTINATIONS_PAGE_CONTENT.badge}
             </span>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-white mb-4">
+            <h1 className="text-3xl sm:text-4xl lg:text-[40px] lg:leading-[44px] font-bold tracking-tight text-white mb-4">
               {DESTINATIONS_PAGE_CONTENT.title}
             </h1>
             <p className="text-base sm:text-lg text-[#d1c8be] leading-relaxed">

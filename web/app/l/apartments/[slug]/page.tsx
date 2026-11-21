@@ -63,7 +63,7 @@ export default async function ApartmentDetailPage({ params }: PageProps) {
 
   return (
     <div className="bg-[var(--color-bg-light)] min-h-screen pt-24 pb-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
         {/* Breadcrumbs */}
         <nav
           aria-label="Breadcrumb"

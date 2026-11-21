@@ -61,7 +61,7 @@ export function HeroSearch({ locations }: HeroSearchProps) {
           <Badge variant="accent" className="mb-4 py-1.5 px-3.5 text-xs sm:text-sm font-medium">
             {HOME_CONTENT.hero.badge}
           </Badge>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white mb-4 sm:mb-5 leading-tight">
+          <h1 className="text-3xl sm:text-4xl lg:text-[40px] lg:leading-[44px] font-bold tracking-tight text-white mb-4 sm:mb-5 leading-tight">
             {HOME_CONTENT.hero.title}
           </h1>
           <p className="text-base sm:text-lg text-neutral-300 max-w-2xl mx-auto leading-relaxed">
