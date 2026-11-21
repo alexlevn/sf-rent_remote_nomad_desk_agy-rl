@@ -6,7 +6,7 @@ Stages of the automated build pipeline for this project.
 | --- | --- | --- | --- | --- |
 | S1 | agent | UI, routes & API map | ✅ |  |
 | S2 | agent | Requirements & risks | ✅ |  |
-| G1 | gate | Owner review: requirements | ⏸ | chờ Alex |
+| G1 | gate | Owner review: requirements | ✅ | approved 11-21 12:30 |
 | S3 | agent | Static HTML design | 🔲 |  |
 | G2 | gate | Owner review: design | 🔲 |  |
 | S4 | agent | Plan: Frontend (mock UI) | 🔲 |  |
