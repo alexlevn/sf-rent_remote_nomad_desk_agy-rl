@@ -67,8 +67,8 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
       await removeFavoriteAction(property.id, userId);
       setRemovedToast(`Removed "${property.title}" from saved homes.`);
       setTimeout(() => setRemovedToast(null), 4000);
-    } catch (err: unknown) {
-      console.error('Failed to sync remove favorite with server', err);
+    } catch {
+      // Ignore server sync errors
     }
   };
 
