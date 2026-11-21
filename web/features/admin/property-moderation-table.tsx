@@ -4,8 +4,12 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, startTransiti
 import Link from 'next/link';
 import Image from 'next/image';
 import type { Property, PropertyStatus, HostProfile } from '@/lib/types';
-import { listProperties, updatePropertyStatus, deleteProperty } from '@/lib/api/properties';
-import { listHosts } from '@/lib/api/hosts';
+import {
+  fetchAdminPropertiesAction,
+  approvePropertyAction,
+  updatePropertyStatusAction,
+  deletePropertyAction,
+} from '@/app/admin/admin-actions';
 import {
   Search,
   CheckCircle,
@@ -41,10 +45,7 @@ export function PropertyModerationTable() {
 
   const fetchData = async () => {
     try {
-      const [propList, hostList] = await Promise.all([
-        listProperties({ status: 'all' }),
-        listHosts(),
-      ]);
+      const { propList, hostList } = await fetchAdminPropertiesAction();
       startTransition(() => {
         setProperties(propList);
         setHosts(hostList);
@@ -98,7 +99,7 @@ export function PropertyModerationTable() {
     setIsSubmitting(true);
 
     try {
-      await updatePropertyStatus(property.id, 'published');
+      await approvePropertyAction(property.id);
       showToast(`Listing "${property.title}" approved and published to ${property.city}!`);
       await fetchData();
       if (selectedProperty?.id === property.id) {
@@ -119,7 +120,7 @@ export function PropertyModerationTable() {
     setIsSubmitting(true);
 
     try {
-      await updatePropertyStatus(rejectingProperty.id, 'rejected', rejectionReason);
+      await updatePropertyStatusAction(rejectingProperty.id, 'rejected', rejectionReason);
       showToast(`Listing "${rejectingProperty.title}" rejected.`);
       const propId = rejectingProperty.id;
       setRejectingProperty(null);
@@ -142,7 +143,7 @@ export function PropertyModerationTable() {
     setIsSubmitting(true);
 
     try {
-      await updatePropertyStatus(property.id, 'hidden');
+      await updatePropertyStatusAction(property.id, 'hidden');
       showToast(`Listing "${property.title}" hidden from public view.`);
       await fetchData();
       if (selectedProperty?.id === property.id) {
@@ -163,7 +164,7 @@ export function PropertyModerationTable() {
     setIsSubmitting(true);
 
     try {
-      await updatePropertyStatus(property.id, 'published');
+      await approvePropertyAction(property.id);
       showToast(`Listing "${property.title}" is now published.`);
       await fetchData();
       if (selectedProperty?.id === property.id) {
@@ -187,7 +188,7 @@ export function PropertyModerationTable() {
     setIsSubmitting(true);
 
     try {
-      await deleteProperty(property.id);
+      await deletePropertyAction(property.id);
       showToast(`Listing "${property.title}" deleted.`);
       if (selectedProperty?.id === property.id) {
         setSelectedProperty(null);

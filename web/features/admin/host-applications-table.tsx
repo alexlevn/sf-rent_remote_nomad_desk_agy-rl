@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import type { HostProfile, HostStatus, User } from '@/lib/types';
-import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
-import { listUsers } from '@/lib/api/users';
+import { fetchAdminHostsAction, reviewHostAction } from '@/app/admin/admin-actions';
 import {
   Search,
   CheckCircle,
@@ -38,7 +37,7 @@ export function HostApplicationsTable() {
 
   const fetchData = async () => {
     try {
-      const [hostList, userList] = await Promise.all([listHosts(), listUsers()]);
+      const { hostList, userList } = await fetchAdminHostsAction();
       startTransition(() => {
         setHosts(hostList);
         setUsers(userList);
@@ -86,7 +85,7 @@ export function HostApplicationsTable() {
     setIsSubmitting(true);
 
     try {
-      await reviewHostApplication(host.id, 'approved');
+      await reviewHostAction(host.id, 'approved');
       showToast(`Host "${host.displayName}" approved! User elevated to Host role.`);
       await fetchData();
       if (selectedHost?.id === host.id) {
@@ -107,7 +106,7 @@ export function HostApplicationsTable() {
     setIsSubmitting(true);
 
     try {
-      await reviewHostApplication(rejectingHost.id, 'rejected', rejectionReason);
+      await reviewHostAction(rejectingHost.id, 'rejected', rejectionReason);
       showToast(`Application for "${rejectingHost.displayName}" has been rejected.`);
       const hostId = rejectingHost.id;
       setRejectingHost(null);
@@ -126,15 +125,12 @@ export function HostApplicationsTable() {
   // Suspend action (AC-ADMIN-3)
   const handleSuspend = async (host: HostProfile) => {
     if (isActionRunningRef.current) return;
-    if (!confirm(`Are you sure you want to suspend "${host.displayName}"? Their listings will be hidden from public city pages.`)) {
-      return;
-    }
 
     isActionRunningRef.current = true;
     setIsSubmitting(true);
 
     try {
-      await reviewHostApplication(host.id, 'suspended', 'Suspended by platform administrator');
+      await reviewHostAction(host.id, 'suspended', 'Suspended by platform administrator');
       showToast(`Host "${host.displayName}" suspended. Listings are now hidden.`);
       await fetchData();
       if (selectedHost?.id === host.id) {
@@ -155,7 +151,7 @@ export function HostApplicationsTable() {
     setIsSubmitting(true);
 
     try {
-      await reviewHostApplication(host.id, 'approved');
+      await reviewHostAction(host.id, 'approved');
       showToast(`Host "${host.displayName}" reactivated successfully.`);
       await fetchData();
       if (selectedHost?.id === host.id) {

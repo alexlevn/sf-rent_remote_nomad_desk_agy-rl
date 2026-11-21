@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import type { Reservation, ReservationStatus, Property, HostProfile } from '@/lib/types';
-import { listReservations, updateReservationStatus } from '@/lib/api/reservations';
-import { listProperties } from '@/lib/api/properties';
-import { listHosts } from '@/lib/api/hosts';
+import {
+  fetchAdminReservationsAction,
+  cancelReservationAdminAction,
+} from '@/app/admin/admin-actions';
 import {
   Search,
   CheckCircle,
@@ -36,11 +37,7 @@ export function AllReservationsTable() {
 
   const fetchData = async () => {
     try {
-      const [resList, propList, hostList] = await Promise.all([
-        listReservations({ status: 'all' }),
-        listProperties({ status: 'all' }),
-        listHosts(),
-      ]);
+      const { resList, propList, hostList } = await fetchAdminReservationsAction();
       startTransition(() => {
         setReservations(resList);
         setProperties(propList);
@@ -101,11 +98,9 @@ export function AllReservationsTable() {
 
     try {
       // AC-ADMIN-4: Admin cancels confirmed booking -> cancelledBy = 'admin', paymentStatus = 'refunded'
-      await updateReservationStatus(
+      await cancelReservationAdminAction(
         voidingReservation.id,
-        'cancelled',
-        cancellationReason,
-        'admin'
+        cancellationReason
       );
       showToast(`Reservation #${voidingReservation.code} cancelled by Admin. Refund processed.`);
       const resId = voidingReservation.id;
