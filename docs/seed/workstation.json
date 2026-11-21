@@ -1,0 +1,131 @@
+{
+  "packages": [
+    {
+      "id": "comfort",
+      "name": "Comfort Base",
+      "slug": "comfort-base",
+      "pricePerMonth": 0,
+      "isIncluded": true,
+      "description": "Solid fixed-height desk, ergonomic chair, ultrawide monitor.",
+      "features": [
+        "Standard fixed-height desk with generous surface",
+        "Ergonomic adjustable task chair",
+        "Ultrawide monitor for focused multitasking",
+        "High-speed WiFi connection verified"
+      ]
+    },
+    {
+      "id": "pro",
+      "name": "Pro Upgrade",
+      "slug": "pro-upgrade",
+      "pricePerMonth": 15000,
+      "isIncluded": false,
+      "description": "Motorized standing desk, Herman Miller Aeron chair, 4K UHD ultrawide monitor, and Logitech MX accessories.",
+      "features": [
+        "Motorized electric standing desk with memory presets",
+        "Herman Miller Aeron-class ergonomic chair",
+        "Premium 4K UHD Ultrawide display (USB-C 90W charging)",
+        "Precision mechanical keyboard & Logitech MX Master 3S",
+        "Integrated cable management & power strip"
+      ]
+    }
+  ],
+  "components": {
+    "desk": [
+      {
+        "id": "desk-std",
+        "name": "Standard Desk",
+        "pricePerMonth": 0,
+        "isIncluded": true,
+        "description": "Solid fixed-height desk with generous surface."
+      },
+      {
+        "id": "desk-standing",
+        "name": "Motorized Standing Desk",
+        "pricePerMonth": 4000,
+        "isIncluded": false,
+        "description": "Sit or stand at the touch of a button, with cable management."
+      }
+    ],
+    "chair": [
+      {
+        "id": "chair-ergo",
+        "name": "Ergonomic Chair",
+        "pricePerMonth": 0,
+        "isIncluded": true,
+        "description": "Adjustable support for full workdays."
+      },
+      {
+        "id": "chair-aeron",
+        "name": "Premium Ergonomic Chair",
+        "pricePerMonth": 4500,
+        "isIncluded": false,
+        "description": "Herman Miller Aeron-class seating for all-day comfort."
+      }
+    ],
+    "monitor": [
+      {
+        "id": "mon-ultrawide",
+        "name": "Ultrawide Monitor",
+        "pricePerMonth": 0,
+        "isIncluded": true,
+        "description": "A wide canvas for focused work."
+      },
+      {
+        "id": "mon-4k-ultrawide",
+        "name": "Premium 4K UHD Ultrawide Monitor",
+        "pricePerMonth": 4000,
+        "isIncluded": false,
+        "description": "Higher resolution and image quality for advanced workflows."
+      }
+    ],
+    "keyboardMouse": [
+      {
+        "id": "km-none",
+        "name": "Not Included",
+        "pricePerMonth": 0,
+        "isIncluded": true,
+        "description": "Bring your own keyboard and mouse."
+      },
+      {
+        "id": "km-mx",
+        "name": "Premium Keyboard & Mouse",
+        "pricePerMonth": 2500,
+        "isIncluded": false,
+        "description": "Precision keyboard and a Logitech MX-class mouse."
+      }
+    ]
+  },
+  "addons": [
+    {
+      "id": "addon-mic",
+      "name": "Studio Microphone",
+      "pricePerMonth": 2000,
+      "description": "Broadcast-quality audio for calls and recording."
+    },
+    {
+      "id": "addon-webcam",
+      "name": "4K Webcam",
+      "pricePerMonth": 1500,
+      "description": "Studio-grade video with a privacy shutter."
+    },
+    {
+      "id": "addon-headset",
+      "name": "Noise-Cancelling Headset",
+      "pricePerMonth": 1800,
+      "description": "Focus in any environment."
+    },
+    {
+      "id": "addon-light",
+      "name": "Task Lighting",
+      "pricePerMonth": 800,
+      "description": "Adjustable desk lamp for evening work."
+    },
+    {
+      "id": "addon-stand",
+      "name": "Laptop Stand",
+      "pricePerMonth": 600,
+      "description": "Raise your laptop to an ergonomic eye level."
+    }
+  ]
+}

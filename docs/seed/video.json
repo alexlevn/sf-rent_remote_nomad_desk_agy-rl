@@ -1,0 +1,65 @@
+[
+  {
+    "id": 1,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/p/DeJ6Y_ROFUP/",
+    "embedSrc": "https://www.instagram.com/p/DeJ6Y_ROFUP/embed/",
+    "aspect": 0.8,
+    "authorName": "gringagoiana",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  },
+  {
+    "id": 2,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/p/DeHWBigMMg5/",
+    "embedSrc": "https://www.instagram.com/p/DeHWBigMMg5/embed/",
+    "aspect": 0.8,
+    "authorName": "hibaaboutaha",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  },
+  {
+    "id": 3,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/p/DeNCcQ7Ndih/",
+    "embedSrc": "https://www.instagram.com/p/DeNCcQ7Ndih/embed/",
+    "aspect": 0.8,
+    "authorName": "reginareyesl",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  },
+  {
+    "id": 4,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/reel/Ddq0o1AsFPn/",
+    "embedSrc": "https://www.instagram.com/reel/Ddq0o1AsFPn/embed/",
+    "aspect": 0.5625,
+    "authorName": "what_real_travel_looks_like",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  },
+  {
+    "id": 5,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/reel/DdrfY-tuqds/?stkn=Y2czeGlrM3Jzb3Yx",
+    "embedSrc": "https://www.instagram.com/reel/DdrfY-tuqds/embed/",
+    "aspect": 0.5625,
+    "authorName": "the.wandering.gays",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  },
+  {
+    "id": 6,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/p/Dd13oWXgAte/",
+    "embedSrc": "https://www.instagram.com/p/Dd13oWXgAte/embed/",
+    "aspect": 0.8,
+    "authorName": "a2pelomundao",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  },
+  {
+    "id": 7,
+    "platform": "instagram",
+    "url": "https://www.instagram.com/reel/Dd1fw86xxPr/?stkn=MTFqOHhhZzI0MWh6Nw%3D%3D",
+    "embedSrc": "https://www.instagram.com/reel/Dd1fw86xxPr/embed/",
+    "aspect": 0.5625,
+    "authorName": "franciscaluco",
+    "avatar": "/seed/video/avatar-placeholder.png"
+  }
+]
