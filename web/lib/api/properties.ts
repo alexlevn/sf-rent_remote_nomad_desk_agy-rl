@@ -201,11 +201,16 @@ export async function saveHostListing(
   // Create new listing
   const maxId = store.properties.reduce((max, p) => Math.max(max, p.id), 0);
   const newId = maxId + 1;
+  const cleanTitleSlug = (data.title || `property-${newId}`)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  const finalSlug = data.slug || cleanTitleSlug || `property-${newId}`;
   const newProperty: Property = {
     id: newId,
     reference: `ND-PROP-${newId}`,
     title: data.title || 'Untitled Property',
-    slug: data.slug || `property-${newId}`,
+    slug: finalSlug,
     description: data.description || '',
     pricePerMonth: data.pricePerMonth || 200000,
     currency: data.currency || 'USD',

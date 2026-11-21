@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   Building,
@@ -30,7 +30,42 @@ const NAV_ITEMS = [
 
 export default function HostLayout({ children }: HostNavProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [hostUser, setHostUser] = useState<{ displayName: string; email: string } | null>(null);
+
+  // AC-HOST-2: Auth Protection Check
+  // Unauthenticated -> /login; Guest -> /host/apply
+  useEffect(() => {
+    if (pathname === '/host/apply') return;
+
+    try {
+      const stored = localStorage.getItem('nomaddesk_user');
+      if (!stored) {
+        router.replace('/login');
+        return;
+      }
+      const parsed = JSON.parse(stored);
+      if (parsed.role === 'guest') {
+        router.replace('/host/apply');
+        return;
+      }
+
+      const name =
+        parsed.firstName || parsed.lastName
+          ? `${parsed.firstName || ''} ${parsed.lastName || ''}`.trim()
+          : parsed.name || (parsed.email === 'host2@example.com' ? 'Andes Living Co.' : 'Casa Urbana Stays');
+
+      startTransition(() => {
+        setHostUser({
+          displayName: name || 'Casa Urbana Stays',
+          email: parsed.email || 'host@example.com',
+        });
+      });
+    } catch {
+      router.replace('/login');
+    }
+  }, [pathname, router]);
 
   // If visiting /host/apply (public onboarding page), render children directly without admin shell
   if (pathname === '/host/apply') {
@@ -111,15 +146,15 @@ export default function HostLayout({ children }: HostNavProps) {
 
         {/* User Footer */}
         <div className="p-4 border-t border-[var(--color-border-dark)] flex items-center gap-3 bg-[var(--color-bg-dark)]">
-          <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center font-bold text-xs text-white shrink-0">
-            CU
+          <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center font-bold text-xs text-white shrink-0 uppercase">
+            {hostUser?.displayName ? hostUser.displayName.slice(0, 2) : 'CU'}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-semibold text-white truncate">
-              Casa Urbana Stays
+              {hostUser?.displayName || 'Casa Urbana Stays'}
             </div>
             <div className="text-[11px] text-[var(--color-text-on-dark-muted)] truncate">
-              host@example.com
+              {hostUser?.email || 'host@example.com'}
             </div>
           </div>
           <Link
