@@ -21,6 +21,8 @@ function mapBlogRow(row: typeof blogPosts.$inferSelect): BlogPost {
     image: row.coverImage || '/seed/blog/blog-nomad-gear.webp',
     excerpt: row.excerpt || '',
     content: row.content || '',
+    seoTitle: row.seoTitle || undefined,
+    seoDescription: row.seoDescription || undefined,
     status: row.status === 'draft' ? 'draft' : 'published',
     position: row.position,
   };
@@ -112,7 +114,15 @@ export async function saveBlogPost(data: Partial<BlogPost>): Promise<BlogPost> {
 
       if (parsed.title !== undefined) {
         updateValues.title = parsed.title;
-        updateValues.seoTitle = parsed.title;
+        if (
+          parsed.seoTitle === undefined &&
+          (!existing[0].seoTitle || existing[0].seoTitle === existing[0].title)
+        ) {
+          updateValues.seoTitle = parsed.title;
+        }
+      }
+      if (parsed.seoTitle !== undefined) {
+        updateValues.seoTitle = parsed.seoTitle || null;
       }
       if (parsed.slug !== undefined) updateValues.slug = parsed.slug;
       if (parsed.category !== undefined) updateValues.category = parsed.category;
@@ -121,7 +131,15 @@ export async function saveBlogPost(data: Partial<BlogPost>): Promise<BlogPost> {
       if (parsed.image !== undefined) updateValues.coverImage = parsed.image;
       if (parsed.excerpt !== undefined) {
         updateValues.excerpt = parsed.excerpt;
-        updateValues.seoDescription = parsed.excerpt;
+        if (
+          parsed.seoDescription === undefined &&
+          (!existing[0].seoDescription || existing[0].seoDescription === existing[0].excerpt)
+        ) {
+          updateValues.seoDescription = parsed.excerpt;
+        }
+      }
+      if (parsed.seoDescription !== undefined) {
+        updateValues.seoDescription = parsed.seoDescription || null;
       }
       if (parsed.content !== undefined) {
         updateValues.content = sanitizeHtml(parsed.content);
@@ -172,8 +190,8 @@ export async function saveBlogPost(data: Partial<BlogPost>): Promise<BlogPost> {
       excerpt: parsed.excerpt,
       content: sanitizedContent,
       status: parsed.status,
-      seoTitle: parsed.title,
-      seoDescription: parsed.excerpt,
+      seoTitle: parsed.seoTitle || parsed.title,
+      seoDescription: parsed.seoDescription || parsed.excerpt,
       position: nextPosition,
       createdAt,
     })

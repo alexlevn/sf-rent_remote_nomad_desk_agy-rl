@@ -104,4 +104,25 @@ export const updatePropertySchema = z.object({
   rejectionReason: z.string().max(2000).nullable().optional(),
 });
 
+export const adminCreatePropertySchema = createPropertySchema.extend({
+  hostId: int4IdSchema,
+  title: z.string().trim().min(1, 'Title is required').max(255),
+  minimumStayNights: z
+    .number()
+    .int()
+    .min(30, 'Minimum stay must be at least 30 nights')
+    .max(3650)
+    .optional()
+    .default(30),
+  status: propertyStatusSchema.optional().default('published'),
+});
+
+// Separate from updatePropertySchema so hosts cannot reassign property ownership
+export const adminUpdatePropertySchema = updatePropertySchema.extend({
+  hostId: int4IdSchema.optional(),
+});
+
 export const featuredReorderSchema = z.array(int4IdSchema);
+
+export type AdminCreatePropertyInput = z.infer<typeof adminCreatePropertySchema>;
+export type AdminUpdatePropertyInput = z.infer<typeof adminUpdatePropertySchema>;

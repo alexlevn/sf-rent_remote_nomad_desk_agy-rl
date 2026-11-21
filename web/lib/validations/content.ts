@@ -146,6 +146,8 @@ export const createTravelGuideSchema = z.object({
   image: z.string().trim().max(255).optional().default('/seed/guide/placeholder.webp'),
   excerpt: z.string().optional().default(''),
   content: z.string().optional().default(''),
+  seoTitle: z.string().trim().max(255).optional(),
+  seoDescription: z.string().trim().max(500).optional(),
   status: contentStatusSchema.optional().default('published'),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
@@ -164,6 +166,8 @@ export const updateTravelGuideSchema = z.object({
   image: z.string().trim().max(255).optional(),
   excerpt: z.string().optional(),
   content: z.string().optional(),
+  seoTitle: z.string().trim().max(255).optional(),
+  seoDescription: z.string().trim().max(500).optional(),
   status: contentStatusSchema.optional(),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
@@ -181,6 +185,8 @@ export const createBlogPostSchema = z.object({
   image: z.string().trim().max(255).optional().default('/seed/blog/blog-nomad-gear.webp'),
   excerpt: z.string().optional().default(''),
   content: z.string().optional().default(''),
+  seoTitle: z.string().trim().max(255).optional(),
+  seoDescription: z.string().trim().max(500).optional(),
   status: contentStatusSchema.optional().default('published'),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
@@ -199,6 +205,8 @@ export const updateBlogPostSchema = z.object({
   image: z.string().trim().max(255).optional(),
   excerpt: z.string().optional(),
   content: z.string().optional(),
+  seoTitle: z.string().trim().max(255).optional(),
+  seoDescription: z.string().trim().max(500).optional(),
   status: contentStatusSchema.optional(),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });

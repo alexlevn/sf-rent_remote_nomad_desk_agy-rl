@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/guards';
 import {
+  createAdminProperty,
   listProperties,
+  updateProperty,
   updatePropertyStatus,
   deleteProperty,
 } from '@/lib/api/properties';
@@ -97,6 +99,39 @@ export async function updatePropertyStatusAction(
   const updated = await updatePropertyStatus(id, status, reason);
   if (updated) {
     await dispatchListingModerationEmail(updated, status, reason);
+    revalidatePath(`/l/apartments/${updated.slug}`);
+  }
+  revalidatePath('/');
+  revalidatePath('/admin/properties');
+  revalidatePath('/c/[city]', 'page');
+  return updated;
+}
+
+/**
+ * Creates a new property directly from the Admin Portal (defaults to 'published').
+ */
+export async function createAdminPropertyAction(
+  data: Partial<Property> & { hostId: number }
+) {
+  await requireAdmin();
+  const created = await createAdminProperty(data);
+  revalidatePath('/');
+  revalidatePath('/admin/properties');
+  revalidatePath('/c/[city]', 'page');
+  revalidatePath(`/l/apartments/${created.slug}`);
+  return created;
+}
+
+/**
+ * Updates an existing property from the Admin Portal (supports reassigning hostId).
+ */
+export async function updateAdminPropertyAction(
+  id: number,
+  data: Partial<Property>
+) {
+  await requireAdmin();
+  const updated = await updateProperty(id, data);
+  if (updated) {
     revalidatePath(`/l/apartments/${updated.slug}`);
   }
   revalidatePath('/');

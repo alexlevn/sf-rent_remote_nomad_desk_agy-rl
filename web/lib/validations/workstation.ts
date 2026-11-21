@@ -20,6 +20,8 @@ export const createWorkstationPackageSchema = z.object({
   isIncluded: z.boolean().optional().default(false),
   description: z.string().optional().default(''),
   features: z.array(z.string()).optional().default([]),
+  isActive: z.boolean().optional().default(true),
+  position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
 
 /**
@@ -33,6 +35,8 @@ export const updateWorkstationPackageSchema = z.object({
   isIncluded: z.boolean().optional(),
   description: z.string().optional(),
   features: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+  position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
 
 /**
@@ -44,6 +48,8 @@ export const createWorkstationComponentSchema = z.object({
   pricePerMonth: z.number().int().nonnegative().max(INT4_MAX).optional().default(0),
   isIncluded: z.boolean().optional().default(false),
   description: z.string().optional().default(''),
+  isActive: z.boolean().optional().default(true),
+  position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
 
 /**
@@ -55,6 +61,8 @@ export const updateWorkstationComponentSchema = z.object({
   pricePerMonth: z.number().int().nonnegative().max(INT4_MAX).optional(),
   isIncluded: z.boolean().optional(),
   description: z.string().optional(),
+  isActive: z.boolean().optional(),
+  position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
 
 /**
@@ -65,6 +73,8 @@ export const createWorkstationAddonSchema = z.object({
   name: z.string().trim().min(1, 'Add-on name is required').max(150),
   pricePerMonth: z.number().int().nonnegative().max(INT4_MAX).optional().default(0),
   description: z.string().optional().default(''),
+  isActive: z.boolean().optional().default(true),
+  position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
 
 /**
@@ -75,6 +85,15 @@ export const updateWorkstationAddonSchema = z.object({
   name: z.string().trim().min(1, 'Add-on name cannot be empty').max(150).optional(),
   pricePerMonth: z.number().int().nonnegative().max(INT4_MAX).optional(),
   description: z.string().optional(),
+  isActive: z.boolean().optional(),
+  position: z.number().int().nonnegative().max(INT4_MAX).optional(),
+});
+
+export const workstationItemTypeSchema = z.enum(['package', 'component', 'addon']);
+
+export const reorderWorkstationSchema = z.object({
+  type: workstationItemTypeSchema,
+  orderedIds: z.array(z.string().trim().min(1).max(100)),
 });
 
 export type WorkstationCategoryInput = z.infer<typeof workstationCategorySchema>;
@@ -84,3 +103,5 @@ export type CreateWorkstationComponentInput = z.infer<typeof createWorkstationCo
 export type UpdateWorkstationComponentInput = z.infer<typeof updateWorkstationComponentSchema>;
 export type CreateWorkstationAddonInput = z.infer<typeof createWorkstationAddonSchema>;
 export type UpdateWorkstationAddonInput = z.infer<typeof updateWorkstationAddonSchema>;
+export type WorkstationItemType = z.infer<typeof workstationItemTypeSchema>;
+export type ReorderWorkstationInput = z.infer<typeof reorderWorkstationSchema>;

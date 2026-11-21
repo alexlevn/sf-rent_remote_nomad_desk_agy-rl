@@ -1,7 +1,9 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
-import { hostProfiles, users } from '@/lib/db/schema';
-import { notifyHostApplication } from '@/lib/email/notifications';
+import { hostProfiles, properties, reservations, users } from '@/lib/db/schema';
+import { notifyBookingCancelled, notifyHostApplication } from '@/lib/email/notifications';
+import type { EmailPropertyInfo, EmailReservationInfo } from '@/lib/email/templates';
+import { getPaymentDriver } from '@/lib/payments/driver';
 import type { HostApplicationInput, HostProfile, HostStatus } from '@/lib/types';
 import {
   hostApplicationSchema,
@@ -250,11 +252,98 @@ export async function reviewHostApplication(
         .where(eq(users.id, user.id));
     }
 
+    const cancelledPending: Array<{
+      paymentRef: string | null;
+      reservationInfo: EmailReservationInfo;
+      propertyInfo: EmailPropertyInfo;
+    }> = [];
+
+    if (parsed.status === 'suspended') {
+      const hostProps = await tx
+        .select({
+          id: properties.id,
+          title: properties.title,
+          city: properties.city,
+          country: properties.country,
+          neighborhood: properties.neighborhood,
+          address: properties.address,
+        })
+        .from(properties)
+        .where(eq(properties.hostId, parsed.id));
+
+      if (hostProps.length > 0) {
+        const propById = new Map(hostProps.map((p) => [p.id, p]));
+        const propIds = hostProps.map((p) => p.id);
+        const cancelReason = (parsed.reason || 'Host account suspended').slice(0, 255);
+
+        const cancelledRows = await tx
+          .update(reservations)
+          .set({
+            status: 'cancelled',
+            cancelledBy: 'admin',
+            paymentStatus: 'voided',
+            rejectionReason: cancelReason,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              inArray(reservations.propertyId, propIds),
+              eq(reservations.status, 'pending')
+            )
+          )
+          .returning();
+
+        for (const row of cancelledRows) {
+          const prop = propById.get(row.propertyId);
+          cancelledPending.push({
+            paymentRef: row.paymentRef,
+            reservationInfo: {
+              code: row.code,
+              guestName: row.guestName,
+              guestEmail: row.guestEmail,
+              moveInDate: row.moveInDate,
+              moveOutDate: row.moveOutDate,
+              nights: row.nights,
+              totalAmount: row.totalAmount,
+              respondBy: row.respondBy ? row.respondBy.toISOString() : null,
+            },
+            propertyInfo: {
+              title: prop?.title ?? 'Apartment',
+              city: prop?.city ?? '',
+              country: prop?.country ?? '',
+              neighborhood: prop?.neighborhood ?? '',
+              address: prop?.address ?? '',
+            },
+          });
+        }
+      }
+    }
+
     return {
       profile: mapHostRow(updatedRows[0]),
       userEmail: user?.email,
+      cancelledPending,
     };
   });
+
+  if (result.cancelledPending.length > 0) {
+    const paymentDriver = getPaymentDriver();
+    for (const item of result.cancelledPending) {
+      if (item.paymentRef) {
+        try {
+          await paymentDriver.void(item.paymentRef);
+        } catch (err) {
+          console.error('[hosts] Failed to void payment for cancelled pending reservation:', err);
+        }
+      }
+      await notifyBookingCancelled(
+        item.reservationInfo,
+        item.propertyInfo,
+        'admin',
+        result.userEmail
+      );
+    }
+  }
 
   if (
     result.userEmail &&

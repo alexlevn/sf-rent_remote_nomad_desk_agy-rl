@@ -21,6 +21,8 @@ function mapGuideRow(row: typeof travelGuides.$inferSelect): TravelGuide {
     image: row.coverImage || '/seed/guide/placeholder.webp',
     excerpt: row.excerpt || '',
     content: row.content || '',
+    seoTitle: row.seoTitle || undefined,
+    seoDescription: row.seoDescription || undefined,
     status: row.status === 'draft' ? 'draft' : 'published',
     position: row.position,
   };
@@ -117,7 +119,15 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
 
       if (parsed.title !== undefined) {
         updateValues.title = parsed.title;
-        updateValues.seoTitle = parsed.title;
+        if (
+          parsed.seoTitle === undefined &&
+          (!existing[0].seoTitle || existing[0].seoTitle === existing[0].title)
+        ) {
+          updateValues.seoTitle = parsed.title;
+        }
+      }
+      if (parsed.seoTitle !== undefined) {
+        updateValues.seoTitle = parsed.seoTitle || null;
       }
       if (parsed.slug !== undefined) updateValues.slug = parsed.slug;
       if (parsed.city !== undefined) updateValues.city = parsed.city;
@@ -126,7 +136,15 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
       if (parsed.image !== undefined) updateValues.coverImage = parsed.image;
       if (parsed.excerpt !== undefined) {
         updateValues.excerpt = parsed.excerpt;
-        updateValues.seoDescription = parsed.excerpt;
+        if (
+          parsed.seoDescription === undefined &&
+          (!existing[0].seoDescription || existing[0].seoDescription === existing[0].excerpt)
+        ) {
+          updateValues.seoDescription = parsed.excerpt;
+        }
+      }
+      if (parsed.seoDescription !== undefined) {
+        updateValues.seoDescription = parsed.seoDescription || null;
       }
       if (parsed.content !== undefined) {
         updateValues.content = sanitizeHtml(parsed.content);
@@ -177,8 +195,8 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
       coverImage: parsed.image,
       isFeatured: parsed.featured,
       status: parsed.status,
-      seoTitle: parsed.title,
-      seoDescription: parsed.excerpt,
+      seoTitle: parsed.seoTitle || parsed.title,
+      seoDescription: parsed.seoDescription || parsed.excerpt,
       position: nextPosition,
       createdAt,
     })

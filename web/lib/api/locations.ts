@@ -7,6 +7,7 @@ import {
   updateLocationSchema,
   locationReorderSchema,
 } from '@/lib/validations/location';
+import { sanitizeHtml } from '@/lib/validations/content';
 
 export interface ListLocationsOptions {
   continent?: string;
@@ -162,7 +163,9 @@ export async function saveLocation(data: Partial<Location>): Promise<Location> {
       if (validated.countryCode !== undefined) updateValues.countryCode = validated.countryCode;
       if (validated.continent !== undefined) updateValues.continent = validated.continent;
       if (validated.propertiesCount !== undefined) updateValues.propertiesCount = validated.propertiesCount;
-      if (validated.description !== undefined) updateValues.description = validated.description;
+      if (validated.description !== undefined) {
+        updateValues.description = sanitizeHtml(validated.description);
+      }
       if (validated.image !== undefined) updateValues.image = validated.image;
       if (validated.center !== undefined) updateValues.center = validated.center;
       if (validated.isActive !== undefined) updateValues.isActive = validated.isActive;
@@ -210,7 +213,7 @@ export async function saveLocation(data: Partial<Location>): Promise<Location> {
         countryCode: validated.countryCode,
         continent: validated.continent || 'Europe',
         propertiesCount: validated.propertiesCount ?? 0,
-        description: validated.description || '',
+        description: sanitizeHtml(validated.description || ''),
         image: validated.image || '/seed/location/placeholder.jpg',
         center: validated.center || [40.4168, -3.7038],
         isActive: validated.isActive ?? true,

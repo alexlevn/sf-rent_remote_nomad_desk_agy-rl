@@ -27,6 +27,8 @@ import type {
   PropertyWorkstation,
 } from '@/lib/types';
 import {
+  adminCreatePropertySchema,
+  adminUpdatePropertySchema,
   createPropertySchema,
   featuredReorderSchema,
   int4IdSchema,
@@ -35,6 +37,7 @@ import {
   propertyStatusSchema,
   updatePropertySchema,
 } from '@/lib/validations/property';
+import { sanitizeHtml } from '@/lib/validations/content';
 
 const DEFAULT_WORKSTATION: PropertyWorkstation = {
   hasWorkstation: true,
@@ -361,15 +364,44 @@ export async function listHostListings(hostId: number): Promise<Property[]> {
   return rows.map(mapPropertyRow);
 }
 
-function buildUpdatePayload(parsed: ReturnType<typeof updatePropertySchema.parse>) {
+async function resolveLocationId(
+  locationId?: number | null,
+  cityName?: string
+): Promise<number | null> {
+  let resolvedLocationId: number | null = locationId ?? null;
+  if (resolvedLocationId != null) {
+    const locExists = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(eq(locations.id, resolvedLocationId))
+      .limit(1);
+    if (locExists.length === 0) {
+      resolvedLocationId = null;
+    }
+  }
+  if (resolvedLocationId == null && cityName) {
+    const matchedLoc = await db
+      .select({ id: locations.id })
+      .from(locations)
+      .where(eq(sql`lower(${locations.city})`, cityName.trim().toLowerCase()))
+      .limit(1);
+    resolvedLocationId = matchedLoc.length > 0 ? matchedLoc[0].id : null;
+  }
+  return resolvedLocationId;
+}
+
+function buildUpdatePayload(parsed: ReturnType<typeof adminUpdatePropertySchema.parse>) {
   const payload: Partial<typeof properties.$inferInsert> = {
     updatedAt: new Date(),
   };
 
+  if (parsed.hostId !== undefined) payload.hostId = parsed.hostId;
   if (parsed.title !== undefined) payload.title = parsed.title;
   if (parsed.slug !== undefined) payload.slug = parsed.slug;
   if (parsed.reference !== undefined) payload.reference = parsed.reference;
-  if (parsed.description !== undefined) payload.description = parsed.description;
+  if (parsed.description !== undefined) {
+    payload.description = sanitizeHtml(parsed.description);
+  }
   if (parsed.pricePerMonth !== undefined) payload.pricePerMonth = parsed.pricePerMonth;
   if (parsed.currency !== undefined) payload.currency = parsed.currency;
   if (parsed.locationId !== undefined) payload.locationId = parsed.locationId;
@@ -392,7 +424,9 @@ function buildUpdatePayload(parsed: ReturnType<typeof updatePropertySchema.parse
   if (parsed.workstation !== undefined) {
     payload.workstation = parsed.workstation as unknown as Record<string, unknown>;
   }
-  if (parsed.houseRules !== undefined) payload.houseRules = parsed.houseRules;
+  if (parsed.houseRules !== undefined) {
+    payload.houseRules = sanitizeHtml(parsed.houseRules);
+  }
   if (parsed.checkInStart !== undefined) payload.checkInStart = parsed.checkInStart;
   if (parsed.checkOut !== undefined) payload.checkOut = parsed.checkOut;
   if (parsed.minimumStayNights !== undefined) {
@@ -469,25 +503,7 @@ export async function saveHostListing(
   const cityName = parsed.city || 'Madrid';
 
   // Resolve valid locationId foreign key from locations table if not explicitly provided
-  let resolvedLocationId: number | null = parsed.locationId ?? null;
-  if (resolvedLocationId != null) {
-    const locExists = await db
-      .select({ id: locations.id })
-      .from(locations)
-      .where(eq(locations.id, resolvedLocationId))
-      .limit(1);
-    if (locExists.length === 0) {
-      resolvedLocationId = null;
-    }
-  }
-  if (resolvedLocationId == null) {
-    const matchedLoc = await db
-      .select({ id: locations.id })
-      .from(locations)
-      .where(eq(sql`lower(${locations.city})`, cityName.toLowerCase()))
-      .limit(1);
-    resolvedLocationId = matchedLoc.length > 0 ? matchedLoc[0].id : null;
-  }
+  const resolvedLocationId = await resolveLocationId(parsed.locationId, cityName);
 
   const inserted = await db.transaction(async (tx) => {
     // Advisory lock prevents concurrent max(id)+1 collisions on non-serial integer PK
@@ -523,7 +539,7 @@ export async function saveHostListing(
         reference: parsed.reference || `ND-PROP-${newId}`,
         title: parsed.title || 'Untitled Property',
         slug: finalSlug,
-        description: parsed.description ?? '',
+        description: sanitizeHtml(parsed.description ?? ''),
         pricePerMonth: parsed.pricePerMonth ?? 200000,
         currency: parsed.currency || 'USD',
         locationId: resolvedLocationId,
@@ -547,7 +563,9 @@ export async function saveHostListing(
           string,
           unknown
         >,
-        houseRules: parsed.houseRules || 'No smoking. Quiet hours 22:00 - 08:00.',
+        houseRules: sanitizeHtml(
+          parsed.houseRules || 'No smoking. Quiet hours 22:00 - 08:00.'
+        ),
         checkInStart: parsed.checkInStart || '15:00',
         checkOut: parsed.checkOut || '11:00',
         minimumStayNights: parsed.minimumStayNights ?? 30,
@@ -559,6 +577,109 @@ export async function saveHostListing(
         featuredPosition: null,
         status: initialStatus,
         rejectionReason: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    return rows[0];
+  });
+
+  return mapPropertyRow(inserted);
+}
+
+/**
+ * Creates a new property directly from the Admin Portal (defaults to 'published').
+ * Requires a valid hostId and enforces minimumStayNights >= 30.
+ */
+export async function createAdminProperty(
+  data: Partial<Property> & { hostId: number }
+): Promise<Property> {
+  const parsed = adminCreatePropertySchema.parse(data);
+
+  const hostExists = await db
+    .select({ id: hostProfiles.id })
+    .from(hostProfiles)
+    .where(eq(hostProfiles.id, parsed.hostId))
+    .limit(1);
+  if (hostExists.length === 0) {
+    throw new Error(`Host profile ${parsed.hostId} not found`);
+  }
+
+  const cityName = parsed.city || 'Madrid';
+  const resolvedLocationId = await resolveLocationId(parsed.locationId, cityName);
+
+  const inserted = await db.transaction(async (tx) => {
+    // Advisory lock prevents concurrent max(id)+1 collisions on non-serial integer PK
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(728391)`);
+
+    const maxRow = await tx
+      .select({ maxId: sql<number>`coalesce(max(${properties.id}), 0)` })
+      .from(properties);
+    const newId = Number(maxRow[0]?.maxId ?? 0) + 1;
+
+    const cleanTitleSlug = parsed.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    let finalSlug = parsed.slug || cleanTitleSlug || `property-${newId}`;
+
+    const slugConflict = await tx
+      .select({ id: properties.id })
+      .from(properties)
+      .where(eq(properties.slug, finalSlug))
+      .limit(1);
+    if (slugConflict.length > 0) {
+      finalSlug = `${finalSlug}-${newId}`;
+    }
+
+    const now = new Date();
+    const rows = await tx
+      .insert(properties)
+      .values({
+        id: newId,
+        hostId: parsed.hostId,
+        reference: parsed.reference || `ND-PROP-${newId}`,
+        title: parsed.title,
+        slug: finalSlug,
+        description: sanitizeHtml(parsed.description ?? ''),
+        pricePerMonth: parsed.pricePerMonth ?? 200000,
+        currency: parsed.currency || 'USD',
+        locationId: resolvedLocationId,
+        city: cityName,
+        country: parsed.country || 'Spain',
+        neighborhood: parsed.neighborhood ?? '',
+        address: parsed.address ?? '',
+        bedrooms: parsed.bedrooms ?? 1,
+        bathrooms: parsed.bathrooms ?? 1,
+        bedsCount: parsed.bedsCount ?? 1,
+        totalSurface: parsed.totalSurface ?? 50,
+        maxGuests: parsed.maxGuests ?? 2,
+        kitchen: parsed.kitchen ?? true,
+        laundry: parsed.laundry ?? true,
+        balcony: parsed.balcony ?? false,
+        petFriendly: parsed.petFriendly ?? false,
+        pool: parsed.pool ?? false,
+        gym: parsed.gym ?? false,
+        terrace: parsed.terrace ?? false,
+        workstation: (parsed.workstation ?? DEFAULT_WORKSTATION) as unknown as Record<
+          string,
+          unknown
+        >,
+        houseRules: sanitizeHtml(
+          parsed.houseRules || 'No smoking. Quiet hours 22:00 - 08:00.'
+        ),
+        checkInStart: parsed.checkInStart || '15:00',
+        checkOut: parsed.checkOut || '11:00',
+        minimumStayNights: parsed.minimumStayNights,
+        isDirectBooking: parsed.isDirectBooking ?? false,
+        images:
+          parsed.images && parsed.images.length > 0
+            ? parsed.images
+            : ['/seed/property/prop-madrid-1.webp'],
+        featuredPosition: parsed.featuredPosition ?? null,
+        status: parsed.status,
+        rejectionReason: parsed.rejectionReason ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -601,6 +722,7 @@ export async function updatePropertyStatus(
 
 /**
  * Updates a property with arbitrary partial data (admin portal).
+ * Supports reassigning hostId, sanitizing HTML, and resolving locationId when city changes.
  */
 export async function updateProperty(
   id: number,
@@ -609,8 +731,26 @@ export async function updateProperty(
   const parsedId = int4IdSchema.safeParse(id);
   if (!parsedId.success) return null;
 
-  const parsed = updatePropertySchema.parse(data);
+  const parsed = adminUpdatePropertySchema.parse(data);
+
+  if (parsed.hostId !== undefined) {
+    const hostExists = await db
+      .select({ id: hostProfiles.id })
+      .from(hostProfiles)
+      .where(eq(hostProfiles.id, parsed.hostId))
+      .limit(1);
+    if (hostExists.length === 0) {
+      throw new Error(`Host profile ${parsed.hostId} not found`);
+    }
+  }
+
   const payload = buildUpdatePayload(parsed);
+
+  if (parsed.locationId !== undefined) {
+    payload.locationId = await resolveLocationId(parsed.locationId, parsed.city);
+  } else if (parsed.city !== undefined) {
+    payload.locationId = await resolveLocationId(null, parsed.city);
+  }
 
   const rows = await db
     .update(properties)
@@ -651,10 +791,22 @@ export async function reorderFeaturedProperties(orderedIds: number[]): Promise<P
 
 /**
  * Deletes a property by ID (admin portal).
+ * Blocks deletion when existing reservations reference this property.
  */
 export async function deleteProperty(id: number): Promise<boolean> {
   const parsedId = int4IdSchema.safeParse(id);
   if (!parsedId.success) return false;
+
+  const refRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(reservations)
+    .where(eq(reservations.propertyId, parsedId.data));
+
+  if ((refRows[0]?.count ?? 0) > 0) {
+    throw new Error(
+      'Cannot delete property with existing reservations. Please hide it instead.'
+    );
+  }
 
   const deleted = await db
     .delete(properties)

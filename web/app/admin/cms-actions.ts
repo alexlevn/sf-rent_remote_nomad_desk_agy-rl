@@ -15,6 +15,7 @@ import {
   deleteWorkstationComponent,
   saveWorkstationAddon,
   deleteWorkstationAddon,
+  reorderWorkstationItems,
   listWorkstations,
 } from '@/lib/api/workstations';
 import { saveTravelGuide, deleteTravelGuide, listTravelGuides } from '@/lib/api/guides';
@@ -151,21 +152,31 @@ export async function deleteWorkstationAddonAction(id: string) {
   return { success: deleted };
 }
 
+export async function reorderWorkstationItemsAction(
+  type: 'package' | 'component' | 'addon',
+  orderedIds: string[]
+) {
+  await assertAdminRole();
+  const workstations = await reorderWorkstationItems(type, orderedIds);
+  revalidatePath('/workstations');
+  revalidatePath('/workstations/build');
+  revalidatePath('/admin/workstations');
+  return { success: true, workstations };
+}
+
 // ==========================================
 // Travel Guides CMS Actions (AC-CMS-3)
 // ==========================================
 
 export async function saveTravelGuideAction(data: Partial<TravelGuide>) {
   await assertAdminRole();
-  // Sanitize content against XSS scripts / onerror
-  const sanitizedContent = data.content
-    ? await sanitizeHtmlContent(data.content)
-    : '';
+  // Sanitize content against XSS scripts / onerror without wiping content on partial updates
+  const payload: Partial<TravelGuide> = { ...data };
+  if (data.content !== undefined) {
+    payload.content = await sanitizeHtmlContent(data.content);
+  }
 
-  const guide = await saveTravelGuide({
-    ...data,
-    content: sanitizedContent,
-  });
+  const guide = await saveTravelGuide(payload);
 
   revalidatePath('/');
   revalidatePath('/travel-guide');
@@ -188,14 +199,12 @@ export async function deleteTravelGuideAction(id: number) {
 
 export async function saveBlogPostAction(data: Partial<BlogPost>) {
   await assertAdminRole();
-  const sanitizedContent = data.content
-    ? await sanitizeHtmlContent(data.content)
-    : '';
+  const payload: Partial<BlogPost> = { ...data };
+  if (data.content !== undefined) {
+    payload.content = await sanitizeHtmlContent(data.content);
+  }
 
-  const post = await saveBlogPost({
-    ...data,
-    content: sanitizedContent,
-  });
+  const post = await saveBlogPost(payload);
 
   revalidatePath('/blog');
   revalidatePath('/admin/blog');
@@ -271,6 +280,11 @@ export async function updateExchangeRatesAction(rates: Partial<ExchangeRates>) {
 export async function fetchWorkstationsAction() {
   await assertAdminRole();
   return await listWorkstations();
+}
+
+export async function fetchAdminWorkstationsAction() {
+  await assertAdminRole();
+  return await listWorkstations({ includeInactive: true });
 }
 
 export async function fetchLocationsAction() {

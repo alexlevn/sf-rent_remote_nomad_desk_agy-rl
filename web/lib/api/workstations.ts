@@ -1,6 +1,7 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import {
+  reservations,
   workstationAddons,
   workstationComponents,
   workstationPackages,
@@ -16,10 +17,12 @@ import {
   createWorkstationAddonSchema,
   createWorkstationComponentSchema,
   createWorkstationPackageSchema,
+  reorderWorkstationSchema,
   updateWorkstationAddonSchema,
   updateWorkstationComponentSchema,
   updateWorkstationPackageSchema,
   workstationCategorySchema,
+  type WorkstationItemType,
 } from '@/lib/validations/workstation';
 
 // Seeded package slugs map to short UI/E2E IDs ('comfort', 'pro') while DB uses serial PK + slug.
@@ -49,6 +52,8 @@ function mapPackageRow(
     isIncluded: row.isIncluded,
     description: row.description ?? '',
     features: Array.isArray(row.features) ? row.features : [],
+    isActive: row.isActive,
+    position: row.position,
   };
 }
 
@@ -76,6 +81,8 @@ function mapComponentRow(
     pricePerMonth: row.monthlyPriceEUR,
     isIncluded,
     description,
+    isActive: row.isActive,
+    position: row.position,
   };
 }
 
@@ -87,6 +94,8 @@ function mapAddonRow(
     name: row.name,
     pricePerMonth: row.monthlyPriceEUR,
     description: row.description ?? '',
+    isActive: row.isActive,
+    position: row.position,
   };
 }
 
@@ -103,24 +112,33 @@ function isWorkstationCategory(
 
 /**
  * Returns available workstation packages, hardware components, and add-ons from PostgreSQL.
+ * Defaults to active items only for public routes; pass includeInactive for Admin CMS.
  */
-export async function listWorkstations(): Promise<WorkstationData> {
+export async function listWorkstations(options?: {
+  includeInactive?: boolean;
+}): Promise<WorkstationData> {
+  const includeInactive = options?.includeInactive ?? false;
+
+  const pkgQuery = db.select().from(workstationPackages);
+  const compQuery = db.select().from(workstationComponents);
+  const addonQuery = db.select().from(workstationAddons);
+
   const [pkgRows, compRows, addonRows] = await Promise.all([
-    db
-      .select()
-      .from(workstationPackages)
-      .where(eq(workstationPackages.isActive, true))
-      .orderBy(asc(workstationPackages.position), asc(workstationPackages.id)),
-    db
-      .select()
-      .from(workstationComponents)
-      .where(eq(workstationComponents.isActive, true))
-      .orderBy(asc(workstationComponents.position), asc(workstationComponents.id)),
-    db
-      .select()
-      .from(workstationAddons)
-      .where(eq(workstationAddons.isActive, true))
-      .orderBy(asc(workstationAddons.position), asc(workstationAddons.id)),
+    includeInactive
+      ? pkgQuery.orderBy(asc(workstationPackages.position), asc(workstationPackages.id))
+      : pkgQuery
+          .where(eq(workstationPackages.isActive, true))
+          .orderBy(asc(workstationPackages.position), asc(workstationPackages.id)),
+    includeInactive
+      ? compQuery.orderBy(asc(workstationComponents.position), asc(workstationComponents.id))
+      : compQuery
+          .where(eq(workstationComponents.isActive, true))
+          .orderBy(asc(workstationComponents.position), asc(workstationComponents.id)),
+    includeInactive
+      ? addonQuery.orderBy(asc(workstationAddons.position), asc(workstationAddons.id))
+      : addonQuery
+          .where(eq(workstationAddons.isActive, true))
+          .orderBy(asc(workstationAddons.position), asc(workstationAddons.id)),
   ]);
 
   const components: WorkstationComponents = {
@@ -220,6 +238,12 @@ export async function saveWorkstationPackage(
     if (validated.features !== undefined) {
       updateValues.features = validated.features;
     }
+    if (validated.isActive !== undefined) {
+      updateValues.isActive = validated.isActive;
+    }
+    if (validated.position !== undefined) {
+      updateValues.position = validated.position;
+    }
 
     if (Object.keys(updateValues).length === 0) {
       return mapPackageRow(existing);
@@ -238,7 +262,7 @@ export async function saveWorkstationPackage(
   const maxPosResult = await db
     .select({ maxPos: sql<number>`coalesce(max(${workstationPackages.position}), 0)::int` })
     .from(workstationPackages);
-  const nextPos = (maxPosResult[0]?.maxPos ?? 0) + 1;
+  const nextPos = validated.position ?? (maxPosResult[0]?.maxPos ?? 0) + 1;
   const slug = (validated.slug ?? validated.id).toLowerCase().replace(/\s+/g, '-');
 
   const inserted = await db
@@ -250,7 +274,7 @@ export async function saveWorkstationPackage(
       monthlyPriceEUR: validated.pricePerMonth,
       isIncluded: validated.isIncluded,
       features: validated.features,
-      isActive: true,
+      isActive: validated.isActive,
       position: nextPos,
     })
     .returning();
@@ -293,7 +317,8 @@ export async function saveWorkstationComponent(
         category: validCategory,
         monthlyPriceEUR: merged.pricePerMonth,
         options: [merged],
-        isActive: true,
+        isActive: validated.isActive ?? existing.isActive,
+        position: validated.position ?? existing.position,
       })
       .where(eq(workstationComponents.id, existing.id))
       .returning();
@@ -305,7 +330,7 @@ export async function saveWorkstationComponent(
   const maxPosResult = await db
     .select({ maxPos: sql<number>`coalesce(max(${workstationComponents.position}), 0)::int` })
     .from(workstationComponents);
-  const nextPos = (maxPosResult[0]?.maxPos ?? 0) + 1;
+  const nextPos = validated.position ?? (maxPosResult[0]?.maxPos ?? 0) + 1;
 
   const newOption: WorkstationComponentOption = {
     id: validated.id,
@@ -323,7 +348,7 @@ export async function saveWorkstationComponent(
       category: validCategory,
       monthlyPriceEUR: newOption.pricePerMonth,
       options: [newOption],
-      isActive: true,
+      isActive: validated.isActive,
       position: nextPos,
     })
     .returning();
@@ -333,6 +358,7 @@ export async function saveWorkstationComponent(
 
 /**
  * Deletes a workstation component option by category and componentId.
+ * Blocks deletion when existing reservations reference this component in workstation_config.
  */
 export async function deleteWorkstationComponent(
   category: keyof WorkstationComponents,
@@ -340,6 +366,24 @@ export async function deleteWorkstationComponent(
 ): Promise<boolean> {
   const validCategory = workstationCategorySchema.parse(category);
   if (!id || typeof id !== 'string') return false;
+
+  const refRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(reservations)
+    .where(
+      sql`${reservations.workstationConfig} IS NOT NULL AND (
+        ${reservations.workstationConfig}->>'deskId' = ${id} OR
+        ${reservations.workstationConfig}->>'chairId' = ${id} OR
+        ${reservations.workstationConfig}->>'monitorId' = ${id} OR
+        ${reservations.workstationConfig}->>'keyboardMouseId' = ${id}
+      )`
+    );
+
+  if ((refRows[0]?.count ?? 0) > 0) {
+    throw new Error(
+      'Cannot delete workstation option referenced by existing reservations. Hide it instead.'
+    );
+  }
 
   const deleted = await db
     .delete(workstationComponents)
@@ -378,6 +422,12 @@ export async function saveWorkstationAddon(
     if (validated.description !== undefined) {
       updateValues.description = validated.description;
     }
+    if (validated.isActive !== undefined) {
+      updateValues.isActive = validated.isActive;
+    }
+    if (validated.position !== undefined) {
+      updateValues.position = validated.position;
+    }
 
     if (Object.keys(updateValues).length === 0) {
       return mapAddonRow(existing);
@@ -396,7 +446,7 @@ export async function saveWorkstationAddon(
   const maxPosResult = await db
     .select({ maxPos: sql<number>`coalesce(max(${workstationAddons.position}), 0)::int` })
     .from(workstationAddons);
-  const nextPos = (maxPosResult[0]?.maxPos ?? 0) + 1;
+  const nextPos = validated.position ?? (maxPosResult[0]?.maxPos ?? 0) + 1;
 
   const inserted = await db
     .insert(workstationAddons)
@@ -406,7 +456,7 @@ export async function saveWorkstationAddon(
       category: 'addon',
       description: validated.description,
       monthlyPriceEUR: validated.pricePerMonth,
-      isActive: true,
+      isActive: validated.isActive,
       position: nextPos,
     })
     .returning();
@@ -416,9 +466,23 @@ export async function saveWorkstationAddon(
 
 /**
  * Deletes a workstation accessory add-on by addonId.
+ * Blocks deletion when existing reservations reference this add-on in workstation_config.
  */
 export async function deleteWorkstationAddon(id: string): Promise<boolean> {
   if (!id || typeof id !== 'string') return false;
+
+  const refRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(reservations)
+    .where(
+      sql`${reservations.workstationConfig} IS NOT NULL AND jsonb_typeof(${reservations.workstationConfig}->'addonIds') = 'array' AND (${reservations.workstationConfig}->'addonIds') @> ${JSON.stringify([id])}::jsonb`
+    );
+
+  if ((refRows[0]?.count ?? 0) > 0) {
+    throw new Error(
+      'Cannot delete workstation option referenced by existing reservations. Hide it instead.'
+    );
+  }
 
   const deleted = await db
     .delete(workstationAddons)
@@ -426,4 +490,48 @@ export async function deleteWorkstationAddon(id: string): Promise<boolean> {
     .returning({ id: workstationAddons.id });
 
   return deleted.length > 0;
+}
+
+/**
+ * Reorders workstation packages, components, or add-ons in a single DB transaction.
+ */
+export async function reorderWorkstationItems(
+  type: WorkstationItemType,
+  orderedIds: string[]
+): Promise<WorkstationData> {
+  const validated = reorderWorkstationSchema.parse({ type, orderedIds });
+  const uniqueIds = Array.from(new Set(validated.orderedIds));
+
+  await db.transaction(async (tx) => {
+    for (let idx = 0; idx < uniqueIds.length; idx += 1) {
+      const itemId = uniqueIds[idx];
+      const nextPos = idx + 1;
+
+      if (validated.type === 'package') {
+        const normalized = itemId.toLowerCase();
+        const resolvedSlug = resolvePackageSlug(normalized);
+        await tx
+          .update(workstationPackages)
+          .set({ position: nextPos })
+          .where(
+            or(
+              eq(sql`lower(${workstationPackages.slug})`, normalized),
+              eq(sql`lower(${workstationPackages.slug})`, resolvedSlug)
+            )
+          );
+      } else if (validated.type === 'component') {
+        await tx
+          .update(workstationComponents)
+          .set({ position: nextPos })
+          .where(eq(workstationComponents.componentId, itemId));
+      } else {
+        await tx
+          .update(workstationAddons)
+          .set({ position: nextPos })
+          .where(eq(workstationAddons.addonId, itemId));
+      }
+    }
+  });
+
+  return listWorkstations({ includeInactive: true });
 }
