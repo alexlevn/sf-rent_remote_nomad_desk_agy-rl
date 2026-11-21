@@ -18,6 +18,10 @@ test.describe('Admin Platform Management E2E Suite', () => {
     await request.post('/api/mock/reset');
   });
 
+  test.afterAll(async ({ request }) => {
+    await request.post('/api/mock/reset');
+  });
+
   test('AC-AUTH-2 (Bảo vệ Route Admin): Guest or host accounts attempting to access /admin are blocked with 403 Forbidden', async ({
     page,
   }) => {

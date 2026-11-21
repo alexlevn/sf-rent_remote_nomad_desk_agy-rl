@@ -17,6 +17,10 @@ test.describe('Admin Full CRUD & Tiptap Visual E2E Suite', () => {
     await request.post('/api/mock/reset');
   });
 
+  test.afterAll(async ({ request }) => {
+    await request.post('/api/mock/reset');
+  });
+
   test('Admin Property CRUD: create at /admin/properties/new with Tiptap -> visible on city & detail -> edit price -> hide removes everywhere', async ({
     page,
   }) => {
@@ -240,14 +244,19 @@ test.describe('Admin Full CRUD & Tiptap Visual E2E Suite', () => {
     await page.getByTestId('post-title-input').fill(postTitle);
 
     const visualEditor = page.getByTestId('rich-editor-visual');
+    await expect(visualEditor).toBeVisible();
     const editable = visualEditor.locator('[contenteditable="true"]');
+    await expect(editable).toBeVisible();
     await editable.click();
+    await expect(editable).toBeFocused();
     await page.keyboard.press(SELECT_ALL_SHORTCUT);
     await page.keyboard.press('Backspace');
     await page.getByRole('button', { name: 'Heading 2' }).click();
-    await page.keyboard.type('Standing Desk Standards');
+    await expect(editable).toBeFocused();
+    await editable.pressSequentially('Standing Desk Standards');
+    await expect(visualEditor.locator('h2')).toContainText('Standing Desk Standards');
     await page.keyboard.press('Enter');
-    await page.keyboard.type('Maintain 90-degree elbow posture during deep work.');
+    await editable.pressSequentially('Maintain 90-degree elbow posture during deep work.');
 
     await page.getByTestId('publish-post-btn').click();
     await expect(page.getByText(/published to \/blog/i)).toBeVisible();
@@ -296,13 +305,14 @@ test.describe('Admin Full CRUD & Tiptap Visual E2E Suite', () => {
     await expect(reelRow).toBeVisible();
 
     // Move newly added reel up to #1 so it leads the homepage carousel (max 7 displayed)
+    const rankCell = reelRow.locator('td').nth(3);
     for (let attempt = 0; attempt < 12; attempt++) {
-      const rankText = await reelRow.locator('td').nth(3).textContent();
-      if (rankText?.includes('#1')) break;
+      const rankText = (await rankCell.textContent()) ?? '';
+      if (rankText.includes('#1') && !rankText.includes('#10')) break;
       await reelRow.getByTitle('Move Up').click();
-      await expect(page.getByText(/Reel order updated on homepage/i)).toBeVisible();
+      await expect(rankCell).not.toHaveText(rankText);
     }
-    await expect(reelRow.locator('td').nth(3)).toContainText('#1');
+    await expect(rankCell).toContainText('#1');
 
     // Verify visible on homepage /
     await page.goto('/');
