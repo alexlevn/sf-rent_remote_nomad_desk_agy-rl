@@ -9,7 +9,7 @@ Stages of the automated build pipeline for this project.
 | G1 | gate | Owner review: requirements | ✅ | approved 11-21 12:30 |
 | S3 | agent | Static HTML design | ✅ |  |
 | G2 | gate | Owner review: design | ✅ | approved 11-21 12:53 |
-| S4 | agent | Plan: Frontend (mock UI) | 🔲 |  |
+| S4 | agent | Plan: Frontend (mock UI) | ✅ |  |
 | S5 | runner | Build: Frontend (mock UI) | 🔲 |  |
 | S5V | agent | UI vs design check & fixes | 🔲 |  |
 | G3 | gate | Owner review: UI mock | 🔲 |  |
