@@ -264,7 +264,11 @@ function createInitialBlockedDates(): BlockedDate[] {
 function createFreshStore(): MockDataStore {
   return {
     properties: JSON.parse(JSON.stringify(propertySeed)) as Property[],
-    locations: JSON.parse(JSON.stringify(locationSeed)) as Location[],
+    locations: (JSON.parse(JSON.stringify(locationSeed)) as Location[]).map((loc, idx) => ({
+      ...loc,
+      isActive: loc.isActive ?? true,
+      position: loc.position ?? idx + 1,
+    })),
     hosts: JSON.parse(JSON.stringify(hostSeed)) as HostProfile[],
     workstations: JSON.parse(JSON.stringify(workstationSeed)) as WorkstationData,
     users: JSON.parse(JSON.stringify(userSeed)) as User[],

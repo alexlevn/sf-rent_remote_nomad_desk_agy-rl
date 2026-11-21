@@ -2,16 +2,24 @@ import type { TravelGuide } from '@/lib/types';
 import { getMockStore } from './mock/seed-data';
 
 /**
- * Lists travel guides with optional city and featured filters.
+ * Lists travel guides with optional city, featured, and status filters.
  */
 export async function listTravelGuides(params?: {
   city?: string;
   featured?: boolean;
+  status?: string;
+  includeDrafts?: boolean;
 }): Promise<TravelGuide[]> {
   const store = getMockStore();
   let result = [...store.guides];
 
-  if (params?.city) {
+  if (!params?.includeDrafts && !params?.status) {
+    result = result.filter((g) => g.status !== 'draft');
+  } else if (params?.status && params.status !== 'all') {
+    result = result.filter((g) => g.status === params.status);
+  }
+
+  if (params?.city && params.city !== 'all') {
     const q = params.city.toLowerCase();
     result = result.filter((g) => g.city.toLowerCase() === q);
   }
@@ -49,12 +57,16 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
   const newGuide: TravelGuide = {
     id: maxId + 1,
     title: data.title || 'Untitled Guide',
-    slug: data.slug || `guide-${maxId + 1}`,
+    slug:
+      data.slug ||
+      (data.title
+        ? data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+        : `guide-${maxId + 1}`),
     city: data.city || 'Barcelona',
     category: data.category || 'City Guide',
     publishDate: data.publishDate || new Date().toISOString().slice(0, 10),
     featured: data.featured ?? false,
-    image: data.image || '/seed/guide/guide-barcelona.webp',
+    image: data.image || '/seed/guide/placeholder.webp',
     excerpt: data.excerpt || '',
     content: data.content || '',
     status: data.status || 'published',
@@ -63,4 +75,17 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
 
   store.guides.push(newGuide);
   return { ...newGuide };
+}
+
+/**
+ * Deletes a travel guide article by ID.
+ */
+export async function deleteTravelGuide(id: number): Promise<boolean> {
+  const store = getMockStore();
+  const idx = store.guides.findIndex((g) => g.id === id);
+  if (idx !== -1) {
+    store.guides.splice(idx, 1);
+    return true;
+  }
+  return false;
 }

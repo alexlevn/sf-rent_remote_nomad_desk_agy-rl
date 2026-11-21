@@ -16,6 +16,7 @@ interface BuilderSummaryCardProps {
   destinationUrl: string;
   onReset: () => void;
   onApplyProPreset: () => void;
+  proPriceEUR?: number;
 }
 
 export function BuilderSummaryCard({
@@ -24,6 +25,7 @@ export function BuilderSummaryCard({
   destinationUrl,
   onReset,
   onApplyProPreset,
+  proPriceEUR = 150,
 }: BuilderSummaryCardProps) {
   return (
     <div className="bg-white rounded-2xl p-6 border border-[var(--color-border-light)] shadow-md sticky top-28">
@@ -63,13 +65,13 @@ export function BuilderSummaryCard({
             type="button"
             onClick={onApplyProPreset}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center justify-center gap-1 cursor-pointer ${
-              totalUpgradeEUR >= 150
+              totalUpgradeEUR >= proPriceEUR
                 ? 'bg-[var(--color-brand)] text-white border-transparent shadow-xs'
                 : 'bg-transparent text-[var(--color-brand)] border-[var(--color-brand)]/40 hover:bg-orange-50'
             }`}
           >
             <Zap className="w-3 h-3" />
-            <span>Pro (+€150)</span>
+            <span>Pro (+€{proPriceEUR})</span>
           </button>
         </div>
       </div>

@@ -17,12 +17,14 @@ interface BookingWidgetProps {
   property: Property;
   blockedDates?: BlockedDate[];
   reservations?: Reservation[];
+  proUpgradePriceEUR?: number;
 }
 
 export function BookingWidget({
   property,
   blockedDates = [],
   reservations = [],
+  proUpgradePriceEUR,
 }: BookingWidgetProps) {
   const router = useRouter();
   const { formatPrice, rates } = useCurrency();
@@ -81,8 +83,9 @@ export function BookingWidget({
   const isDateUnavailable = isConflict || isInvalidNights;
 
   // Workstation add-on EUR cents
+  const proMonthlyCents = proUpgradePriceEUR ?? PRO_UPGRADE_MONTHLY_EUR_CENTS;
   const workstationEURCents =
-    workstationSetup === 'pro' ? PRO_UPGRADE_MONTHLY_EUR_CENTS : 0;
+    workstationSetup === 'pro' ? proMonthlyCents : 0;
 
   // Calculate pricing breakdown in real-time (AC-DETAIL-2)
   const pricing = useMemo(() => {
@@ -235,7 +238,9 @@ export function BookingWidget({
             data-testid="workstation-select"
           >
             <option value="comfort">Comfort Base (Included - $0)</option>
-            <option value="pro">Pro Upgrade (+€150/mo: Herman Miller + 4K Ultrawide)</option>
+            <option value="pro">
+              Pro Upgrade (+€{Math.round(proMonthlyCents / 100)}/mo: Herman Miller + 4K Ultrawide)
+            </option>
           </select>
         </div>
 

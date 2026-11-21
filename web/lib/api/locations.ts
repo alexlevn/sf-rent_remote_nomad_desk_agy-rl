@@ -2,11 +2,16 @@ import type { Location } from '@/lib/types';
 import { getMockStore } from './mock/seed-data';
 
 /**
- * Lists all destination locations.
+ * Lists destination locations. By default returns only active locations.
  */
-export async function listLocations(): Promise<Location[]> {
+export async function listLocations(options?: {
+  includeInactive?: boolean;
+}): Promise<Location[]> {
   const store = getMockStore();
-  return store.locations.map((loc) => ({ ...loc }));
+  const list = options?.includeInactive
+    ? store.locations
+    : store.locations.filter((loc) => loc.isActive !== false);
+  return list.map((loc) => ({ ...loc }));
 }
 
 /**
@@ -48,19 +53,52 @@ export async function saveLocation(data: Partial<Location>): Promise<Location> {
   const maxId = store.locations.reduce((max, l) => Math.max(max, l.id), 0);
   const newLocation: Location = {
     id: maxId + 1,
-    city: data.city || 'new-city',
-    name: data.name || 'New City',
-    slug: data.slug || 'new-city',
+    city: data.city || data.name?.toLowerCase().replace(/\s+/g, '-') || 'new-city',
+    name: data.name || data.city || 'New City',
+    slug: (data.slug || data.name || data.city || 'new-city')
+      .toLowerCase()
+      .replace(/^furnished-apartments-/, '')
+      .replace(/\s+/g, '-'),
     country: data.country || 'Global',
     countryCode: data.countryCode || 'GL',
     continent: data.continent || 'Europe',
     propertiesCount: data.propertiesCount || 0,
     description: data.description || '',
-    image: data.image || '/seed/location/madrid.jpg',
+    image: data.image || '/seed/location/placeholder.jpg',
     center: data.center || [40.4168, -3.7038],
     isActive: data.isActive ?? true,
     position: data.position ?? maxId + 1,
   };
   store.locations.push(newLocation);
   return { ...newLocation };
+}
+
+/**
+ * Deletes a location if it has no associated properties.
+ */
+export async function deleteLocation(id: number): Promise<boolean> {
+  const store = getMockStore();
+  const idx = store.locations.findIndex((l) => l.id === id);
+  if (idx === -1) return false;
+
+  if (store.locations[idx].propertiesCount > 0) {
+    throw new Error('Cannot delete destination with existing properties. Please hide it instead.');
+  }
+
+  store.locations.splice(idx, 1);
+  return true;
+}
+
+/**
+ * Reorders top cities positions.
+ */
+export async function reorderTopCities(orderedIds: number[]): Promise<Location[]> {
+  const store = getMockStore();
+  orderedIds.forEach((id, idx) => {
+    const loc = store.locations.find((l) => l.id === id);
+    if (loc) {
+      loc.position = idx + 1;
+    }
+  });
+  return store.locations.map((loc) => ({ ...loc }));
 }

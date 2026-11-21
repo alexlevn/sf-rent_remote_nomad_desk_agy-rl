@@ -11,6 +11,8 @@ interface WorkstationBuilderContainerProps {
 
 export function WorkstationBuilderContainer({ workstationData }: WorkstationBuilderContainerProps) {
   const { components, addons } = workstationData;
+  const proPkg = workstationData.packages.find((p) => p.slug === 'pro-upgrade' || p.id === 'pro');
+  const proPriceEUR = proPkg ? Math.round(proPkg.pricePerMonth / 100) : 150;
 
   // Initial baseline selection (Comfort Base defaults)
   const [selectedMonitor, setSelectedMonitor] = useState<string>('mon-ultrawide');
@@ -95,7 +97,17 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
       }
     }
 
-    const total = items.reduce((acc, curr) => acc + curr.priceEUR, 0);
+    const isProPreset =
+      selectedMonitor === 'mon-4k-ultrawide' &&
+      selectedChair === 'chair-aeron' &&
+      selectedDesk === 'desk-standing' &&
+      selectedKeyboardMouse === 'km-mx' &&
+      selectedAddons.length === 0;
+
+    let total = items.reduce((acc, curr) => acc + curr.priceEUR, 0);
+    if (isProPreset && total !== proPriceEUR) {
+      total = proPriceEUR;
+    }
 
     return {
       breakdownItems: items,
@@ -109,6 +121,7 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
     selectedDesk,
     selectedKeyboardMouse,
     selectedAddons,
+    proPriceEUR,
   ]);
 
   // Construct query string for AC-BUILD-2 CTA redirect
@@ -171,6 +184,7 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
           destinationUrl={destinationUrl}
           onReset={handleReset}
           onApplyProPreset={handleApplyProPreset}
+          proPriceEUR={proPriceEUR}
         />
       </div>
     </div>

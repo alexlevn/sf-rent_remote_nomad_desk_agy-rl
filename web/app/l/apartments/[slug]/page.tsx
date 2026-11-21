@@ -12,6 +12,7 @@ import {
   listBlockedDates,
   listReservations,
 } from '@/lib/api/reservations';
+import { listWorkstations } from '@/lib/api/workstations';
 import { ImageGallery } from '@/features/property-detail/image-gallery';
 import { WorkstationSpecs } from '@/features/property-detail/workstation-specs';
 import { AmenitiesList } from '@/features/property-detail/amenities-list';
@@ -48,13 +49,17 @@ export default async function ApartmentDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  // Fetch host details, blocked dates, reservations, and similar listings in parallel
-  const [host, blockedDates, reservations, similarListings] = await Promise.all([
+  // Fetch host details, blocked dates, reservations, similar listings, and workstation catalog in parallel
+  const [host, blockedDates, reservations, similarListings, workstationData] = await Promise.all([
     getHostProfile(property.hostId),
     listBlockedDates(property.id),
     listReservations({ propertyId: property.id }),
     listProperties({ city: property.city }),
+    listWorkstations(),
   ]);
+
+  const proPkg = workstationData.packages.find((p) => p.slug === 'pro-upgrade' || p.id === 'pro');
+  const proUpgradePriceEUR = proPkg ? proPkg.pricePerMonth : 15000;
 
   return (
     <div className="bg-[var(--color-bg-light)] min-h-screen pt-24 pb-16">
@@ -173,6 +178,7 @@ export default async function ApartmentDetailPage({ params }: PageProps) {
               property={property}
               blockedDates={blockedDates}
               reservations={reservations}
+              proUpgradePriceEUR={proUpgradePriceEUR}
             />
           </div>
         </div>

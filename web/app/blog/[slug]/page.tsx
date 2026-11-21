@@ -162,9 +162,21 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
           </p>
         </div>
 
-        <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)]">
-          {post.content}
-        </p>
+        {post.content.includes('<') ? (
+          <div
+            className="prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
+            dangerouslySetInnerHTML={{
+              __html: post.content
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                .replace(/\bon\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+                .replace(/javascript:/gi, ''),
+            }}
+          />
+        ) : (
+          <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)]">
+            {post.content}
+          </p>
+        )}
       </div>
     </ArticleLayout>
   );

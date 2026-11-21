@@ -136,9 +136,21 @@ export default async function TravelGuideDetailPage({
         <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] mb-4">
           Monthly accommodations typically provide up to 35% savings over nightly Airbnb rates, eliminating tourist taxes and cleaning surcharges.
         </p>
-        <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)]">
-          {guide.content}
-        </p>
+        {guide.content.includes('<') ? (
+          <div
+            className="prose prose-neutral max-w-none text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)] space-y-4"
+            dangerouslySetInnerHTML={{
+              __html: guide.content
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                .replace(/\bon\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+                .replace(/javascript:/gi, ''),
+            }}
+          />
+        ) : (
+          <p className="text-sm sm:text-base leading-relaxed text-[var(--color-text-on-light)]">
+            {guide.content}
+          </p>
+        )}
       </div>
     </ArticleLayout>
   );
