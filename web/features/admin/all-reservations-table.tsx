@@ -2,10 +2,16 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import type { Reservation, ReservationStatus, Property, HostProfile } from '@/lib/types';
+import type {
+  AdminReservationsStatusCounts,
+  AdminReservationsSummary,
+} from '@/lib/api/reservations';
 import {
-  fetchAdminReservationsAction,
+  fetchAdminPropertiesAction,
+  fetchAdminReservationsPaginatedAction,
   cancelReservationAdminAction,
 } from '@/app/admin/admin-actions';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   Search,
   CheckCircle,
@@ -16,85 +22,174 @@ import {
   X,
 } from 'lucide-react';
 
+const PAGE_SIZE = 20;
+
+const EMPTY_COUNTS: AdminReservationsStatusCounts = {
+  all: 0,
+  pending: 0,
+  confirmed: 0,
+  completed: 0,
+  cancelled: 0,
+  rejected: 0,
+  expired: 0,
+};
+
+const EMPTY_SUMMARY: AdminReservationsSummary = {
+  totalCount: 0,
+  pendingCount: 0,
+  confirmedCount: 0,
+  completedCount: 0,
+  cancelledCount: 0,
+  rejectedCount: 0,
+  expiredCount: 0,
+  gmvCents: 0,
+  commissionCents: 0,
+  hostPayoutCents: 0,
+};
+
 export function AllReservationsTable() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [hosts, setHosts] = useState<HostProfile[]>([]);
+  const [counts, setCounts] = useState<AdminReservationsStatusCounts>(EMPTY_COUNTS);
+  const [summary, setSummary] = useState<AdminReservationsSummary>(EMPTY_SUMMARY);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [hostFilter, setHostFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Intervention modal & detail modal
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [voidingReservation, setVoidingReservation] = useState<Reservation | null>(null);
   const [cancellationReason, setCancellationReason] = useState('Cancelled by Platform Administrator due to compliance review');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const isActionRunningRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchData = async () => {
-    try {
-      const { resList, propList, hostList } = await fetchAdminReservationsAction();
-      startTransition(() => {
-        setReservations(resList);
-        setProperties(propList);
-        setHosts(hostList);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
-
+  // Load property & host metadata once on mount for display names and host filter dropdown
   useEffect(() => {
-    fetchData();
+    let active = true;
+    const loadMetadata = async () => {
+      try {
+        const { propList, hostList } = await fetchAdminPropertiesAction();
+        if (!active) return;
+        startTransition(() => {
+          setProperties(propList);
+          setHosts(hostList);
+        });
+      } catch {
+        // Non-blocking: table falls back to Property #id / Host #id
+      }
+    };
+    loadMetadata();
+    return () => {
+      active = false;
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
+  // Debounce keyword search (250ms) and reset page to 1
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const fetchPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const result = await fetchAdminReservationsPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          status: statusFilter as ReservationStatus | 'all',
+          hostId: hostFilter === 'all' ? undefined : Number(hostFilter),
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setReservations(result.items);
+          setTotal(result.total);
+          setCounts(result.counts);
+          setSummary(result.summary);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to load reservations');
+          setLoading(false);
+        });
+      }
+    },
+    [statusFilter, hostFilter, debouncedSearch]
+  );
+
+  useEffect(() => {
+    fetchPage(page);
+  }, [page, fetchPage]);
+
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Property & Host lookup helpers
-  const getProperty = useCallback((propertyId: number) => {
-    return properties.find((p) => p.id === propertyId);
+  const propertyById = useMemo(() => {
+    const map = new Map<number, Property>();
+    for (const p of properties) {
+      map.set(p.id, p);
+    }
+    return map;
   }, [properties]);
 
-  const getHostName = useCallback((propertyId: number) => {
-    const prop = properties.find((p) => p.id === propertyId);
-    if (!prop) return 'Unknown Host';
-    const host = hosts.find((h) => h.id === prop.hostId);
-    return host ? host.displayName : `Host #${prop.hostId}`;
-  }, [properties, hosts]);
+  const hostById = useMemo(() => {
+    const map = new Map<number, HostProfile>();
+    for (const h of hosts) {
+      map.set(h.id, h);
+    }
+    return map;
+  }, [hosts]);
 
-  // KPI Summary stats
-  const summary = useMemo(() => {
-    const total = reservations.length;
-    const confirmed = reservations.filter((r) => r.status === 'confirmed').length;
-    const pending = reservations.filter((r) => r.status === 'pending').length;
-    const cancelled = reservations.filter((r) => r.status === 'cancelled').length;
+  const getProperty = useCallback(
+    (propertyId: number) => propertyById.get(propertyId),
+    [propertyById]
+  );
 
-    // GMV & Commission from confirmed reservations
-    const confirmedList = reservations.filter((r) => r.status === 'confirmed');
-    const gmvUSD = confirmedList.reduce((sum, r) => sum + (r.totalAmount || 0), 0) / 100;
-    const commissionUSD = confirmedList.reduce(
-      (sum, r) => sum + (r.commissionAmount || Math.round((r.totalAmount || 0) * 0.1)),
-      0
-    ) / 100;
-
-    return { total, confirmed, pending, cancelled, gmvUSD, commissionUSD };
-  }, [reservations]);
+  const getHostName = useCallback(
+    (propertyId: number) => {
+      const prop = propertyById.get(propertyId);
+      if (!prop) return 'Unknown Host';
+      const host = hostById.get(prop.hostId);
+      return host ? host.displayName : `Host #${prop.hostId}`;
+    },
+    [propertyById, hostById]
+  );
 
   // Admin Intervention Cancel / Void action (AC-ADMIN-4)
   const handleConfirmAdminCancel = async () => {
     if (!voidingReservation || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       // AC-ADMIN-4: Admin cancels confirmed booking -> cancelledBy = 'admin', paymentStatus = 'refunded'
@@ -105,7 +200,7 @@ export function AllReservationsTable() {
       showToast(`Reservation #${voidingReservation.code} cancelled by Admin. Refund processed.`);
       const resId = voidingReservation.id;
       setVoidingReservation(null);
-      await fetchData();
+      await fetchPage(page);
       if (selectedReservation?.id === resId) {
         setSelectedReservation((prev) =>
           prev
@@ -120,43 +215,12 @@ export function AllReservationsTable() {
         );
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to cancel reservation');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to cancel reservation');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
     }
   };
-
-  // Filtered reservations
-  const filteredReservations = useMemo(() => {
-    return reservations.filter((r) => {
-      // Status filter
-      if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-
-      // Host filter
-      if (hostFilter !== 'all') {
-        const prop = getProperty(r.propertyId);
-        if (!prop || String(prop.hostId) !== hostFilter) return false;
-      }
-
-      // Keyword Search
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const prop = getProperty(r.propertyId);
-        const hostName = getHostName(r.propertyId).toLowerCase();
-        return (
-          r.code.toLowerCase().includes(q) ||
-          r.guestName.toLowerCase().includes(q) ||
-          r.guestEmail.toLowerCase().includes(q) ||
-          hostName.includes(q) ||
-          (prop && prop.city.toLowerCase().includes(q)) ||
-          (prop && prop.title.toLowerCase().includes(q))
-        );
-      }
-
-      return true;
-    });
-  }, [reservations, statusFilter, hostFilter, searchQuery, getProperty, getHostName]);
 
   const renderStatusBadge = (status: ReservationStatus) => {
     switch (status) {
@@ -192,6 +256,9 @@ export function AllReservationsTable() {
     }
   };
 
+  const gmvUSD = summary.gmvCents / 100;
+  const commissionUSD = summary.commissionCents / 100;
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -203,6 +270,7 @@ export function AllReservationsTable() {
           <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-sm font-medium">{toastMessage}</span>
           <button
+            type="button"
             onClick={() => setToastMessage(null)}
             className="text-neutral-400 hover:text-white ml-2"
             aria-label="Dismiss"
@@ -212,17 +280,38 @@ export function AllReservationsTable() {
         </div>
       )}
 
-      {/* KPI Audit Summary Cards */}
+      {/* Inline Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-red-500 hover:text-red-700 p-0.5"
+            aria-label="Dismiss error"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* KPI Audit Summary Cards (SQL-aggregated across all reservations) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] shadow-sm">
           <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
             Total Bookings
           </div>
           <div className="text-2xl font-bold text-[var(--color-text-on-light)] mt-1">
-            {summary.total}
+            {summary.totalCount}
           </div>
           <div className="text-xs text-neutral-400 mt-1">
-            {summary.confirmed} confirmed · {summary.pending} pending
+            {summary.confirmedCount} confirmed · {summary.pendingCount} pending
           </div>
         </div>
 
@@ -231,10 +320,10 @@ export function AllReservationsTable() {
             Active Stay Pipeline
           </div>
           <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-            {summary.confirmed} Stays
+            {summary.confirmedCount} Stays
           </div>
           <div className="text-xs text-neutral-400 mt-1">
-            {summary.cancelled} cancellations
+            {summary.cancelledCount} cancellations
           </div>
         </div>
 
@@ -243,7 +332,7 @@ export function AllReservationsTable() {
             Confirmed GMV
           </div>
           <div className="text-2xl font-bold text-[var(--color-text-on-light)] mt-1">
-            ${summary.gmvUSD.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            ${Math.round(gmvUSD).toLocaleString('en-US')}
           </div>
           <div className="text-xs text-neutral-400 mt-1">
             Platform gross rental volume
@@ -255,7 +344,7 @@ export function AllReservationsTable() {
             Platform Commission (10%)
           </div>
           <div className="text-2xl font-bold text-[var(--color-brand)] mt-1">
-            ${summary.commissionUSD.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            ${Math.round(commissionUSD).toLocaleString('en-US')}
           </div>
           <div className="text-xs text-neutral-400 mt-1">
             Net NomadDesk platform revenue
@@ -270,16 +359,19 @@ export function AllReservationsTable() {
           <div>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
               className="text-sm py-1.5 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
             >
-              <option value="all">All Statuses ({reservations.length})</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="pending">Pending</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="rejected">Rejected</option>
-              <option value="expired">Expired</option>
+              <option value="all">All Statuses ({counts.all})</option>
+              <option value="confirmed">Confirmed ({counts.confirmed})</option>
+              <option value="pending">Pending ({counts.pending})</option>
+              <option value="completed">Completed ({counts.completed})</option>
+              <option value="cancelled">Cancelled ({counts.cancelled})</option>
+              <option value="rejected">Rejected ({counts.rejected})</option>
+              <option value="expired">Expired ({counts.expired})</option>
             </select>
           </div>
 
@@ -287,7 +379,10 @@ export function AllReservationsTable() {
           <div>
             <select
               value={hostFilter}
-              onChange={(e) => setHostFilter(e.target.value)}
+              onChange={(e) => {
+                setHostFilter(e.target.value);
+                setPage(1);
+              }}
               className="text-sm py-1.5 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
             >
               <option value="all">All Hosts ({hosts.length})</option>
@@ -339,7 +434,7 @@ export function AllReservationsTable() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredReservations.length === 0 ? (
+              ) : reservations.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
@@ -356,11 +451,11 @@ export function AllReservationsTable() {
                   </td>
                 </tr>
               ) : (
-                filteredReservations.map((res) => {
+                reservations.map((res) => {
                   const prop = getProperty(res.propertyId);
                   const hostName = getHostName(res.propertyId);
                   const totalUSD = Math.round((res.totalAmount || 0) / 100);
-                  const commissionUSD = Math.round(
+                  const commissionItemUSD = Math.round(
                     (res.commissionAmount || (res.totalAmount || 0) * 0.1) / 100
                   );
 
@@ -372,6 +467,7 @@ export function AllReservationsTable() {
                       {/* Booking Code */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
+                          type="button"
                           onClick={() => setSelectedReservation(res)}
                           className="font-bold text-[var(--color-brand)] hover:underline text-left block"
                         >
@@ -416,7 +512,7 @@ export function AllReservationsTable() {
 
                       {/* Commission */}
                       <td className="px-6 py-4 font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                        ${commissionUSD.toLocaleString()}
+                        ${commissionItemUSD.toLocaleString()}
                       </td>
 
                       {/* Status */}
@@ -431,6 +527,7 @@ export function AllReservationsTable() {
                       <td className="px-6 py-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            type="button"
                             onClick={() => setSelectedReservation(res)}
                             className="btn btn-outline btn-sm text-xs px-2.5 py-1"
                           >
@@ -440,6 +537,7 @@ export function AllReservationsTable() {
                           {/* Admin Void button on confirmed reservations (AC-ADMIN-4) */}
                           {res.status === 'confirmed' && (
                             <button
+                              type="button"
                               onClick={() => {
                                 setVoidingReservation(res);
                                 setCancellationReason('Cancelled by Platform Administrator due to compliance review');
@@ -466,6 +564,15 @@ export function AllReservationsTable() {
             </tbody>
           </table>
         </div>
+
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+          disabled={loading}
+          itemLabel="reservations"
+        />
       </div>
 
       {/* Modal: Reservation Details Drawer */}
@@ -486,7 +593,9 @@ export function AllReservationsTable() {
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedReservation(null)}
+                aria-label="Close reservation details"
                 className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100"
               >
                 <X className="w-5 h-5" />

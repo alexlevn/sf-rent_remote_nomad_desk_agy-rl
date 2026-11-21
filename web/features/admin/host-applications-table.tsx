@@ -2,7 +2,13 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import type { HostProfile, HostStatus, User } from '@/lib/types';
-import { fetchAdminHostsAction, reviewHostAction } from '@/app/admin/admin-actions';
+import type { AdminHostsStatusCounts } from '@/lib/api/hosts';
+import {
+  fetchAdminHostsPaginatedAction,
+  fetchAdminUsersAction,
+  reviewHostAction,
+} from '@/app/admin/admin-actions';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   Search,
   CheckCircle,
@@ -20,79 +26,159 @@ import {
 
 type TabKey = 'pending' | 'approved' | 'suspended' | 'rejected';
 
+const PAGE_SIZE = 20;
+
+const EMPTY_COUNTS: AdminHostsStatusCounts = {
+  all: 0,
+  pending: 0,
+  approved: 0,
+  rejected: 0,
+  suspended: 0,
+};
+
 export function HostApplicationsTable() {
   const [hosts, setHosts] = useState<HostProfile[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [counts, setCounts] = useState<AdminHostsStatusCounts>(EMPTY_COUNTS);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+
   const [activeTab, setActiveTab] = useState<TabKey>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Drawer & Modal states
   const [selectedHost, setSelectedHost] = useState<HostProfile | null>(null);
   const [rejectingHost, setRejectingHost] = useState<HostProfile | null>(null);
   const [rejectionReason, setRejectionReason] = useState('Portfolio does not meet NomadDesk remote standards');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const isActionRunningRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchData = async () => {
-    try {
-      const { hostList, userList } = await fetchAdminHostsAction();
-      startTransition(() => {
-        setHosts(hostList);
-        setUsers(userList);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
-
+  // Load user emails once on mount for host contact display
   useEffect(() => {
-    fetchData();
+    let active = true;
+    const loadUsers = async () => {
+      try {
+        const userList = await fetchAdminUsersAction();
+        if (!active) return;
+        startTransition(() => {
+          setUsers(userList);
+        });
+      } catch {
+        // Non-blocking: falls back to host slug/id placeholder email
+      }
+    };
+    loadUsers();
+    return () => {
+      active = false;
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
+  // Debounce search (250ms) and reset page to 1
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const fetchPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const result = await fetchAdminHostsPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          status: activeTab,
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setHosts(result.items);
+          setTotal(result.total);
+          setCounts(result.counts);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to load hosts');
+          setLoading(false);
+        });
+      }
+    },
+    [activeTab, debouncedSearch]
+  );
+
+  useEffect(() => {
+    fetchPage(page);
+  }, [page, fetchPage]);
+
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Helper to find host's associated user email
-  const getHostEmail = useCallback((host: HostProfile) => {
-    const user = users.find((u) => u.id === host.userId);
-    if (user?.email) return user.email;
-    if (host.slug.includes('nordic') || host.id === 3) return 'applicant@example.com';
-    if (host.slug.includes('urbana') || host.id === 1) return 'host@example.com';
-    return `host-${host.id}@example.com`;
+  const userEmailById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const u of users) {
+      map.set(u.id, u.email);
+    }
+    return map;
   }, [users]);
 
-  // Tab counts
-  const counts = useMemo(() => {
-    return {
-      pending: hosts.filter((h) => h.status === 'pending').length,
-      approved: hosts.filter((h) => h.status === 'approved').length,
-      suspended: hosts.filter((h) => h.status === 'suspended').length,
-      rejected: hosts.filter((h) => h.status === 'rejected').length,
-    };
-  }, [hosts]);
+  // Helper to find host's associated user email
+  const getHostEmail = useCallback(
+    (host: HostProfile) => {
+      const email = userEmailById.get(host.userId);
+      if (email) return email;
+      if (host.slug.includes('nordic') || host.id === 3) return 'applicant@example.com';
+      if (host.slug.includes('urbana') || host.id === 1) return 'host@example.com';
+      return `host-${host.id}@example.com`;
+    },
+    [userEmailById]
+  );
+
+  const reloadAfterMutation = async () => {
+    const nextPage = hosts.length <= 1 && page > 1 ? page - 1 : page;
+    if (nextPage !== page) {
+      setPage(nextPage);
+    } else {
+      await fetchPage(page);
+    }
+  };
 
   // Approve action (AC-ADMIN-1)
   const handleApprove = async (host: HostProfile) => {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await reviewHostAction(host.id, 'approved');
       showToast(`Host "${host.displayName}" approved! User elevated to Host role.`);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedHost?.id === host.id) {
         setSelectedHost((prev) => (prev ? { ...prev, status: 'approved' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to approve host');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to approve host');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -104,18 +190,19 @@ export function HostApplicationsTable() {
     if (!rejectingHost || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await reviewHostAction(rejectingHost.id, 'rejected', rejectionReason);
       showToast(`Application for "${rejectingHost.displayName}" has been rejected.`);
       const hostId = rejectingHost.id;
       setRejectingHost(null);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedHost?.id === hostId) {
         setSelectedHost((prev) => (prev ? { ...prev, status: 'rejected', rejectionReason } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reject host');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reject host');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -125,19 +212,19 @@ export function HostApplicationsTable() {
   // Suspend action (AC-ADMIN-3)
   const handleSuspend = async (host: HostProfile) => {
     if (isActionRunningRef.current) return;
-
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await reviewHostAction(host.id, 'suspended', 'Suspended by platform administrator');
       showToast(`Host "${host.displayName}" suspended. Listings are now hidden.`);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedHost?.id === host.id) {
         setSelectedHost((prev) => (prev ? { ...prev, status: 'suspended' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to suspend host');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to suspend host');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
@@ -149,36 +236,22 @@ export function HostApplicationsTable() {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       await reviewHostAction(host.id, 'approved');
       showToast(`Host "${host.displayName}" reactivated successfully.`);
-      await fetchData();
+      await reloadAfterMutation();
       if (selectedHost?.id === host.id) {
         setSelectedHost((prev) => (prev ? { ...prev, status: 'approved' } : null));
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reactivate host');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reactivate host');
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
     }
   };
-
-  // Filtered hosts
-  const filteredHosts = useMemo(() => {
-    return hosts.filter((h) => {
-      if (h.status !== activeTab) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      const email = getHostEmail(h).toLowerCase();
-      return (
-        h.displayName.toLowerCase().includes(q) ||
-        email.includes(q) ||
-        h.cities.toLowerCase().includes(q)
-      );
-    });
-  }, [hosts, activeTab, searchQuery, getHostEmail]);
 
   const renderStatusBadge = (status: HostStatus) => {
     switch (status) {
@@ -206,9 +279,31 @@ export function HostApplicationsTable() {
           <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-sm font-medium">{toastMessage}</span>
           <button
+            type="button"
             onClick={() => setToastMessage(null)}
             className="text-neutral-400 hover:text-white ml-2"
             aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Inline Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-red-500 hover:text-red-700 p-0.5"
+            aria-label="Dismiss error"
           >
             <X className="w-4 h-4" />
           </button>
@@ -219,7 +314,11 @@ export function HostApplicationsTable() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--color-border-light)] pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setActiveTab('pending')}
+            type="button"
+            onClick={() => {
+              setActiveTab('pending');
+              setPage(1);
+            }}
             className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === 'pending'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -229,7 +328,11 @@ export function HostApplicationsTable() {
             Applications ({counts.pending})
           </button>
           <button
-            onClick={() => setActiveTab('approved')}
+            type="button"
+            onClick={() => {
+              setActiveTab('approved');
+              setPage(1);
+            }}
             className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === 'approved'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -239,7 +342,11 @@ export function HostApplicationsTable() {
             Active Hosts ({counts.approved})
           </button>
           <button
-            onClick={() => setActiveTab('suspended')}
+            type="button"
+            onClick={() => {
+              setActiveTab('suspended');
+              setPage(1);
+            }}
             className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === 'suspended'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -249,7 +356,11 @@ export function HostApplicationsTable() {
             Suspended ({counts.suspended})
           </button>
           <button
-            onClick={() => setActiveTab('rejected')}
+            type="button"
+            onClick={() => {
+              setActiveTab('rejected');
+              setPage(1);
+            }}
             className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               activeTab === 'rejected'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -297,7 +408,7 @@ export function HostApplicationsTable() {
                     </div>
                   </td>
                 </tr>
-              ) : filteredHosts.length === 0 ? (
+              ) : hosts.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
@@ -314,7 +425,7 @@ export function HostApplicationsTable() {
                   </td>
                 </tr>
               ) : (
-                filteredHosts.map((host) => {
+                hosts.map((host) => {
                   const email = getHostEmail(host);
                   return (
                     <tr
@@ -328,6 +439,7 @@ export function HostApplicationsTable() {
                           </div>
                           <div>
                             <button
+                              type="button"
                               onClick={() => setSelectedHost(host)}
                               className="font-semibold text-[var(--color-text-on-light)] hover:text-[var(--color-brand)] text-left"
                             >
@@ -357,6 +469,7 @@ export function HostApplicationsTable() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
+                            type="button"
                             onClick={() => setSelectedHost(host)}
                             className="btn btn-outline btn-sm text-xs"
                             title="View full application"
@@ -367,6 +480,7 @@ export function HostApplicationsTable() {
                           {host.status === 'pending' && (
                             <>
                               <button
+                                type="button"
                                 onClick={() => handleApprove(host)}
                                 disabled={isSubmitting}
                                 className="btn btn-primary btn-sm text-xs bg-emerald-600 hover:bg-emerald-700 border-none text-white"
@@ -374,6 +488,7 @@ export function HostApplicationsTable() {
                                 Approve
                               </button>
                               <button
+                                type="button"
                                 onClick={() => {
                                   setRejectingHost(host);
                                   setRejectionReason('Portfolio does not meet NomadDesk remote standards');
@@ -388,6 +503,7 @@ export function HostApplicationsTable() {
 
                           {host.status === 'approved' && (
                             <button
+                              type="button"
                               onClick={() => handleSuspend(host)}
                               disabled={isSubmitting}
                               className="btn btn-outline btn-sm text-xs text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200"
@@ -398,6 +514,7 @@ export function HostApplicationsTable() {
 
                           {host.status === 'suspended' && (
                             <button
+                              type="button"
                               onClick={() => handleReactivate(host)}
                               disabled={isSubmitting}
                               className="btn btn-primary btn-sm text-xs"
@@ -408,6 +525,7 @@ export function HostApplicationsTable() {
 
                           {host.status === 'rejected' && (
                             <button
+                              type="button"
                               onClick={() => handleApprove(host)}
                               disabled={isSubmitting}
                               className="btn btn-outline btn-sm text-xs text-emerald-600 border-emerald-200"
@@ -424,6 +542,15 @@ export function HostApplicationsTable() {
             </tbody>
           </table>
         </div>
+
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+          disabled={loading}
+          itemLabel="hosts"
+        />
       </div>
 
       {/* Drawer: Host Application Detail */}
@@ -442,7 +569,9 @@ export function HostApplicationsTable() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedHost(null)}
+                  aria-label="Close host details"
                   className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                 >
                   <X className="w-5 h-5" />
@@ -527,6 +656,7 @@ export function HostApplicationsTable() {
             {/* Actions Bar */}
             <div className="pt-6 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex items-center justify-end gap-3">
               <button
+                type="button"
                 onClick={() => setSelectedHost(null)}
                 className="btn btn-outline btn-sm text-sm"
               >
@@ -536,6 +666,7 @@ export function HostApplicationsTable() {
               {selectedHost.status === 'pending' && (
                 <>
                   <button
+                    type="button"
                     onClick={() => {
                       setRejectingHost(selectedHost);
                       setRejectionReason('Portfolio does not meet NomadDesk remote standards');
@@ -546,6 +677,7 @@ export function HostApplicationsTable() {
                     Reject Application
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleApprove(selectedHost)}
                     disabled={isSubmitting}
                     className="btn btn-primary btn-sm text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -557,6 +689,7 @@ export function HostApplicationsTable() {
 
               {selectedHost.status === 'approved' && (
                 <button
+                  type="button"
                   onClick={() => handleSuspend(selectedHost)}
                   disabled={isSubmitting}
                   className="btn btn-outline btn-sm text-sm text-amber-600 border-amber-200"
@@ -567,6 +700,7 @@ export function HostApplicationsTable() {
 
               {selectedHost.status === 'suspended' && (
                 <button
+                  type="button"
                   onClick={() => handleReactivate(selectedHost)}
                   disabled={isSubmitting}
                   className="btn btn-primary btn-sm text-sm"

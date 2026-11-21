@@ -1,8 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, startTransition } from 'react';
-import type { User, UserRole } from '@/lib/types';
-import { fetchAdminUsersAction, updateUserAction } from '@/app/admin/admin-actions';
+import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
+import type { Property, Reservation, ReservationStatus, User, UserRole } from '@/lib/types';
+import type { AdminUsersCounts } from '@/lib/api/users';
+import {
+  fetchAdminPropertiesAction,
+  fetchAdminUserReservationsAction,
+  fetchAdminUsersPaginatedAction,
+  updateUserAction,
+} from '@/app/admin/admin-actions';
+import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   Search,
   ShieldCheck,
@@ -12,7 +19,11 @@ import {
   Lock,
   Unlock,
   AlertCircle,
+  AlertTriangle,
   Sparkles,
+  Calendar,
+  BookmarkCheck,
+  X,
 } from 'lucide-react';
 
 interface UserTableProps {
@@ -20,57 +31,177 @@ interface UserTableProps {
   currentAdminEmail?: string;
 }
 
+const PAGE_SIZE = 20;
+
+const EMPTY_COUNTS: AdminUsersCounts = {
+  all: 0,
+  guest: 0,
+  host: 0,
+  admin: 0,
+  active: 0,
+  inactive: 0,
+};
+
 export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: UserTableProps) {
   const [users, setUsers] = useState<User[]>([]);
+  const [counts, setCounts] = useState<AdminUsersCounts>(EMPTY_COUNTS);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // User Reservations Drawer state
+  const [drawerUser, setDrawerUser] = useState<User | null>(null);
+  const [drawerReservations, setDrawerReservations] = useState<Reservation[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const propertiesLoadedRef = useRef(false);
+
+  const requestIdRef = useRef(0);
+  const drawerRequestIdRef = useRef(0);
+  const isActionRunningRef = useRef(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSameAdmin = (targetUser: User) =>
     (currentAdminId != null && targetUser.id === currentAdminId) ||
     (Boolean(currentAdminEmail) && targetUser.email === currentAdminEmail);
 
-  const fetchUsers = async () => {
-    try {
-      const data = await fetchAdminUsersAction();
-      startTransition(() => {
-        setUsers(data);
-        setLoading(false);
-      });
-    } catch {
-      startTransition(() => {
-        setLoading(false);
-      });
-    }
-  };
-
+  // Cleanup toast timer on unmount
   useEffect(() => {
-    fetchUsers();
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
-  // Show temporary toast message
+  // Debounce search (250ms) and reset page to 1
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Close drawer on Escape key
+  useEffect(() => {
+    if (!drawerUser) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDrawerUser(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [drawerUser]);
+
+  const fetchPage = useCallback(
+    async (targetPage: number) => {
+      const reqId = ++requestIdRef.current;
+      setLoading(true);
+      try {
+        const result = await fetchAdminUsersPaginatedAction({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          role: roleFilter,
+          status: statusFilter,
+          search: debouncedSearch || undefined,
+        });
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setUsers(result.items);
+          setTotal(result.total);
+          setCounts(result.counts);
+          setLoading(false);
+        });
+      } catch (err) {
+        if (reqId !== requestIdRef.current) return;
+        startTransition(() => {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to load users');
+          setLoading(false);
+        });
+      }
+    },
+    [roleFilter, statusFilter, debouncedSearch]
+  );
+
+  useEffect(() => {
+    fetchPage(page);
+  }, [page, fetchPage]);
+
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
     }, 3500);
   };
 
-  // Count active admins to protect the last remaining admin
-  const adminCount = useMemo(() => {
-    return users.filter((u) => u.role === 'admin' && u.isActive !== false).length;
-  }, [users]);
+  const propertyById = useMemo(() => {
+    const map = new Map<number, Property>();
+    for (const p of properties) {
+      map.set(p.id, p);
+    }
+    return map;
+  }, [properties]);
+
+  // Open User Reservations Drawer and load user's bookings
+  const handleOpenBookings = async (user: User) => {
+    const reqId = ++drawerRequestIdRef.current;
+    setDrawerUser(user);
+    setDrawerReservations([]);
+    setDrawerError(null);
+    setDrawerLoading(true);
+
+    try {
+      const [userReservations, propsResult] = await Promise.all([
+        fetchAdminUserReservationsAction(user.id),
+        propertiesLoadedRef.current ? Promise.resolve(null) : fetchAdminPropertiesAction(),
+      ]);
+      if (reqId !== drawerRequestIdRef.current) return;
+      startTransition(() => {
+        if (propsResult) {
+          propertiesLoadedRef.current = true;
+          setProperties(propsResult.propList);
+        }
+        setDrawerReservations(userReservations);
+        setDrawerLoading(false);
+      });
+    } catch (err) {
+      if (reqId !== drawerRequestIdRef.current) return;
+      startTransition(() => {
+        setDrawerError(err instanceof Error ? err.message : 'Failed to load user reservations');
+        setDrawerLoading(false);
+      });
+    }
+  };
+
+  // Global admin count from SQL counts (server also enforces active-admin protection)
+  const adminCount = counts.admin;
 
   // Handle Role Change (Promote / Demote)
   const handleRoleChange = async (targetUser: User, newRole: UserRole) => {
-    // Protection: Cannot demote the last remaining admin account
+    if (isActionRunningRef.current) return;
     if (targetUser.role === 'admin' && newRole !== 'admin' && adminCount <= 1) {
-      alert('Cannot demote the last remaining active administrator account.');
+      setErrorMessage('Cannot demote the last remaining active administrator account.');
       return;
     }
 
+    isActionRunningRef.current = true;
+    setIsSubmitting(true);
+    setErrorMessage(null);
     try {
       await updateUserAction(targetUser.id, { role: newRole });
       showToast(
@@ -78,24 +209,30 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           ? `User ${targetUser.email} promoted to Administrator.`
           : `Administrator ${targetUser.email} demoted to Guest.`
       );
-      await fetchUsers();
+      await fetchPage(page);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update user role');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update user role');
+    } finally {
+      setIsSubmitting(false);
+      isActionRunningRef.current = false;
     }
   };
 
   // Handle Account Suspension / Activation Toggle
   const handleToggleStatus = async (targetUser: User) => {
-    // Protection: Cannot suspend the current logged-in admin or the last remaining admin
+    if (isActionRunningRef.current) return;
     if (isSameAdmin(targetUser) && targetUser.isActive) {
-      alert('You cannot suspend your own active administrator account.');
+      setErrorMessage('You cannot suspend your own active administrator account.');
       return;
     }
     if (targetUser.role === 'admin' && targetUser.isActive && adminCount <= 1) {
-      alert('Cannot suspend the last remaining active administrator account.');
+      setErrorMessage('Cannot suspend the last remaining active administrator account.');
       return;
     }
 
+    isActionRunningRef.current = true;
+    setIsSubmitting(true);
+    setErrorMessage(null);
     const nextActive = !targetUser.isActive;
     try {
       await updateUserAction(targetUser.id, { isActive: nextActive });
@@ -104,41 +241,75 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           ? `Account for ${targetUser.email} has been activated.`
           : `Account for ${targetUser.email} has been suspended.`
       );
-      await fetchUsers();
+      await fetchPage(page);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update account status');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update account status');
+    } finally {
+      setIsSubmitting(false);
+      isActionRunningRef.current = false;
     }
   };
 
-  // Filtered Users List
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      // Search matching email or name
-      const query = searchQuery.trim().toLowerCase();
-      const name = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase();
-      const matchesSearch =
-        !query || user.email.toLowerCase().includes(query) || name.includes(query);
-
-      // Role filter
-      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-
-      // Status filter
-      const matchesStatus =
-        statusFilter === 'all' ||
-        (statusFilter === 'active' && user.isActive !== false) ||
-        (statusFilter === 'suspended' && user.isActive === false);
-
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [users, searchQuery, roleFilter, statusFilter]);
+  const renderReservationStatusBadge = (status: ReservationStatus) => {
+    switch (status) {
+      case 'confirmed':
+        return <span className="badge badge-success">Confirmed</span>;
+      case 'pending':
+        return <span className="badge badge-warning">Pending</span>;
+      case 'completed':
+        return <span className="badge bg-blue-100 text-blue-800 border border-blue-200">Completed</span>;
+      case 'cancelled':
+        return <span className="badge badge-error">Cancelled</span>;
+      case 'rejected':
+        return <span className="badge badge-error">Rejected</span>;
+      case 'expired':
+        return <span className="badge bg-neutral-100 text-neutral-600 border border-neutral-300">Expired</span>;
+      default:
+        return <span className="badge">{status}</span>;
+    }
+  };
 
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
       {toastMessage && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs md:text-sm font-medium flex items-center gap-2 shadow-sm animate-fade-in">
-          <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{toastMessage}</span>
+        <div
+          role="status"
+          className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs md:text-sm font-medium flex items-center justify-between gap-2 shadow-sm animate-fade-in"
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            aria-label="Dismiss notification"
+            className="text-emerald-700 hover:text-emerald-900"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Inline Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs md:text-sm font-medium flex items-center justify-between gap-2 shadow-sm"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            aria-label="Dismiss error"
+            className="text-red-600 hover:text-red-800"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -163,14 +334,18 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
             {(['all', 'guest', 'host', 'admin'] as const).map((r) => (
               <button
                 key={r}
-                onClick={() => setRoleFilter(r)}
+                type="button"
+                onClick={() => {
+                  setRoleFilter(r);
+                  setPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg capitalize transition-all ${
                   roleFilter === r
                     ? 'bg-white text-neutral-900 shadow-xs'
                     : 'text-neutral-500 hover:text-neutral-800'
                 }`}
               >
-                {r === 'all' ? 'All Roles' : r}
+                {r === 'all' ? `All Roles (${counts.all})` : `${r} (${counts[r]})`}
               </button>
             ))}
           </div>
@@ -178,12 +353,15 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           {/* Status Filter Dropdown */}
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'suspended')}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as 'all' | 'active' | 'suspended');
+              setPage(1);
+            }}
             className="px-3 py-2 bg-neutral-50 border border-[var(--color-border-light)] rounded-xl text-xs font-medium text-neutral-700 focus:outline-none focus:border-[var(--color-brand)]"
           >
             <option value="all">All Statuses</option>
-            <option value="active">Active Only</option>
-            <option value="suspended">Suspended Only</option>
+            <option value="active">Active Only ({counts.active})</option>
+            <option value="suspended">Suspended Only ({counts.inactive})</option>
           </select>
         </div>
       </div>
@@ -199,7 +377,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                 <th className="py-3.5 px-4">Account Status</th>
                 <th className="py-3.5 px-4">Created</th>
                 <th className="py-3.5 px-4">Role Modification</th>
-                <th className="py-3.5 px-4 text-right">Access Control</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border-light)]">
@@ -212,7 +390,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                     </div>
                   </td>
                 </tr>
-              ) : filteredUsers.length === 0 ? (
+              ) : users.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-neutral-500">
                     <AlertCircle className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
@@ -223,7 +401,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => {
+                users.map((user) => {
                   const isCurrentAdmin = isSameAdmin(user);
                   const isLastAdmin = user.role === 'admin' && adminCount <= 1;
 
@@ -250,7 +428,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                       </td>
 
                       {/* Role Badge */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {user.role === 'admin' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                             <ShieldCheck className="w-3 h-3 text-emerald-600" />
@@ -269,7 +447,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                       </td>
 
                       {/* Status Badge */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {user.isActive !== false ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -284,18 +462,18 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                       </td>
 
                       {/* Created Date */}
-                      <td className="py-3.5 px-4 text-neutral-500 font-mono text-xs">
-                        {user.createdAt
-                          ? user.createdAt.split('T')[0]
-                          : '2026-01-15'}
+                      <td className="py-3.5 px-4 text-neutral-500 font-mono text-xs whitespace-nowrap">
+                        {user.createdAt ? user.createdAt.split('T')[0] : '—'}
                       </td>
 
                       {/* Role Modification */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         {user.role === 'guest' ? (
                           <button
+                            type="button"
+                            disabled={isSubmitting}
                             onClick={() => handleRoleChange(user, 'admin')}
-                            className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 transition-colors shadow-2xs inline-flex items-center gap-1"
+                            className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 disabled:opacity-50 transition-colors shadow-2xs inline-flex items-center gap-1"
                           >
                             <span>Promote to Admin</span>
                           </button>
@@ -306,8 +484,10 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                             </span>
                           ) : (
                             <button
+                              type="button"
+                              disabled={isSubmitting}
                               onClick={() => handleRoleChange(user, 'guest')}
-                              className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50/50 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors inline-flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50/50 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
                             >
                               <span>Demote to Guest</span>
                             </button>
@@ -322,37 +502,53 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                         )}
                       </td>
 
-                      {/* Access Control (Suspend / Activate) */}
-                      <td className="py-3.5 px-4 text-right">
-                        {user.isActive !== false ? (
+                      {/* Actions: Bookings Drawer & Access Control */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleToggleStatus(user)}
-                            disabled={isCurrentAdmin || isLastAdmin}
-                            title={
-                              isCurrentAdmin
-                                ? 'Cannot suspend your own account'
-                                : isLastAdmin
-                                ? 'Cannot suspend the last admin account'
-                                : 'Suspend user account'
-                            }
-                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1 ${
-                              isCurrentAdmin || isLastAdmin
-                                ? 'opacity-40 cursor-not-allowed text-neutral-400'
-                                : 'text-red-600 hover:bg-red-50 hover:border-red-200 border border-transparent'
-                            }`}
+                            type="button"
+                            data-testid={`user-bookings-btn-${user.id}`}
+                            onClick={() => handleOpenBookings(user)}
+                            className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 transition-colors inline-flex items-center gap-1"
+                            title="View user reservations"
                           >
-                            <Lock className="w-3 h-3" />
-                            <span>Suspend</span>
+                            <BookmarkCheck className="w-3 h-3 text-[var(--color-brand)]" />
+                            <span>Bookings</span>
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => handleToggleStatus(user)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors inline-flex items-center gap-1"
-                          >
-                            <Unlock className="w-3 h-3" />
-                            <span>Reactivate</span>
-                          </button>
-                        )}
+
+                          {user.isActive !== false ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStatus(user)}
+                              disabled={isSubmitting || isCurrentAdmin || isLastAdmin}
+                              title={
+                                isCurrentAdmin
+                                  ? 'Cannot suspend your own account'
+                                  : isLastAdmin
+                                  ? 'Cannot suspend the last admin account'
+                                  : 'Suspend user account'
+                              }
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                                isCurrentAdmin || isLastAdmin
+                                  ? 'opacity-40 cursor-not-allowed text-neutral-400'
+                                  : 'text-red-600 hover:bg-red-50 hover:border-red-200 border border-transparent'
+                              }`}
+                            >
+                              <Lock className="w-3 h-3" />
+                              <span>Suspend</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => handleToggleStatus(user)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
+                            >
+                              <Unlock className="w-3 h-3" />
+                              <span>Reactivate</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -362,17 +558,147 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           </table>
         </div>
 
-        {/* Table Footer with Summary */}
-        <div className="p-4 border-t border-[var(--color-border-light)] bg-neutral-50/50 flex flex-col sm:flex-row items-center justify-between text-xs text-neutral-500 gap-2">
-          <div>
-            Showing <strong className="text-neutral-900">{filteredUsers.length}</strong> of{' '}
-            <strong className="text-neutral-900">{users.length}</strong> registered user accounts.
-          </div>
-          <div className="text-[11px] text-neutral-400">
-            * Host roles are managed strictly via Host Approvals queue (§4.3 Screen #29).
-          </div>
+        <PaginationBar
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+          disabled={loading}
+          itemLabel="users"
+        />
+
+        <div className="px-4 py-2.5 border-t border-[var(--color-border-light)] bg-neutral-50/40 text-[11px] text-neutral-400">
+          * Host roles are managed strictly via Host Approvals queue (§4.3 Screen #29).
         </div>
       </div>
+
+      {/* Drawer: User Reservations History */}
+      {drawerUser && (
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setDrawerUser(null);
+            }
+          }}
+        >
+          <div
+            data-testid="user-reservations-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Reservations for ${drawerUser.email}`}
+            className="w-full max-w-lg bg-white h-full shadow-2xl p-6 overflow-y-auto border-l border-[var(--color-border-light)] flex flex-col justify-between"
+          >
+            <div className="space-y-5">
+              {/* Drawer Header */}
+              <div className="flex items-start justify-between gap-3 pb-4 border-b border-[var(--color-border-light)]">
+                <div>
+                  <h3 className="text-lg font-bold text-[var(--color-text-on-light)]">
+                    User Reservations
+                  </h3>
+                  <p className="text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
+                    {drawerUser.firstName || drawerUser.lastName
+                      ? `${drawerUser.firstName ?? ''} ${drawerUser.lastName ?? ''}`.trim() + ' · '
+                      : ''}
+                    <span className="font-mono">{drawerUser.email}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDrawerUser(null)}
+                  aria-label="Close reservations drawer"
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Drawer Body */}
+              {drawerLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-xs text-neutral-500">
+                  <div className="w-6 h-6 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin" />
+                  <span>Loading user bookings...</span>
+                </div>
+              ) : drawerError ? (
+                <div
+                  role="alert"
+                  className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2"
+                >
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <span>{drawerError}</span>
+                </div>
+              ) : drawerReservations.length === 0 ? (
+                <div className="py-12 text-center text-xs text-neutral-500 space-y-2">
+                  <BookmarkCheck className="w-8 h-8 text-neutral-300 mx-auto" />
+                  <p className="font-semibold text-neutral-700">No bookings found</p>
+                  <p className="text-neutral-400">
+                    This user has not made any reservations on NomadDesk yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
+                    {drawerReservations.length}{' '}
+                    {drawerReservations.length === 1 ? 'Reservation' : 'Reservations'}
+                  </div>
+                  {drawerReservations.map((res) => {
+                    const prop = propertyById.get(res.propertyId);
+                    const totalUSD = Math.round((res.totalAmount || 0) / 100);
+                    return (
+                      <div
+                        key={res.id}
+                        data-testid={`user-drawer-reservation-${res.code}`}
+                        className="p-4 rounded-xl border border-[var(--color-border-light)] bg-neutral-50/70 space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-xs font-bold text-[var(--color-brand)]">
+                            #{res.code}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {renderReservationStatusBadge(res.status)}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="text-sm font-semibold text-neutral-900">
+                            {prop ? prop.title : `Property #${res.propertyId}`}
+                          </div>
+                          {prop?.city && (
+                            <div className="text-xs text-neutral-500">{prop.city}</div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1 text-xs border-t border-[var(--color-border-light)]">
+                          <div className="flex items-center gap-1.5 text-neutral-600">
+                            <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                            <span>
+                              {res.moveInDate} → {res.moveOutDate} ({res.nights}n)
+                            </span>
+                          </div>
+                          <div className="font-bold text-neutral-900">
+                            ${totalUSD.toLocaleString('en-US')}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="pt-4 border-t border-[var(--color-border-light)] flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setDrawerUser(null)}
+                className="btn btn-outline btn-sm text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
