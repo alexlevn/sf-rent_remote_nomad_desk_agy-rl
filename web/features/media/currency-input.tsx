@@ -59,17 +59,20 @@ export function CurrencyInput({
   const [isFocused, setIsFocused] = useState(false);
   const [draftText, setDraftText] = useState('');
 
+  const normalizedValue =
+    value === '' || !Number.isFinite(value) ? '' : Math.trunc(value);
+
   // Derive displayed text so external prop resets stay in sync without remounting
   const displayedValue = isFocused
-    ? parseCurrencyDraft(draftText) === value
+    ? parseCurrencyDraft(draftText) === normalizedValue
       ? draftText
-      : value === ''
+      : normalizedValue === ''
         ? ''
-        : String(value)
-    : formatCurrencyInteger(value);
+        : String(normalizedValue)
+    : formatCurrencyInteger(normalizedValue);
 
   const handleFocus = () => {
-    setDraftText(value === '' ? '' : String(value));
+    setDraftText(normalizedValue === '' ? '' : String(normalizedValue));
     setIsFocused(true);
   };
 

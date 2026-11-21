@@ -106,6 +106,7 @@ function MediaLibraryModalContent({
   const isMountedRef = useRef(true);
   const isUploadingRef = useRef(false);
   const deletingIdsRef = useRef<Set<number>>(new Set());
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabRefs = useRef<Record<MediaLibraryTab, HTMLButtonElement | null>>({
     upload: null,
@@ -115,6 +116,7 @@ function MediaLibraryModalContent({
 
   useEffect(() => {
     isMountedRef.current = true;
+    dialogRef.current?.focus();
     return () => {
       isMountedRef.current = false;
     };
@@ -188,10 +190,16 @@ function MediaLibraryModalContent({
           return;
         }
 
+        const safeTotalPages = Math.max(1, data.totalPages);
+        if (data.total > 0 && libraryPage > safeTotalPages) {
+          setLibraryPage(safeTotalPages);
+          return;
+        }
+
         setLibraryError(null);
         setLibraryItems(data.items);
         setLibraryTotal(data.total);
-        setLibraryTotalPages(Math.max(1, data.totalPages));
+        setLibraryTotalPages(safeTotalPages);
         setSettledQueryKey(currentQueryKey);
       })
       .catch((error: unknown) => {
@@ -431,8 +439,7 @@ function MediaLibraryModalContent({
     onClose();
   };
 
-  const handleInsertUrl = (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleInsertUrl = () => {
     const trimmedUrl = urlInput.trim();
     if (!isSafeImagePath(trimmedUrl)) {
       setUrlError(
@@ -449,6 +456,15 @@ function MediaLibraryModalContent({
       },
     ]);
     onClose();
+  };
+
+  const handleUrlInputKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleInsertUrl();
+    }
   };
 
   const handleTabKeyDown = (
@@ -495,7 +511,11 @@ function MediaLibraryModalContent({
       />
 
       {/* Dialog container */}
-      <div className="relative z-10 flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] shadow-2xl">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="relative z-10 flex w-full max-w-4xl max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] shadow-2xl focus:outline-none"
+      >
         {/* Header */}
         <div className="flex items-center justify-between gap-4 border-b border-[var(--color-border-light)] px-4 py-3.5 sm:px-6">
           <div className="min-w-0">
@@ -911,13 +931,12 @@ function MediaLibraryModalContent({
             </div>
           )}
 
-          {/* TAB 3: FROM URL */}
+          {/* TAB 3: FROM URL (div instead of <form> because modal can mount inside a parent form) */}
           {allowUrlTab && activeTab === 'url' && (
-            <form
+            <div
               role="tabpanel"
               id={`${titleId}-panel-url`}
               aria-labelledby={`${titleId}-tab-url`}
-              onSubmit={handleInsertUrl}
               className="space-y-4"
             >
               <div>
@@ -935,6 +954,7 @@ function MediaLibraryModalContent({
                     setUrlInput(e.target.value);
                     if (urlError) setUrlError(null);
                   }}
+                  onKeyDown={handleUrlInputKeyDown}
                   placeholder="/seed/guide/placeholder.webp, /uploads/..., or https://..."
                   className="w-full min-h-10 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] px-3 py-2 text-sm text-[var(--color-text-on-light)] placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                 />
@@ -958,8 +978,8 @@ function MediaLibraryModalContent({
                   value={urlAlt}
                   maxLength={255}
                   onChange={(e) => setUrlAlt(e.target.value)}
+                  onKeyDown={handleUrlInputKeyDown}
                   placeholder="Describe the image for accessibility"
-                  aria-label="Image alt text"
                   className="w-full min-h-10 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] px-3 py-2 text-sm text-[var(--color-text-on-light)] placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
                 />
               </div>
@@ -1002,14 +1022,15 @@ function MediaLibraryModalContent({
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
                   data-testid="media-url-insert-btn"
+                  onClick={handleInsertUrl}
                   className="min-h-10 rounded-lg bg-[var(--color-brand)] px-4 py-2 text-sm font-semibold text-[var(--color-brand-text)] hover:bg-[var(--color-brand-hover)] transition-colors cursor-pointer"
                 >
                   Insert Image
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </div>
 
