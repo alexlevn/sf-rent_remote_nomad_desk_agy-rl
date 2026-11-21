@@ -365,17 +365,18 @@ export async function deleteWorkstationComponent(
   id: string
 ): Promise<boolean> {
   const validCategory = workstationCategorySchema.parse(category);
-  if (!id || typeof id !== 'string') return false;
+  const cleanId = typeof id === 'string' ? id.trim() : '';
+  if (!cleanId) return false;
 
   const refRows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(reservations)
     .where(
       sql`${reservations.workstationConfig} IS NOT NULL AND (
-        ${reservations.workstationConfig}->>'deskId' = ${id} OR
-        ${reservations.workstationConfig}->>'chairId' = ${id} OR
-        ${reservations.workstationConfig}->>'monitorId' = ${id} OR
-        ${reservations.workstationConfig}->>'keyboardMouseId' = ${id}
+        ${reservations.workstationConfig}->>'deskId' = ${cleanId} OR
+        ${reservations.workstationConfig}->>'chairId' = ${cleanId} OR
+        ${reservations.workstationConfig}->>'monitorId' = ${cleanId} OR
+        ${reservations.workstationConfig}->>'keyboardMouseId' = ${cleanId}
       )`
     );
 
@@ -390,7 +391,7 @@ export async function deleteWorkstationComponent(
     .where(
       and(
         eq(workstationComponents.category, validCategory),
-        eq(workstationComponents.componentId, id)
+        eq(workstationComponents.componentId, cleanId)
       )
     )
     .returning({ id: workstationComponents.id });
@@ -469,13 +470,14 @@ export async function saveWorkstationAddon(
  * Blocks deletion when existing reservations reference this add-on in workstation_config.
  */
 export async function deleteWorkstationAddon(id: string): Promise<boolean> {
-  if (!id || typeof id !== 'string') return false;
+  const cleanId = typeof id === 'string' ? id.trim() : '';
+  if (!cleanId) return false;
 
   const refRows = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(reservations)
     .where(
-      sql`${reservations.workstationConfig} IS NOT NULL AND jsonb_typeof(${reservations.workstationConfig}->'addonIds') = 'array' AND (${reservations.workstationConfig}->'addonIds') @> ${JSON.stringify([id])}::jsonb`
+      sql`${reservations.workstationConfig} IS NOT NULL AND jsonb_typeof(${reservations.workstationConfig}->'addonIds') = 'array' AND (${reservations.workstationConfig}->'addonIds') @> ${JSON.stringify([cleanId])}::jsonb`
     );
 
   if ((refRows[0]?.count ?? 0) > 0) {
@@ -486,7 +488,7 @@ export async function deleteWorkstationAddon(id: string): Promise<boolean> {
 
   const deleted = await db
     .delete(workstationAddons)
-    .where(eq(workstationAddons.addonId, id))
+    .where(eq(workstationAddons.addonId, cleanId))
     .returning({ id: workstationAddons.id });
 
   return deleted.length > 0;

@@ -134,6 +134,7 @@ export async function updateAdminPropertyAction(
   if (updated) {
     revalidatePath(`/l/apartments/${updated.slug}`);
   }
+  revalidatePath('/l/apartments/[slug]', 'page');
   revalidatePath('/');
   revalidatePath('/admin/properties');
   revalidatePath('/c/[city]', 'page');

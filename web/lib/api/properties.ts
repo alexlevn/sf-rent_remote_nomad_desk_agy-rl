@@ -808,10 +808,24 @@ export async function deleteProperty(id: number): Promise<boolean> {
     );
   }
 
-  const deleted = await db
-    .delete(properties)
-    .where(eq(properties.id, parsedId.data))
-    .returning({ id: properties.id });
+  try {
+    const deleted = await db
+      .delete(properties)
+      .where(eq(properties.id, parsedId.data))
+      .returning({ id: properties.id });
 
-  return deleted.length > 0;
+    return deleted.length > 0;
+  } catch (err) {
+    const code =
+      typeof err === 'object' && err !== null
+        ? (err as { code?: unknown; cause?: { code?: unknown } }).code ??
+          (err as { cause?: { code?: unknown } }).cause?.code
+        : undefined;
+    if (code === '23503') {
+      throw new Error(
+        'Cannot delete property with existing reservations. Please hide it instead.'
+      );
+    }
+    throw err;
+  }
 }
