@@ -238,18 +238,24 @@ test.describe('Upload Media, Media Library, Tiptap Image, Formatted Price & Host
       page.locator(`img[src="${adminUploadedCoverUrl}"]`).first(),
     );
 
-    const richDesc = page.locator('.rich-html-content').first();
+    const aboutHomeSection = page
+      .getByRole('heading', { level: 2, name: 'About This Home' })
+      .locator('xpath=..');
     await expect(
-      richDesc.locator('strong', { hasText: 'Dedicated dual-4K workspace' }),
+      aboutHomeSection.locator('strong', {
+        hasText: 'Dedicated dual-4K workspace',
+      }),
     ).toBeVisible();
     await expect(
-      richDesc.locator('li', { hasText: '1 Gbps symmetrical fiber' }),
+      aboutHomeSection.locator('li', { hasText: '1 Gbps symmetrical fiber' }),
     ).toBeVisible();
     await expect(
-      richDesc.locator('li', { hasText: 'Herman Miller ergonomic seating' }),
+      aboutHomeSection.locator('li', {
+        hasText: 'Herman Miller ergonomic seating',
+      }),
     ).toBeVisible();
     await expectImageLoaded(
-      richDesc.locator(`img[src="${adminUploadedCoverUrl}"]`),
+      aboutHomeSection.locator(`img[src="${adminUploadedCoverUrl}"]`),
     );
   });
 
@@ -497,18 +503,19 @@ test.describe('Upload Media, Media Library, Tiptap Image, Formatted Price & Host
       new RegExp(`${avatarUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
     );
 
+    const saveSuccessAlert = page.getByText(/Host profile updated successfully/i);
     await page.getByRole('button', { name: 'Save Profile', exact: true }).click();
-    await expect(
-      page.getByText(/Host profile updated successfully/i),
-    ).toBeVisible();
+    await expect(saveSuccessAlert).toBeVisible();
+
+    // Dismiss the first banner so the second save assertion waits for the clear action to finish
+    await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await expect(saveSuccessAlert).not.toBeVisible();
 
     // Clear temporary E2E avatar so Host 1 does not retain a deleted /uploads/ URL after afterAll reset
     await page.getByTestId('host-avatar-picker-clear-btn').click();
     await expect(page.getByTestId('host-avatar-picker-input')).toHaveValue('');
     await page.getByRole('button', { name: 'Save Profile', exact: true }).click();
-    await expect(
-      page.getByText(/Host profile updated successfully/i),
-    ).toBeVisible();
+    await expect(saveSuccessAlert).toBeVisible();
   });
 
   test('6. Responsive & keyboard check at 768px viewport: no horizontal overflow and Escape closes Media Library Modal', async ({
