@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, startTransition } from 'react';
 import { useCurrency } from '@/context/currency-context';
-import { getExchangeRates, updateExchangeRates } from '@/lib/api/rates';
+import { getExchangeRates } from '@/lib/api/rates';
+import { updateExchangeRatesAction } from '@/app/admin/cms-actions';
 import type { ExchangeRates } from '@/lib/types';
 import {
   Coins,
@@ -69,8 +70,8 @@ export function CurrencyRatesForm() {
         GBP_USD: gbpNum,
       };
 
-      // 1. Update mock store
-      await updateExchangeRates(updated);
+      // 1. Update mock store via server action
+      await updateExchangeRatesAction(updated);
 
       // 2. Update client CurrencyContext and trigger storage event
       if (updateRates) {
@@ -148,6 +149,7 @@ export function CurrencyRatesForm() {
                 value={eurRate}
                 onChange={(e) => setEurRate(e.target.value)}
                 placeholder="1.08"
+                data-testid="eur-rate-input"
                 className="w-full px-4 py-2.5 bg-neutral-50 border border-[var(--color-border-light)] rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-brand)] focus:bg-white transition-all font-mono"
               />
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400">
@@ -202,6 +204,7 @@ export function CurrencyRatesForm() {
             <button
               type="submit"
               disabled={saving || loading}
+              data-testid="save-rates-btn"
               className="px-6 py-2.5 rounded-xl bg-[var(--color-brand)] text-white text-xs md:text-sm font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-sm disabled:opacity-50 inline-flex items-center gap-2"
             >
               {saving ? (

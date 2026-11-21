@@ -11,7 +11,9 @@ export async function listLocations(options?: {
   const list = options?.includeInactive
     ? store.locations
     : store.locations.filter((loc) => loc.isActive !== false);
-  return list.map((loc) => ({ ...loc }));
+  return [...list]
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+    .map((loc) => ({ ...loc }));
 }
 
 /**
@@ -42,12 +44,36 @@ export async function getLocationById(id: number): Promise<Location | null> {
  */
 export async function saveLocation(data: Partial<Location>): Promise<Location> {
   const store = getMockStore();
-  if (data.id) {
-    const idx = store.locations.findIndex((l) => l.id === data.id);
-    if (idx !== -1) {
-      store.locations[idx] = { ...store.locations[idx], ...data };
-      return { ...store.locations[idx] };
+  const existingIdx = data.id
+    ? store.locations.findIndex((l) => l.id === data.id)
+    : store.locations.findIndex(
+        (l) =>
+          (data.slug && l.slug.toLowerCase() === data.slug.toLowerCase()) ||
+          (data.name && l.name.toLowerCase() === data.name.toLowerCase())
+      );
+
+  if (existingIdx !== -1) {
+    if (data.position != null && data.position <= 8) {
+      store.locations.forEach((l) => {
+        if (
+          l.id !== store.locations[existingIdx].id &&
+          l.position != null &&
+          l.position >= data.position!
+        ) {
+          l.position += 1;
+        }
+      });
     }
+    store.locations[existingIdx] = { ...store.locations[existingIdx], ...data };
+    return { ...store.locations[existingIdx] };
+  }
+
+  if (data.position != null && data.position <= 8) {
+    store.locations.forEach((l) => {
+      if (l.position != null && l.position >= data.position!) {
+        l.position += 1;
+      }
+    });
   }
 
   const maxId = store.locations.reduce((max, l) => Math.max(max, l.id), 0);

@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
 import type { Location } from '@/lib/types';
-import { listLocations } from '@/lib/api/locations';
 import {
   saveLocationAction,
   deleteLocationAction,
+  fetchLocationsAction,
 } from '@/app/admin/cms-actions';
 import {
   MapPin,
@@ -47,7 +47,7 @@ export default function AdminLocationsPage() {
 
   const fetchLocations = async () => {
     try {
-      const data = await listLocations({ includeInactive: true });
+      const data = await fetchLocationsAction();
       startTransition(() => {
         setLocations(data);
         setLoading(false);
@@ -362,6 +362,7 @@ export default function AdminLocationsPage() {
                             type="button"
                             onClick={() => handleToggleActive(loc)}
                             title={isHidden ? 'Show destination' : 'Hide destination'}
+                            data-testid={`toggle-active-${loc.slug}`}
                             className="p-1.5 rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                           >
                             {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -369,6 +370,7 @@ export default function AdminLocationsPage() {
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(loc)}
+                            data-testid={`edit-location-${loc.slug}`}
                             className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] text-xs font-medium text-[var(--color-text-on-light)] hover:bg-neutral-100 transition-colors cursor-pointer"
                           >
                             Edit City

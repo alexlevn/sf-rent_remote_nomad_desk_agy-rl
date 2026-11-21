@@ -8,13 +8,13 @@ import type {
   WorkstationAddon,
   WorkstationComponents,
 } from '@/lib/types';
-import { listWorkstations } from '@/lib/api/workstations';
 import {
   saveWorkstationPackageAction,
   saveWorkstationComponentAction,
   deleteWorkstationComponentAction,
   saveWorkstationAddonAction,
   deleteWorkstationAddonAction,
+  fetchWorkstationsAction,
 } from '@/app/admin/cms-actions';
 import {
   Monitor,
@@ -54,7 +54,7 @@ export default function AdminWorkstationsPage() {
 
   const fetchWorkstations = async () => {
     try {
-      const wsData = await listWorkstations();
+      const wsData = await fetchWorkstationsAction();
       startTransition(() => {
         setData(wsData);
         setLoading(false);

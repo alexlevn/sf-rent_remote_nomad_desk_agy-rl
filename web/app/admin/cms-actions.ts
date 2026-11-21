@@ -6,6 +6,7 @@ import {
   saveLocation,
   deleteLocation,
   reorderTopCities,
+  listLocations,
 } from '@/lib/api/locations';
 import {
   saveWorkstationPackage,
@@ -13,10 +14,13 @@ import {
   deleteWorkstationComponent,
   saveWorkstationAddon,
   deleteWorkstationAddon,
+  listWorkstations,
 } from '@/lib/api/workstations';
-import { saveTravelGuide, deleteTravelGuide } from '@/lib/api/guides';
+import { saveTravelGuide, deleteTravelGuide, listTravelGuides } from '@/lib/api/guides';
 import { saveBlogPost, deleteBlogPost } from '@/lib/api/blog';
 import { saveVideo, deleteVideo, reorderVideos } from '@/lib/api/videos';
+import { reorderFeaturedProperties } from '@/lib/api/properties';
+import { updateExchangeRates } from '@/lib/api/rates';
 import type {
   Location,
   WorkstationPackage,
@@ -26,6 +30,7 @@ import type {
   TravelGuide,
   BlogPost,
   CommunityVideo,
+  ExchangeRates,
 } from '@/lib/types';
 
 /**
@@ -230,3 +235,53 @@ export async function reorderVideosAction(orderedIds: number[]) {
   revalidatePath('/admin/videos');
   return { success: true, videos };
 }
+
+// ==========================================
+// Featured Properties CMS Actions (AC-CMS-4)
+// ==========================================
+
+export async function reorderFeaturedPropertiesAction(orderedIds: number[]) {
+  await assertAdminRole();
+  const properties = await reorderFeaturedProperties(orderedIds);
+  revalidatePath('/');
+  revalidatePath('/admin/properties');
+  return { success: true, properties };
+}
+
+// ==========================================
+// Exchange Rates CMS Actions (AC-CMS-5)
+// ==========================================
+
+export async function updateExchangeRatesAction(rates: Partial<ExchangeRates>) {
+  await assertAdminRole();
+  const updated = await updateExchangeRates(rates);
+  revalidatePath('/');
+  revalidatePath('/admin/settings');
+  revalidatePath('/c/[city]');
+  revalidatePath('/l/apartments/[slug]');
+  return { success: true, rates: updated };
+}
+
+// ==========================================
+// Server Fetch Actions for Client Admin Pages
+// ==========================================
+
+export async function fetchWorkstationsAction() {
+  await assertAdminRole();
+  return await listWorkstations();
+}
+
+export async function fetchLocationsAction() {
+  await assertAdminRole();
+  return await listLocations({ includeInactive: true });
+}
+
+export async function fetchTravelGuidesAction() {
+  await assertAdminRole();
+  const [guidesData, locsData] = await Promise.all([
+    listTravelGuides({ includeDrafts: true, status: 'all' }),
+    listLocations({ includeInactive: true }),
+  ]);
+  return { guidesData, locsData };
+}
+

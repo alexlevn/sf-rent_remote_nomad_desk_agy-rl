@@ -64,6 +64,7 @@ export function BuilderSummaryCard({
           <button
             type="button"
             onClick={onApplyProPreset}
+            data-testid="preset-pro-btn"
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center justify-center gap-1 cursor-pointer ${
               totalUpgradeEUR >= proPriceEUR
                 ? 'bg-[var(--color-brand)] text-white border-transparent shadow-xs'

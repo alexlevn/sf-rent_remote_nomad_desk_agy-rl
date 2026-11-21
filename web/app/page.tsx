@@ -20,16 +20,20 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
-  const [locations, properties, videos, guides] = await Promise.all([
+  const [locations, properties, videos, featuredGuides, allGuides] = await Promise.all([
     listLocations(),
     listProperties({ featured: true }),
     listVideos(),
     listTravelGuides({ featured: true }),
+    listTravelGuides(),
   ]);
 
   // Fallback to general list if featured query returned fewer than 3
   const displayProperties =
     properties.length >= 3 ? properties : await listProperties();
+
+  const displayGuides =
+    featuredGuides.length > 0 ? featuredGuides : allGuides.slice(0, 3);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -43,7 +47,7 @@ export default async function HomePage() {
       <TopCities locations={locations} />
 
       {/* 4. 3D Stay Showcase & Process */}
-      <Showcase3D />
+      <Showcase3D property={displayProperties[0]} />
 
       {/* 5. Workstation Upgrade Banner */}
       <WorkstationStrip />
@@ -52,7 +56,7 @@ export default async function HomePage() {
       <CommunityReels videos={videos} />
 
       {/* 7. Travel Guides Highlights */}
-      <GuideHighlights guides={guides} />
+      <GuideHighlights guides={displayGuides} />
 
       {/* 8. FAQs Accordion */}
       <HomeFAQ />

@@ -52,7 +52,9 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
 
   // Featured filter
   if (params?.featured) {
-    result = result.filter((p) => p.featuredPosition != null || p.isFeatured === true);
+    result = result
+      .filter((p) => p.featuredPosition != null || p.isFeatured === true)
+      .sort((a, b) => (a.featuredPosition ?? 999) - (b.featuredPosition ?? 999));
   }
 
   // Bedrooms filter (exact or minimum)

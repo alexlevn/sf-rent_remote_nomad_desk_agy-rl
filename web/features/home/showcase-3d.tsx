@@ -1,7 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { HOME_CONTENT } from '@/content/home';
+import type { Property } from '@/lib/types';
 
-export function Showcase3D() {
+interface Showcase3DProps {
+  property?: Property;
+}
+
+export function Showcase3D({ property }: Showcase3DProps = {}) {
   return (
     <section className="py-20 sm:py-24 bg-[var(--color-bg-dark)] text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -50,8 +55,11 @@ export function Showcase3D() {
             <span className="text-xs font-semibold tracking-wider text-[var(--color-brand)] uppercase">
               Virtual 3D Room Tour
             </span>
-            <h3 className="text-xl sm:text-2xl font-bold text-white mt-1 mb-3">
-              Ergonomic Layouts Inspected for High-Output Work
+            <h3
+              data-testid="showcase-3d-title"
+              className="text-xl sm:text-2xl font-bold text-white mt-1 mb-3"
+            >
+              {property ? property.title : 'Ergonomic Layouts Inspected for High-Output Work'}
             </h3>
             <p className="text-xs sm:text-sm text-neutral-400 mb-6 leading-relaxed">
               Every home is verified with electric sit-stand desks, 4K monitor arms, calibrated task lighting, and minimum 300 Mbps symmetrical fiber connectivity.

@@ -3,9 +3,11 @@
 import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
 import Link from 'next/link';
 import type { TravelGuide, Location } from '@/lib/types';
-import { listTravelGuides } from '@/lib/api/guides';
-import { listLocations } from '@/lib/api/locations';
-import { saveTravelGuideAction, deleteTravelGuideAction } from '@/app/admin/cms-actions';
+import {
+  saveTravelGuideAction,
+  deleteTravelGuideAction,
+  fetchTravelGuidesAction,
+} from '@/app/admin/cms-actions';
 import { CmsRichEditorMock } from '@/features/admin/cms-rich-editor-mock';
 import {
   BookOpen,
@@ -40,10 +42,7 @@ export default function AdminGuidesPage() {
 
   const fetchData = async () => {
     try {
-      const [guidesData, locsData] = await Promise.all([
-        listTravelGuides({ includeDrafts: true, status: 'all' }),
-        listLocations({ includeInactive: true }),
-      ]);
+      const { guidesData, locsData } = await fetchTravelGuidesAction();
 
       startTransition(() => {
         setGuides(guidesData);

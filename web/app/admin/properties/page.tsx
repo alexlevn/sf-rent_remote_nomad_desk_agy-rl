@@ -43,6 +43,7 @@ export default function AdminPropertiesPage() {
           <button
             type="button"
             onClick={() => setViewMode('featured')}
+            data-testid="featured-tab-btn"
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               viewMode === 'featured'
                 ? 'bg-white dark:bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-light)] shadow-xs'

@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo, useRef, startTransition } from 'react';
 import Image from 'next/image';
 import type { Property } from '@/lib/types';
-import { listProperties, reorderFeaturedProperties } from '@/lib/api/properties';
+import { fetchAdminPropertiesAction } from '@/app/admin/admin-actions';
+import { reorderFeaturedPropertiesAction } from '@/app/admin/cms-actions';
 import {
   Sparkles,
   ArrowUp,
@@ -27,9 +28,9 @@ export function FeaturedPropertiesManager() {
 
   const fetchData = async () => {
     try {
-      const list = await listProperties({ status: 'all' });
+      const { propList } = await fetchAdminPropertiesAction();
       // Filter published only for featured selection
-      const published = list.filter((p) => p.status === 'published');
+      const published = propList.filter((p) => p.status === 'published');
 
       // Sort featured by featuredPosition ascending (1-based)
       const featured = [...published]
@@ -75,9 +76,9 @@ export function FeaturedPropertiesManager() {
 
     try {
       const orderedIds = newList.map((p) => p.id);
-      const updated = await reorderFeaturedProperties(orderedIds);
+      const res = await reorderFeaturedPropertiesAction(orderedIds);
       startTransition(() => {
-        setFeaturedProperties(updated);
+        setFeaturedProperties(res.properties);
       });
       showToast('Featured properties and 3D Showcase updated successfully!');
     } catch (err) {
@@ -170,6 +171,7 @@ export function FeaturedPropertiesManager() {
           <select
             value={selectedToAddId}
             onChange={(e) => setSelectedToAddId(e.target.value ? Number(e.target.value) : '')}
+            data-testid="select-featured-property"
             className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50 dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           >
             <option value="">-- Select a property to feature ({availableToAdd.length} eligible) --</option>
@@ -185,6 +187,7 @@ export function FeaturedPropertiesManager() {
             type="button"
             onClick={handleAdd}
             disabled={!selectedToAddId || isSubmitting}
+            data-testid="add-to-featured-btn"
             className="w-full sm:w-auto btn btn-primary btn-sm flex items-center justify-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
@@ -218,6 +221,7 @@ export function FeaturedPropertiesManager() {
             return (
               <div
                 key={property.id}
+                data-testid={`featured-row-${property.id}`}
                 className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border transition-all ${
                   isFirst
                     ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 shadow-sm'
@@ -227,6 +231,7 @@ export function FeaturedPropertiesManager() {
                 {/* Left: Rank & Info */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div
+                    data-testid="featured-rank"
                     className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
                       isFirst
                         ? 'bg-[var(--color-brand)] text-white shadow-sm'
@@ -281,6 +286,7 @@ export function FeaturedPropertiesManager() {
                       type="button"
                       onClick={() => handleMoveUp(index)}
                       disabled={isFirst || isSubmitting}
+                      data-testid={`move-up-${property.id}`}
                       className="p-1.5 rounded-md hover:bg-white dark:hover:bg-neutral-700 disabled:opacity-30 disabled:hover:bg-transparent text-neutral-700 dark:text-neutral-200"
                       title="Move up"
                     >
@@ -290,6 +296,7 @@ export function FeaturedPropertiesManager() {
                       type="button"
                       onClick={() => handleMoveDown(index)}
                       disabled={isLast || isSubmitting}
+                      data-testid={`move-down-${property.id}`}
                       className="p-1.5 rounded-md hover:bg-white dark:hover:bg-neutral-700 disabled:opacity-30 disabled:hover:bg-transparent text-neutral-700 dark:text-neutral-200"
                       title="Move down"
                     >
@@ -301,6 +308,7 @@ export function FeaturedPropertiesManager() {
                     type="button"
                     onClick={() => handleRemove(property.id)}
                     disabled={isSubmitting}
+                    data-testid={`remove-featured-${property.id}`}
                     className="p-2 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                     title="Remove from featured"
                   >
