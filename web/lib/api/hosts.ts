@@ -121,6 +121,12 @@ export async function applyHost(
   let saved: HostProfile;
 
   if (existing.length > 0) {
+    if (existing[0].status === 'suspended') {
+      throw new Error('Suspended host accounts cannot reapply; please contact support');
+    }
+    if (existing[0].status === 'approved') {
+      throw new Error('Host account is already approved');
+    }
     const updatedRows = await db
       .update(hostProfiles)
       .set({

@@ -367,6 +367,22 @@ export async function updateReservationStatus(
     }
   }
 
+  // Enforce valid reservation lifecycle transitions
+  if ((status === 'confirmed' || status === 'rejected') && existing.status !== 'pending') {
+    throw new Error(
+      `Cannot transition reservation from '${existing.status}' to '${status}'`
+    );
+  }
+  if (
+    status === 'cancelled' &&
+    existing.status !== 'pending' &&
+    existing.status !== 'confirmed'
+  ) {
+    throw new Error(
+      `Cannot cancel reservation in '${existing.status}' status`
+    );
+  }
+
   const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
   if (status === 'rejected' && trimmedReason.length === 0) {
     throw new Error('Rejection reason is required');
@@ -474,69 +490,74 @@ export async function addBlockedDate(
   }
   const parsed = parsedResult.data;
 
-  // Verify property exists and enforce host ownership when hostId is provided (Risk #8)
-  const propRows = await db
-    .select({ id: properties.id, hostId: properties.hostId })
-    .from(properties)
-    .where(eq(properties.id, parsed.propertyId))
-    .limit(1);
-
-  if (propRows.length === 0) {
-    throw new Error(`Property ${parsed.propertyId} not found`);
-  }
-  if (options?.hostId != null && propRows[0].hostId !== options.hostId) {
-    throw new Error('Unauthorized: property does not belong to this host');
-  }
-
   // Lazily expire overdue pending bookings so expired holds do not block host calendar (Risk #9)
   await expireOverduePendingReservations(parsed.propertyId);
 
-  // Prevent overlapping blocked ranges for the same property
-  const existingBlocks = await db
-    .select({ id: blockedDates.id })
-    .from(blockedDates)
-    .where(
-      and(
-        eq(blockedDates.propertyId, parsed.propertyId),
-        sql`${blockedDates.startDate} < ${parsed.endDate}::date`,
-        sql`${blockedDates.endDate} > ${parsed.startDate}::date`
+  // Serialize overlap check + insert per property inside a transaction to prevent race conditions
+  const insertedRow = await db.transaction(async (tx) => {
+    const propRows = await tx
+      .select({ id: properties.id, hostId: properties.hostId })
+      .from(properties)
+      .where(eq(properties.id, parsed.propertyId))
+      .for('update')
+      .limit(1);
+
+    if (propRows.length === 0) {
+      throw new Error(`Property ${parsed.propertyId} not found`);
+    }
+    if (options?.hostId != null && propRows[0].hostId !== options.hostId) {
+      throw new Error('Unauthorized: property does not belong to this host');
+    }
+
+    // Prevent overlapping blocked ranges for the same property
+    const existingBlocks = await tx
+      .select({ id: blockedDates.id })
+      .from(blockedDates)
+      .where(
+        and(
+          eq(blockedDates.propertyId, parsed.propertyId),
+          sql`${blockedDates.startDate} < ${parsed.endDate}::date`,
+          sql`${blockedDates.endDate} > ${parsed.startDate}::date`
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (existingBlocks.length > 0) {
-    throw new Error('This blocked period overlaps with an existing blocked date range');
-  }
+    if (existingBlocks.length > 0) {
+      throw new Error('This blocked period overlaps with an existing blocked date range');
+    }
 
-  // Prevent overlapping with existing active bookings (pending or confirmed) - AC-HOST-6
-  const activeBookings = await db
-    .select({ id: reservations.id })
-    .from(reservations)
-    .where(
-      and(
-        eq(reservations.propertyId, parsed.propertyId),
-        inArray(reservations.status, ['pending', 'confirmed']),
-        sql`${reservations.moveInDate} < ${parsed.endDate}::date`,
-        sql`${reservations.moveOutDate} > ${parsed.startDate}::date`
+    // Prevent overlapping with existing active bookings (pending or confirmed) - AC-HOST-6
+    const activeBookings = await tx
+      .select({ id: reservations.id })
+      .from(reservations)
+      .where(
+        and(
+          eq(reservations.propertyId, parsed.propertyId),
+          inArray(reservations.status, ['pending', 'confirmed']),
+          sql`${reservations.moveInDate} < ${parsed.endDate}::date`,
+          sql`${reservations.moveOutDate} > ${parsed.startDate}::date`
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
 
-  if (activeBookings.length > 0) {
-    throw new Error('These dates overlap an existing booking');
-  }
+    if (activeBookings.length > 0) {
+      throw new Error('These dates overlap an existing booking');
+    }
 
-  const insertedRows = await db
-    .insert(blockedDates)
-    .values({
-      propertyId: parsed.propertyId,
-      startDate: parsed.startDate,
-      endDate: parsed.endDate,
-      reason: parsed.reason || 'Owner Block',
-    })
-    .returning();
+    const rows = await tx
+      .insert(blockedDates)
+      .values({
+        propertyId: parsed.propertyId,
+        startDate: parsed.startDate,
+        endDate: parsed.endDate,
+        reason: parsed.reason || 'Owner Block',
+      })
+      .returning();
 
-  return mapBlockedDateRow(insertedRows[0]);
+    return rows[0];
+  });
+
+  return mapBlockedDateRow(insertedRow);
 }
 
 /**

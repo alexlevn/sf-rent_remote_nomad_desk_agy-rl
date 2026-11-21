@@ -309,6 +309,13 @@ describe('Host Portal DB Integration & Security (T11)', () => {
       expect(rejected.paymentStatus).toBe('voided');
       expect(rejected.rejectionReason).toBe('Scheduled plumbing repair');
 
+      // Invalid transition: cannot accept an already-rejected reservation
+      await expect(
+        updateReservationStatus(inserted.id, 'confirmed', undefined, undefined, {
+          hostId: 1,
+        })
+      ).rejects.toThrow(/Cannot transition reservation/);
+
       // Test 48h expiry guard (Risk #9): accepting an overdue pending booking fails and marks expired
       await db
         .update(reservations)

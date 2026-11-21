@@ -64,9 +64,10 @@ export default async function HostListingsPage() {
   // Server Action to toggle property visibility (published <-> hidden)
   async function toggleHidePropertyAction(
     propertyId: number,
-    currentStatus: PropertyStatus
+    _currentStatus: PropertyStatus
   ) {
     'use server';
+    void _currentStatus;
     try {
       const { hostId } = await requireHost();
       const target = await getPropertyById(propertyId);
@@ -77,7 +78,7 @@ export default async function HostListingsPage() {
         return { success: false, error: 'Only published or hidden listings can toggle visibility.' };
       }
       const nextStatus: PropertyStatus =
-        currentStatus === 'hidden' ? 'published' : 'hidden';
+        target.status === 'hidden' ? 'published' : 'hidden';
       const updated = await updatePropertyStatus(propertyId, nextStatus);
       if (!updated) {
         return { success: false, error: 'Property not found.' };
