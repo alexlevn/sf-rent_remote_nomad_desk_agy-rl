@@ -36,6 +36,7 @@ import {
   Video as YoutubeIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MediaLibraryModal } from '@/features/media/media-library-modal';
 
 export interface TiptapEditorProps {
   value: string;
@@ -44,21 +45,16 @@ export interface TiptapEditorProps {
   placeholder?: string;
   minHeight?: string;
   testIdPrefix?: string;
+  editorId?: string;
 }
 
 type EditorMode = 'visual' | 'html';
-type InlineDialogType = 'link' | 'image' | 'youtube' | null;
+type InlineDialogType = 'link' | 'youtube' | null;
 
 function isSafeLinkUrl(url: string): boolean {
   const trimmed = url.trim();
   if (!trimmed) return false;
   return /^(https?:\/\/|mailto:|\/|#)/i.test(trimmed);
-}
-
-function isSafeImageUrl(url: string): boolean {
-  const trimmed = url.trim();
-  if (!trimmed) return false;
-  return /^(https?:\/\/|\/)/i.test(trimmed);
 }
 
 export function TiptapEditor({
@@ -68,11 +64,12 @@ export function TiptapEditor({
   placeholder = 'Write content, headings, lists, links, tables, or embed media...',
   minHeight = '300px',
   testIdPrefix = 'rich-editor',
+  editorId,
 }: TiptapEditorProps) {
   const [mode, setMode] = useState<EditorMode>('visual');
   const [activeDialog, setActiveDialog] = useState<InlineDialogType>(null);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [dialogInput, setDialogInput] = useState('');
-  const [dialogAlt, setDialogAlt] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
 
   // Track user edits so untouched seed HTML is preserved verbatim (AC-CMS-3)
@@ -126,6 +123,7 @@ export function TiptapEditor({
     content: value || '',
     editorProps: {
       attributes: {
+        ...(editorId ? { id: editorId } : {}),
         class: 'tiptap-content outline-none text-sm text-[var(--color-text-on-light)] focus:outline-none',
       },
     },
@@ -152,8 +150,8 @@ export function TiptapEditor({
   }, [editor, value, mode]);
 
   const openDialog = (type: Exclude<InlineDialogType, null>) => {
+    setIsMediaModalOpen(false);
     setDialogError(null);
-    setDialogAlt('');
     if (type === 'link') {
       const existingHref = (editor?.getAttributes('link').href as string | undefined) ?? '';
       setDialogInput(existingHref);
@@ -166,7 +164,6 @@ export function TiptapEditor({
   const closeDialog = (restoreFocus = false) => {
     setActiveDialog(null);
     setDialogInput('');
-    setDialogAlt('');
     setDialogError(null);
     if (restoreFocus) {
       editor?.chain().focus().run();
@@ -188,20 +185,6 @@ export function TiptapEditor({
         return;
       }
       editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run();
-      closeDialog();
-      return;
-    }
-
-    if (activeDialog === 'image') {
-      if (!isSafeImageUrl(trimmed)) {
-        setDialogError('Enter a valid image path (/seed/..., /uploads/...) or https:// URL.');
-        return;
-      }
-      editor
-        .chain()
-        .focus()
-        .setImage({ src: trimmed, alt: dialogAlt.trim() || undefined })
-        .run();
       closeDialog();
       return;
     }
@@ -229,6 +212,7 @@ export function TiptapEditor({
   const handleModeSwitch = (nextMode: EditorMode) => {
     if (nextMode === mode) return;
     closeDialog();
+    setIsMediaModalOpen(false);
     setMode(nextMode);
   };
 
@@ -420,8 +404,11 @@ export function TiptapEditor({
 
               <button
                 type="button"
-                onClick={() => openDialog('image')}
-                className={toolbarBtnClass(activeDialog === 'image')}
+                onClick={() => {
+                  closeDialog();
+                  setIsMediaModalOpen(true);
+                }}
+                className={toolbarBtnClass(isMediaModalOpen)}
                 title="Insert Image"
                 aria-label="Insert Image"
               >
@@ -506,7 +493,7 @@ export function TiptapEditor({
         </div>
       </div>
 
-      {/* Inline Dialog Panel (Link / Image / YouTube) — one dialog at a time, no window.prompt */}
+      {/* Inline Dialog Panel (Link / YouTube) — one dialog at a time, no window.prompt */}
       {mode === 'visual' && activeDialog && (
         <div
           className="px-4 py-3 bg-[var(--color-bg-light)] border-b border-[var(--color-border-light)] space-y-2"
@@ -517,11 +504,7 @@ export function TiptapEditor({
               htmlFor={`${testIdPrefix}-dialog-input`}
               className="text-xs font-semibold text-[var(--color-text-on-light)] min-w-24"
             >
-              {activeDialog === 'link'
-                ? 'Link URL'
-                : activeDialog === 'image'
-                  ? 'Image URL / Path'
-                  : 'YouTube URL'}
+              {activeDialog === 'link' ? 'Link URL' : 'YouTube URL'}
             </label>
             <input
               id={`${testIdPrefix}-dialog-input`}
@@ -535,24 +518,11 @@ export function TiptapEditor({
               placeholder={
                 activeDialog === 'link'
                   ? 'https://example.com or /c/madrid (leave empty to remove)'
-                  : activeDialog === 'image'
-                    ? '/seed/guide/placeholder.webp, /uploads/..., or https://...'
-                    : 'https://www.youtube.com/watch?v=...'
+                  : 'https://www.youtube.com/watch?v=...'
               }
               autoFocus
               className="flex-1 min-w-52 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
             />
-            {activeDialog === 'image' && (
-              <input
-                type="text"
-                value={dialogAlt}
-                onChange={(e) => setDialogAlt(e.target.value)}
-                onKeyDown={handleDialogKeyDown}
-                placeholder="Alt text (optional)"
-                aria-label="Image alt text"
-                className="w-44 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border-light)] bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
-              />
-            )}
             <button
               type="button"
               onClick={handleApplyDialog}
@@ -612,6 +582,32 @@ export function TiptapEditor({
           {value ? `${value.length} chars` : 'Empty'}
         </span>
       </div>
+
+      <MediaLibraryModal
+        isOpen={isMediaModalOpen}
+        onClose={() => {
+          setIsMediaModalOpen(false);
+          editor?.chain().focus().run();
+        }}
+        onSelect={(items) => {
+          const first = items[0];
+          if (first && editor) {
+            editor
+              .chain()
+              .focus()
+              .setImage({
+                src: first.url,
+                alt: first.alt || undefined,
+              })
+              .run();
+          }
+          setIsMediaModalOpen(false);
+        }}
+        multiple={false}
+        allowUrlTab={true}
+        initialTab="upload"
+        title="Insert Image"
+      />
     </div>
   );
 }
