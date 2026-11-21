@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+
+const MOCK_SUBMISSION_DELAY_MS = 400;
 
 interface ContactFormProps {
   id?: string;
@@ -19,17 +21,32 @@ export function ContactForm({
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
 
+  const isSubmittingRef = useRef(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
     if (!name.trim() || !email.trim() || !message.trim()) return;
 
+    isSubmittingRef.current = true;
     setStatus('submitting');
-    setTimeout(() => {
+
+    timerRef.current = setTimeout(() => {
       setStatus('success');
-    }, 400);
+      isSubmittingRef.current = false;
+    }, MOCK_SUBMISSION_DELAY_MS);
   };
 
   const handleReset = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    isSubmittingRef.current = false;
     setName('');
     setEmail('');
     setSubject('');
