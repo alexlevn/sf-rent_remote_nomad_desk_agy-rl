@@ -1,5 +1,7 @@
 import React from 'react';
+import Image from 'next/image';
 import type { HostProfile, Property } from '@/lib/types';
+import { isSafeImagePath } from '@/lib/validations/media';
 
 interface HostInfoBlockProps {
   host: HostProfile | null;
@@ -17,7 +19,11 @@ export function HostInfoBlock({ host, property }: HostInfoBlockProps) {
     host?.bio ||
     'Design-led furnished apartments in central Madrid and Barcelona, set up for long stays and focused work.';
 
-  // Generate initials for avatar
+  const rawAvatar = typeof host?.avatar === 'string' ? host.avatar.trim() : '';
+  const avatarSrc =
+    rawAvatar.length > 0 && isSafeImagePath(rawAvatar) ? rawAvatar : null;
+
+  // Generate initials for avatar fallback
   const initials = displayName
     .split(' ')
     .filter(Boolean)
@@ -33,9 +39,21 @@ export function HostInfoBlock({ host, property }: HostInfoBlockProps) {
     >
       <div className="flex items-center gap-4">
         {/* Host Avatar */}
-        <div className="w-14 h-14 rounded-full bg-[var(--color-text-on-light)] text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
-          {initials}
-        </div>
+        {avatarSrc ? (
+          <Image
+            src={avatarSrc}
+            alt={`${displayName} avatar`}
+            width={56}
+            height={56}
+            unoptimized
+            data-testid="host-info-avatar"
+            className="w-14 h-14 rounded-full object-cover shrink-0 border border-[var(--color-border-light)] shadow-2xs"
+          />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-[var(--color-text-on-light)] text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-2xs">
+            {initials}
+          </div>
+        )}
 
         {/* Host Meta */}
         <div>

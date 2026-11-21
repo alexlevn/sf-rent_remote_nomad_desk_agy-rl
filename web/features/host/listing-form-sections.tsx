@@ -8,8 +8,12 @@ import {
   Upload,
   Check,
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   Building2,
+  ExternalLink,
   Image as ImageIcon,
+  Images,
   Sliders,
   Laptop,
   DollarSign,
@@ -19,6 +23,18 @@ import {
   Star,
 } from 'lucide-react';
 import type { Location, Property } from '@/lib/types';
+import { stripHtmlTags } from '@/lib/validations/content';
+import { isSafeImagePath } from '@/lib/validations/media';
+import { TiptapEditor } from '@/features/admin/tiptap-editor';
+import { CurrencyInput } from '@/features/media/currency-input';
+import {
+  MediaLibraryModal,
+  type SelectedMediaItem,
+} from '@/features/media/media-library-modal';
+import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+
+const MAX_IMAGES = 50;
+const INT4_MAX = 2_147_483_647;
 
 const MOCK_GALLERY_OPTIONS = [
   '/seed/property/prop-madrid-1.webp',
@@ -72,7 +88,9 @@ export function ListingFormSections({
       : ['/seed/property/prop-madrid-1.webp', '/seed/property/prop-madrid-2.webp']
   );
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
+  const [imageError, setImageError] = useState<string | null>(null);
   const [showGalleryPicker, setShowGalleryPicker] = useState(false);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
 
   // Section 3: Details & Amenities
   const [bedrooms, setBedrooms] = useState<number>(initialData?.bedrooms ?? 1);
@@ -122,7 +140,7 @@ export function ListingFormSections({
   const initialRentDollars = initialData?.pricePerMonth
     ? Math.round(initialData.pricePerMonth / 100)
     : 2850;
-  const [monthlyRentUsd, setMonthlyRentUsd] = useState<number | string>(
+  const [monthlyRentUsd, setMonthlyRentUsd] = useState<number | ''>(
     initialRentDollars
   );
   const [minimumStayNights, setMinimumStayNights] = useState<number>(
@@ -151,6 +169,57 @@ export function ListingFormSections({
   >(null);
   const isSubmittingRef = useRef(false);
 
+  // Track dirty state against initial snapshot for unsaved-changes warnings
+  const currentSnapshot = JSON.stringify({
+    title,
+    city,
+    neighborhood,
+    address,
+    description,
+    images,
+    bedrooms,
+    bathrooms,
+    totalSurface,
+    maxGuests,
+    bedsCount,
+    kitchen,
+    laundry,
+    balcony,
+    petFriendly,
+    pool,
+    gym,
+    terrace,
+    desk,
+    chair,
+    monitors,
+    keyboard,
+    wifiSpeed,
+    monthlyRentUsd,
+    minimumStayNights,
+    checkInStart,
+    checkOut,
+    houseRules,
+    isDirectBooking,
+  });
+  const [baselineSnapshot, setBaselineSnapshot] = useState<string>(
+    () => currentSnapshot
+  );
+  const isDirty = currentSnapshot !== baselineSnapshot;
+  const { confirmLeave } = useUnsavedChanges(isDirty);
+
+  const canViewOnWeb = Boolean(
+    initialData && initialData.status === 'published' && initialData.slug
+  );
+
+  const clearImagesFieldError = () => {
+    setErrors((prev) => {
+      if (!prev.images) return prev;
+      const next = { ...prev };
+      delete next.images;
+      return next;
+    });
+  };
+
   // AC-HOST-7: Client-side isolation safeguard
   React.useEffect(() => {
     try {
@@ -174,15 +243,23 @@ export function ListingFormSections({
       newErrors.title = 'Listing title is required.';
     } else if (title.trim().length < 5) {
       newErrors.title = 'Title must be at least 5 characters.';
+    } else if (title.trim().length > 255) {
+      newErrors.title = 'Title must be 255 characters or fewer.';
     }
 
     if (!city.trim()) {
       newErrors.city = 'Please select a city.';
     }
 
-    const numRent = Number(monthlyRentUsd);
-    if (isNaN(numRent) || numRent <= 0) {
+    if (
+      monthlyRentUsd === '' ||
+      !Number.isFinite(monthlyRentUsd) ||
+      monthlyRentUsd <= 0
+    ) {
       newErrors.monthlyRentUsd = 'Monthly rent must be greater than $0.';
+    } else if (Math.round(monthlyRentUsd * 100) > INT4_MAX) {
+      newErrors.monthlyRentUsd =
+        'Monthly rent exceeds the maximum allowed amount.';
     }
 
     if (minimumStayNights < 30) {
@@ -190,8 +267,13 @@ export function ListingFormSections({
         'NomadDesk standard requires minimum stay of 30 nights.';
     }
 
+    if (images.some((url) => !isSafeImagePath(url))) {
+      newErrors.images =
+        'All photo URLs must be valid /uploads/, /seed/, or https:// paths.';
+    }
+
     if (intent === 'pending_review') {
-      if (!description.trim()) {
+      if (!stripHtmlTags(description).trim()) {
         newErrors.description =
           'Description is required before submitting for review.';
       }
@@ -285,6 +367,7 @@ export function ListingFormSections({
         return;
       }
 
+      setBaselineSnapshot(currentSnapshot);
       // Success: redirect to host listings table
       startTransition(() => {
         router.push('/host/listings');
@@ -299,45 +382,125 @@ export function ListingFormSections({
     }
   };
 
-  const handleAddCustomPhoto = () => {
-    if (!customPhotoUrl.trim()) return;
-    if (!images.includes(customPhotoUrl.trim())) {
-      setImages([...images, customPhotoUrl.trim()]);
+  const handleMediaSelect = (selected: SelectedMediaItem[]) => {
+    if (selected.length === 0) return;
+
+    const next = [...images];
+    let hitLimit = false;
+    let addedCount = 0;
+
+    for (const item of selected) {
+      const trimmed = item.url.trim();
+      if (!isSafeImagePath(trimmed) || next.includes(trimmed)) continue;
+      if (next.length >= MAX_IMAGES) {
+        hitLimit = true;
+        break;
+      }
+      next.push(trimmed);
+      addedCount += 1;
     }
+
+    if (addedCount > 0) {
+      setImages(next);
+      clearImagesFieldError();
+    }
+
+    setImageError(
+      hitLimit ? `Maximum ${MAX_IMAGES} images allowed per property.` : null
+    );
+  };
+
+  const handleAddCustomPhoto = () => {
+    const trimmed = customPhotoUrl.trim();
+    if (!isSafeImagePath(trimmed)) {
+      setImageError(
+        'Enter a valid image path (/uploads/..., /seed/...) or https:// URL.'
+      );
+      return;
+    }
+    if (images.includes(trimmed)) {
+      setImageError('This image is already in the gallery.');
+      return;
+    }
+    if (images.length >= MAX_IMAGES) {
+      setImageError(`Maximum ${MAX_IMAGES} images allowed per property.`);
+      return;
+    }
+    setImages((prev) => [...prev, trimmed]);
     setCustomPhotoUrl('');
+    setImageError(null);
+    clearImagesFieldError();
   };
 
   const handleToggleGalleryPhoto = (photoPath: string) => {
+    setImageError(null);
     if (images.includes(photoPath)) {
-      if (images.length > 1) {
-        setImages(images.filter((img) => img !== photoPath));
-      }
-    } else {
-      setImages([...images, photoPath]);
+      setImages((prev) => prev.filter((img) => img !== photoPath));
+      return;
     }
+    if (images.length >= MAX_IMAGES) {
+      setImageError(`Maximum ${MAX_IMAGES} images allowed per property.`);
+      return;
+    }
+    setImages((prev) => [...prev, photoPath]);
+    clearImagesFieldError();
   };
 
-  const handleSetCoverPhoto = (photoPath: string) => {
-    const remaining = images.filter((img) => img !== photoPath);
-    setImages([photoPath, ...remaining]);
+  const handleSetCoverPhoto = (index: number) => {
+    if (index <= 0 || index >= images.length) return;
+    setImages((prev) => {
+      const target = prev[index];
+      return [target, ...prev.filter((_, idx) => idx !== index)];
+    });
   };
 
-  const handleRemovePhoto = (photoPath: string) => {
-    if (images.length > 1) {
-      setImages(images.filter((img) => img !== photoPath));
-    }
+  const handleMovePhoto = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= images.length) return;
+    setImages((prev) => {
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = temp;
+      return next;
+    });
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setImages((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleCancel = () => {
+    if (isSubmittingRef.current) return;
+    if (!confirmLeave()) return;
+    router.push('/host/listings');
   };
 
   return (
-    <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 sm:p-8 md:p-10 max-w-4xl mx-auto shadow-xs">
-      <div className="border-b border-neutral-100 pb-5 mb-8">
-        <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
-          {initialData ? `Edit Listing #${initialData.id}` : 'Create New Apartment Listing'}
-        </h2>
-        <p className="text-xs sm:text-sm text-neutral-500 mt-1">
-          Provide complete property information, verified workstation hardware specifications, and monthly rates.
-        </p>
-      </div>
+    <>
+      <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 sm:p-8 md:p-10 max-w-4xl mx-auto shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-neutral-100 pb-5 mb-8">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 tracking-tight">
+              {initialData ? `Edit Listing #${initialData.id}` : 'Create New Apartment Listing'}
+            </h2>
+            <p className="text-xs sm:text-sm text-neutral-500 mt-1">
+              Provide complete property information, verified workstation hardware specifications, and monthly rates.
+            </p>
+          </div>
+          {canViewOnWeb && initialData && (
+            <Link
+              href={`/l/apartments/${initialData.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="host-view-on-web-link"
+              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-800 hover:bg-neutral-50 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>View on Web</span>
+            </Link>
+          )}
+        </div>
 
       {serverError && (
         <div
@@ -466,21 +629,19 @@ export function ListingFormSections({
               >
                 Description (WYSIWYG Editorial)
               </label>
-              <textarea
-                id="listing-description"
-                rows={4}
+              <TiptapEditor
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={setDescription}
+                label="Listing Description"
                 placeholder="Describe the interior, neighborhood vibe, workstation ergonomics, natural lighting, and proximity to cafes..."
-                className={`w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors ${
-                  errors.description
-                    ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
-                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]'
-                }`}
-                aria-invalid={Boolean(errors.description)}
+                minHeight="220px"
+                editorId="listing-description"
+                testIdPrefix="host-description-editor"
               />
               {errors.description && (
-                <p className="text-xs text-rose-600 mt-1">{errors.description}</p>
+                <p role="alert" className="text-xs text-rose-600 mt-1">
+                  {errors.description}
+                </p>
               )}
             </div>
           </div>
@@ -488,7 +649,7 @@ export function ListingFormSections({
 
         {/* SECTION 2: PHOTOS */}
         <section aria-labelledby="section-photos">
-          <div className="flex items-center justify-between pb-3 mb-5 border-b border-neutral-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 mb-5 border-b border-neutral-200">
             <div className="flex items-center gap-2">
               <ImageIcon className="w-5 h-5 text-[var(--color-brand)]" />
               <h3
@@ -498,18 +659,33 @@ export function ListingFormSections({
                 2. Property Photos & Media Gallery
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowGalleryPicker(!showGalleryPicker)}
-              className="text-xs font-semibold text-[var(--color-brand)] hover:underline flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {showGalleryPicker ? 'Close Gallery' : 'Select from Seed Gallery'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                data-testid="host-open-media-btn"
+                onClick={() => setIsMediaModalOpen(true)}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] px-3.5 py-2 text-xs font-semibold text-white transition-colors cursor-pointer"
+              >
+                <Images className="w-3.5 h-3.5" />
+                <span>Upload / Media Library</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowGalleryPicker(!showGalleryPicker)}
+                className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-neutral-300 bg-white hover:bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-700 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>
+                  {showGalleryPicker ? 'Close Gallery' : 'Select from Seed Gallery'}
+                </span>
+              </button>
+            </div>
           </div>
 
           {errors.images && (
-            <p className="text-xs text-rose-600 mb-3">{errors.images}</p>
+            <p role="alert" className="text-xs text-rose-600 mb-3">
+              {errors.images}
+            </p>
           )}
 
           {/* Current Selected Images */}
@@ -517,58 +693,99 @@ export function ListingFormSections({
             <div className="text-xs font-semibold text-neutral-600 mb-2">
               Selected Photos ({images.length}) — First photo is the primary cover image:
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
-              {images.map((imgUrl, idx) => (
-                <div
-                  key={`${imgUrl}-${idx}`}
-                  className="group relative aspect-4/3 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100"
-                >
-                  <Image
-                    src={imgUrl}
-                    alt={`Property photo ${idx + 1}`}
-                    fill
-                    sizes="(max-width: 768px) 50vw, 20vw"
-                    className="object-cover"
-                    unoptimized
-                  />
-                  {idx === 0 && (
-                    <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-900/80 text-white flex items-center gap-1">
-                      <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                      Cover
-                    </span>
-                  )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-1">
-                    {idx !== 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleSetCoverPhoto(imgUrl)}
-                        title="Set as Cover Photo"
-                        className="p-1 rounded bg-white text-neutral-900 hover:bg-neutral-100 text-[10px] font-bold"
-                      >
-                        Set Cover
-                      </button>
-                    )}
-                    {images.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePhoto(imgUrl)}
-                        title="Remove photo"
-                        className="p-1 rounded bg-rose-600 text-white hover:bg-rose-700"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+            {images.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-8 text-center text-xs text-neutral-500">
+                No photos selected yet. Upload from Media Library, pick from Seed Gallery, or enter an image URL below.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {images.map((imgUrl, idx) => (
+                  <div
+                    key={`${imgUrl}-${idx}`}
+                    data-testid={`host-photo-card-${idx}`}
+                    className="rounded-xl overflow-hidden border border-neutral-200 bg-white flex flex-col"
+                  >
+                    <div className="relative aspect-4/3 bg-neutral-100">
+                      <Image
+                        src={imgUrl}
+                        alt={`Property photo ${idx + 1}`}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 33vw"
+                        className="object-cover"
+                        unoptimized
+                      />
+                      {idx === 0 && (
+                        <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-900/85 text-white flex items-center gap-1">
+                          <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                          Cover
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-1 px-2 py-1.5 bg-neutral-50 border-t border-neutral-200">
+                      <div className="flex items-center gap-1">
+                        {idx !== 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSetCoverPhoto(idx)}
+                            title="Set as Cover Photo"
+                            aria-label={`Set photo ${idx + 1} as cover`}
+                            data-testid={`host-photo-cover-${idx}`}
+                            className="min-h-8 px-2 py-1 rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 text-[11px] font-semibold cursor-pointer"
+                          >
+                            Set Cover
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-neutral-500 px-1">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMovePhoto(idx, 'up')}
+                          disabled={idx === 0}
+                          title="Move photo up"
+                          aria-label={`Move photo ${idx + 1} up`}
+                          data-testid={`host-photo-up-${idx}`}
+                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMovePhoto(idx, 'down')}
+                          disabled={idx === images.length - 1}
+                          title="Move photo down"
+                          aria-label={`Move photo ${idx + 1} down`}
+                          data-testid={`host-photo-down-${idx}`}
+                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(idx)}
+                          title="Remove photo"
+                          aria-label={`Remove photo ${idx + 1}`}
+                          data-testid={`host-photo-remove-${idx}`}
+                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Seed Gallery Picker Modal/Panel */}
+          {/* Seed Gallery Picker Panel */}
           {showGalleryPicker && (
             <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200 mb-4">
               <div className="text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">
-                Available Mock Seed Images (Click to toggle):
+                Available Seed Images (Click to toggle):
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {MOCK_GALLERY_OPTIONS.map((optUrl) => {
@@ -578,7 +795,7 @@ export function ListingFormSections({
                       key={optUrl}
                       type="button"
                       onClick={() => handleToggleGalleryPhoto(optUrl)}
-                      className={`relative aspect-4/3 rounded-lg overflow-hidden border-2 transition-all ${
+                      className={`relative aspect-4/3 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
                         isSelected
                           ? 'border-[var(--color-brand)] ring-2 ring-[var(--color-brand)]/20'
                           : 'border-transparent opacity-75 hover:opacity-100'
@@ -605,22 +822,50 @@ export function ListingFormSections({
           )}
 
           {/* Custom Image URL Input */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={customPhotoUrl}
-              onChange={(e) => setCustomPhotoUrl(e.target.value)}
-              placeholder="Or add photo URL: /seed/property/prop-madrid-3.webp"
-              className="flex-1 px-3.5 py-2 rounded-lg border border-neutral-300 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[var(--color-brand)]"
-            />
-            <button
-              type="button"
-              onClick={handleAddCustomPhoto}
-              className="px-3.5 py-2 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-700 transition-colors flex items-center gap-1.5"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Add Photo
-            </button>
+          <div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={customPhotoUrl}
+                onChange={(e) => {
+                  setCustomPhotoUrl(e.target.value);
+                  if (imageError) setImageError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCustomPhoto();
+                  }
+                }}
+                data-testid="host-custom-photo-input"
+                aria-label="Image URL or path"
+                aria-invalid={Boolean(imageError)}
+                placeholder="Or add photo URL: /uploads/..., /seed/..., or https://..."
+                className={`flex-1 min-h-10 px-3.5 py-2 rounded-lg border text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none ${
+                  imageError
+                    ? 'border-rose-400 focus:border-rose-500'
+                    : 'border-neutral-300 focus:border-[var(--color-brand)]'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={handleAddCustomPhoto}
+                data-testid="host-add-photo-btn"
+                className="min-h-10 px-3.5 py-2 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-xs font-semibold text-neutral-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Add Photo
+              </button>
+            </div>
+            {imageError && (
+              <p
+                role="alert"
+                data-testid="host-image-error"
+                className="text-xs text-rose-600 mt-1.5"
+              >
+                {imageError}
+              </p>
+            )}
           </div>
         </section>
 
@@ -804,7 +1049,7 @@ export function ListingFormSections({
               id="section-workstation"
               className="text-base sm:text-lg font-bold text-neutral-900"
             >
-              2. Dedicated Workstation Hardware
+              4. Dedicated Workstation Hardware
             </h3>
           </div>
 
@@ -931,7 +1176,7 @@ export function ListingFormSections({
               id="section-pricing"
               className="text-base sm:text-lg font-bold text-neutral-900"
             >
-              3. Monthly Rate & Booking Rules
+              5. Monthly Rate & Booking Rules
             </h3>
           </div>
 
@@ -943,29 +1188,20 @@ export function ListingFormSections({
               >
                 Monthly Rent (USD $) <span className="text-rose-500">*</span>
               </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500 font-bold text-sm">
-                  $
-                </span>
-                <input
-                  id="pricing-monthly"
-                  type="number"
-                  min="100"
-                  max="100000"
-                  step="50"
-                  value={monthlyRentUsd}
-                  onChange={(e) => setMonthlyRentUsd(e.target.value)}
-                  placeholder="2850"
-                  className={`w-full pl-8 pr-4 py-2.5 rounded-lg border text-sm font-bold text-neutral-900 focus:outline-none transition-colors ${
-                    errors.monthlyRentUsd
-                      ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
-                      : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]'
-                  }`}
-                  aria-invalid={Boolean(errors.monthlyRentUsd)}
-                />
-              </div>
+              <CurrencyInput
+                id="pricing-monthly"
+                value={monthlyRentUsd}
+                onChange={setMonthlyRentUsd}
+                currencySymbol="$"
+                suffix="/ mo"
+                min={1}
+                placeholder="2,850"
+                testId="host-price-input"
+                ariaInvalid={Boolean(errors.monthlyRentUsd)}
+                required
+              />
               {errors.monthlyRentUsd && (
-                <p className="text-xs text-rose-600 mt-1">
+                <p role="alert" className="text-xs text-rose-600 mt-1">
                   {errors.monthlyRentUsd}
                 </p>
               )}
@@ -1057,32 +1293,61 @@ export function ListingFormSections({
             >
               House Rules & Quiet Hours
             </label>
-            <textarea
-              id="rules-houserules"
-              rows={2}
+            <TiptapEditor
               value={houseRules}
-              onChange={(e) => setHouseRules(e.target.value)}
+              onChange={setHouseRules}
+              label="House Rules & Quiet Hours"
               placeholder="e.g. No smoking inside. Quiet hours 22:00 - 08:00."
-              className="w-full px-4 py-2 rounded-lg border border-neutral-300 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[var(--color-brand)]"
+              minHeight="160px"
+              editorId="rules-houserules"
+              testIdPrefix="host-rules-editor"
             />
           </div>
         </section>
 
-        {/* BOTTOM ACTION BAR */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 border-t border-neutral-200">
-          <Link
-            href="/host/listings"
-            className="w-full sm:w-auto px-5 py-2.5 rounded-lg border border-neutral-300 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors text-center"
-          >
-            Cancel
-          </Link>
+        {/* STICKY BOTTOM ACTION BAR */}
+        <div
+          data-testid="host-sticky-save-bar"
+          className="sticky bottom-0 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-[var(--color-border-light)] bg-white/95 backdrop-blur-xs px-4 py-3 shadow-lg"
+        >
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full ${
+                isDirty ? 'bg-amber-500' : 'bg-emerald-500'
+              }`}
+            />
+            <span
+              data-testid="host-dirty-status"
+              className={
+                isDirty ? 'text-amber-700 font-semibold' : 'text-neutral-500'
+              }
+            >
+              {isDirty ? 'Unsaved changes' : 'Ready to save'}
+            </span>
+            {Object.keys(errors).length > 0 && (
+              <span role="alert" className="text-rose-600 font-semibold">
+                · Please fix {Object.keys(errors).length}{' '}
+                {Object.keys(errors).length === 1 ? 'field' : 'fields'} above
+              </span>
+            )}
+          </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleCancel}
+              data-testid="host-cancel-btn"
+              className="min-h-10 px-4 py-2 rounded-lg border border-neutral-300 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors text-center cursor-pointer"
+            >
+              Cancel
+            </button>
+
             <button
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSubmit('draft')}
-              className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg border border-neutral-300 bg-neutral-100 hover:bg-neutral-200 text-sm font-semibold text-neutral-800 transition-colors disabled:opacity-50"
+              className="flex-1 sm:flex-none min-h-10 px-4 py-2 rounded-lg border border-neutral-300 bg-neutral-100 hover:bg-neutral-200 text-sm font-semibold text-neutral-800 transition-colors disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting && submittingIntent === 'draft' ? (
                 <span className="inline-flex items-center gap-2">
@@ -1098,7 +1363,7 @@ export function ListingFormSections({
               type="button"
               disabled={isSubmitting}
               onClick={() => handleSubmit('pending_review')}
-              className="flex-1 sm:flex-none px-6 py-2.5 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-sm font-bold text-white shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="flex-1 sm:flex-none min-h-10 px-5 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-sm font-bold text-white shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isSubmitting && submittingIntent === 'pending_review' ? (
                 <span className="inline-flex items-center gap-2">
@@ -1115,6 +1380,17 @@ export function ListingFormSections({
           </div>
         </div>
       </form>
-    </div>
+      </div>
+
+      <MediaLibraryModal
+        isOpen={isMediaModalOpen}
+        onClose={() => setIsMediaModalOpen(false)}
+        onSelect={handleMediaSelect}
+        multiple={true}
+        allowUrlTab={true}
+        initialTab="upload"
+        title="Property Photos"
+      />
+    </>
   );
 }

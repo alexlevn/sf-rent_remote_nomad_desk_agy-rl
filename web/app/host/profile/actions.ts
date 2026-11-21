@@ -17,6 +17,7 @@ export async function updateCurrentHostProfileAction(data: {
   cities: string;
   portfolioSize: number;
   website: string | null;
+  avatar?: string | null;
 }): Promise<HostProfile> {
   const { hostId } = await requireHost();
   const updated = await updateHostProfile(hostId, {
@@ -26,8 +27,10 @@ export async function updateCurrentHostProfileAction(data: {
     cities: data.cities,
     portfolioSize: data.portfolioSize,
     website: data.website,
+    ...(data.avatar !== undefined ? { avatar: data.avatar } : {}),
   });
   revalidatePath('/host/profile');
   revalidatePath('/host');
+  revalidatePath('/l/apartments/[slug]', 'page');
   return updated;
 }

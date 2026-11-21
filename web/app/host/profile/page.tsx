@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import {
   CheckCircle2,
   AlertCircle,
@@ -11,6 +12,8 @@ import {
   fetchCurrentHostProfileAction,
   updateCurrentHostProfileAction,
 } from '@/app/host/profile/actions';
+import { ImagePickerField } from '@/features/media/image-picker-field';
+import { isSafeImagePath } from '@/lib/validations/media';
 
 export default function HostProfilePage() {
   const [displayName, setDisplayName] = useState('Casa Urbana Stays');
@@ -21,6 +24,8 @@ export default function HostProfilePage() {
   const [cities, setCities] = useState('Madrid, Barcelona');
   const [portfolioSize, setPortfolioSize] = useState<number>(12);
   const [website, setWebsite] = useState('');
+  const [avatar, setAvatar] = useState('');
+  const [failedPreviewAvatar, setFailedPreviewAvatar] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,6 +50,8 @@ export default function HostProfilePage() {
           setCities(profile.cities || 'Madrid, Barcelona');
           setPortfolioSize(profile.portfolioSize || 12);
           setWebsite(profile.website || '');
+          setAvatar(profile.avatar || '');
+          setFailedPreviewAvatar(null);
         }
       } catch {
         // Fallback to initial seed values
@@ -68,34 +75,62 @@ export default function HostProfilePage() {
     try {
       if (!displayName.trim()) {
         setFeedback({ type: 'error', message: 'Display name is required.' });
-        setIsSaving(false);
-        isSubmittingRef.current = false;
         return;
       }
 
-      await updateCurrentHostProfileAction({
+      const trimmedAvatar = avatar.trim();
+      if (trimmedAvatar.length > 0 && !isSafeImagePath(trimmedAvatar)) {
+        setFeedback({
+          type: 'error',
+          message: 'Host avatar must be a valid /uploads/, /seed/, or https:// URL.',
+        });
+        return;
+      }
+
+      const updated = await updateCurrentHostProfileAction({
         displayName: displayName.trim(),
         phone: phone.trim(),
         bio: bio.trim(),
         cities: cities.trim(),
         portfolioSize: Number(portfolioSize) || 12,
         website: website.trim() || null,
+        avatar: trimmedAvatar || null,
       });
 
+      setAvatar(updated.avatar || '');
+      setFailedPreviewAvatar(null);
       setFeedback({
         type: 'success',
         message: 'Host profile updated successfully! Changes are live on your listings.',
       });
-    } catch {
+    } catch (err: unknown) {
       setFeedback({
         type: 'error',
-        message: 'Failed to update profile. Please check your network and try again.',
+        message:
+          err instanceof Error
+            ? err.message
+            : 'Failed to update profile. Please check your network and try again.',
       });
     } finally {
       setIsSaving(false);
       isSubmittingRef.current = false;
     }
   };
+
+  const trimmedAvatar = avatar.trim();
+  const showAvatarImage =
+    trimmedAvatar.length > 0 &&
+    isSafeImagePath(trimmedAvatar) &&
+    failedPreviewAvatar !== trimmedAvatar;
+  const previewInitials =
+    displayName
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'HO';
 
   if (isLoading) {
     return (
@@ -149,6 +184,25 @@ export default function HostProfilePage() {
       {/* Form Card */}
       <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 sm:p-8 shadow-xs">
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Host Logo / Avatar */}
+          <ImagePickerField
+            id="host-avatar"
+            label="Host Logo / Avatar (Optional)"
+            value={avatar}
+            onChange={(nextUrl) => {
+              setFailedPreviewAvatar(null);
+              setAvatar(nextUrl);
+            }}
+            placeholder="/uploads/..., /seed/..., or https://..."
+            helperText="Displayed next to 'Hosted by' on your public apartment pages. Leave empty to show your initials."
+            allowClear={true}
+            previewAspect="square"
+            previewAlt={`${displayName || 'Host'} avatar`}
+            modalTitle="Choose or Upload Host Avatar"
+            testIdPrefix="host-avatar-picker"
+            disabled={isSaving}
+          />
+
           {/* Display Name */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-2">
@@ -279,9 +333,24 @@ export default function HostProfilePage() {
         </div>
 
         <div className="bg-white rounded-xl border border-[var(--color-border-light)] p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-neutral-800 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-inner">
-            {displayName.slice(0, 2).toUpperCase()}
-          </div>
+          {showAvatarImage ? (
+            <div className="relative w-14 h-14 rounded-full overflow-hidden border border-[var(--color-border-light)] bg-neutral-100 shrink-0 shadow-inner">
+              <Image
+                src={trimmedAvatar}
+                alt={`${displayName || 'Host'} avatar`}
+                fill
+                unoptimized
+                sizes="56px"
+                data-testid="host-profile-preview-avatar"
+                className="object-cover"
+                onError={() => setFailedPreviewAvatar(trimmedAvatar)}
+              />
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-full bg-neutral-800 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-inner">
+              {previewInitials}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold text-base text-neutral-900">
