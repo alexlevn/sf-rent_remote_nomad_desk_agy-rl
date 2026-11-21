@@ -13,6 +13,7 @@ import {
   Monitor,
   BookOpen,
   FileText,
+  Images,
   Video,
   Settings,
   Menu,
@@ -49,6 +50,7 @@ const MAIN_NAV_ITEMS: NavItem[] = [
 ];
 
 const CMS_NAV_ITEMS: NavItem[] = [
+  { href: '/admin/media', label: 'Media Library', icon: Images },
   { href: '/admin/locations', label: 'Destinations & Cities', icon: MapPin },
   { href: '/admin/workstations', label: 'Workstation Catalog', icon: Monitor },
   { href: '/admin/guides', label: 'Travel Guides', icon: BookOpen },
@@ -66,6 +68,7 @@ function resolvePageTitle(pathname: string): string {
   if (pathname.startsWith('/admin/hosts')) return 'Host Membership Approvals';
   if (pathname.startsWith('/admin/properties')) return 'Property Moderation';
   if (pathname.startsWith('/admin/reservations')) return 'Booking Monitor';
+  if (pathname.startsWith('/admin/media')) return 'Media Library';
   if (pathname.startsWith('/admin/locations')) return 'Destinations & Cities CMS';
   if (pathname.startsWith('/admin/workstations')) return 'Workstation Catalog CMS';
   if (pathname.startsWith('/admin/guides')) return 'Travel Guides CMS';
