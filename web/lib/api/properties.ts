@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  desc,
   eq,
   gte,
   ilike,
@@ -828,4 +829,141 @@ export async function deleteProperty(id: number): Promise<boolean> {
     }
     throw err;
   }
+}
+
+export interface AdminPropertiesPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  status?: PropertyStatus | 'all';
+  city?: string;
+  hostId?: number;
+  search?: string;
+}
+
+export interface AdminPropertiesStatusCounts {
+  all: number;
+  published: number;
+  pending_review: number;
+  draft: number;
+  rejected: number;
+  hidden: number;
+}
+
+export interface AdminPropertiesPaginatedResult {
+  items: Property[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: AdminPropertiesStatusCounts;
+}
+
+function normalizePagination(page?: number, pageSize?: number) {
+  const safePage =
+    typeof page === 'number' && Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+  const rawSize =
+    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
+  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    offset: (safePage - 1) * safePageSize,
+  };
+}
+
+/**
+ * Lists properties for the Admin Portal using SQL LIMIT/OFFSET pagination,
+ * filtered COUNT(*), and global per-status counts.
+ */
+export async function listAdminPropertiesPaginated(
+  params?: AdminPropertiesPaginatedParams
+): Promise<AdminPropertiesPaginatedResult> {
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+
+  const statusCountRows = await db
+    .select({
+      status: properties.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(properties)
+    .groupBy(properties.status);
+
+  const counts: AdminPropertiesStatusCounts = {
+    all: 0,
+    published: 0,
+    pending_review: 0,
+    draft: 0,
+    rejected: 0,
+    hidden: 0,
+  };
+  for (const row of statusCountRows) {
+    const c = Number(row.count ?? 0);
+    counts.all += c;
+    if (row.status in counts && row.status !== 'all') {
+      counts[row.status as keyof Omit<AdminPropertiesStatusCounts, 'all'>] = c;
+    }
+  }
+
+  const conditions: SQL[] = [];
+
+  if (params?.status && params.status !== 'all') {
+    const validStatus = propertyStatusSchema.safeParse(params.status);
+    if (!validStatus.success) {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+    conditions.push(eq(properties.status, validStatus.data));
+  }
+
+  if (params?.city && params.city.trim() && params.city.trim().toLowerCase() !== 'all') {
+    conditions.push(eq(sql`lower(${properties.city})`, params.city.trim().toLowerCase()));
+  }
+
+  if (params?.hostId != null) {
+    const validHostId = int4IdSchema.safeParse(params.hostId);
+    if (!validHostId.success) {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+    conditions.push(eq(properties.hostId, validHostId.data));
+  }
+
+  if (params?.search && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim())}%`;
+    const searchCond = or(
+      ilike(properties.title, pattern),
+      ilike(properties.reference, pattern),
+      ilike(properties.city, pattern),
+      ilike(properties.neighborhood, pattern),
+      ilike(properties.slug, pattern)
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [totalRows, itemRows] = await Promise.all([
+    whereClause
+      ? db.select({ count: sql<number>`count(*)::int` }).from(properties).where(whereClause)
+      : db.select({ count: sql<number>`count(*)::int` }).from(properties),
+    whereClause
+      ? db
+          .select()
+          .from(properties)
+          .where(whereClause)
+          .orderBy(desc(properties.id))
+          .limit(pageSize)
+          .offset(offset)
+      : db
+          .select()
+          .from(properties)
+          .orderBy(desc(properties.id))
+          .limit(pageSize)
+          .offset(offset),
+  ]);
+
+  return {
+    items: itemRows.map(mapPropertyRow),
+    total: Number(totalRows[0]?.count ?? 0),
+    page,
+    pageSize,
+    counts,
+  };
 }

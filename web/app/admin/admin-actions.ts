@@ -5,16 +5,34 @@ import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth/guards';
 import {
   createAdminProperty,
+  listAdminPropertiesPaginated,
   listProperties,
   updateProperty,
   updatePropertyStatus,
   deleteProperty,
+  type AdminPropertiesPaginatedParams,
 } from '@/lib/api/properties';
-import { getHostProfile, listHosts, reviewHostApplication } from '@/lib/api/hosts';
-import { getUserById, listUsers, updateUser } from '@/lib/api/users';
 import {
+  getHostProfile,
+  listAdminHostsPaginated,
+  listHosts,
+  reviewHostApplication,
+  type AdminHostsPaginatedParams,
+} from '@/lib/api/hosts';
+import {
+  getUserById,
+  listAdminUsersPaginated,
+  listUsers,
+  updateUser,
+  type AdminUsersPaginatedParams,
+} from '@/lib/api/users';
+import {
+  getAdminDashboardStats,
+  listAdminReservationsPaginated,
   listReservations,
   updateReservationStatus,
+  type AdminDashboardPeriod,
+  type AdminReservationsPaginatedParams,
 } from '@/lib/api/reservations';
 import { notifyListingModeration } from '@/lib/email/notifications';
 import type { PropertyStatus, HostStatus, Property, User } from '@/lib/types';
@@ -269,4 +287,67 @@ export async function updateUserAction(
   revalidatePath('/admin');
   revalidatePath('/admin/users');
   return stripUserSecret(updated);
+}
+
+/**
+ * Fetches period-scoped Admin Dashboard KPIs computed via SQL aggregations.
+ */
+export async function fetchAdminDashboardStatsAction(
+  period: AdminDashboardPeriod = 'all'
+) {
+  await requireAdmin();
+  return getAdminDashboardStats(period);
+}
+
+/**
+ * Fetches paginated properties for the Admin Portal using SQL LIMIT/OFFSET.
+ */
+export async function fetchAdminPropertiesPaginatedAction(
+  params?: AdminPropertiesPaginatedParams
+) {
+  await requireAdmin();
+  return listAdminPropertiesPaginated(params);
+}
+
+/**
+ * Fetches paginated host profiles for the Admin Portal using SQL LIMIT/OFFSET.
+ */
+export async function fetchAdminHostsPaginatedAction(
+  params?: AdminHostsPaginatedParams
+) {
+  await requireAdmin();
+  return listAdminHostsPaginated(params);
+}
+
+/**
+ * Fetches paginated reservations and SQL-aggregated KPI summary for the Admin Portal.
+ */
+export async function fetchAdminReservationsPaginatedAction(
+  params?: AdminReservationsPaginatedParams
+) {
+  await requireAdmin();
+  return listAdminReservationsPaginated(params);
+}
+
+/**
+ * Fetches paginated users for the Admin Directory with passwordHash stripped.
+ */
+export async function fetchAdminUsersPaginatedAction(
+  params?: AdminUsersPaginatedParams
+) {
+  await requireAdmin();
+  const result = await listAdminUsersPaginated(params);
+  return {
+    ...result,
+    items: result.items.map(stripUserSecret),
+  };
+}
+
+/**
+ * Fetches all reservations for a specific user (for the Admin User Reservations Drawer).
+ */
+export async function fetchAdminUserReservationsAction(userId: number) {
+  await requireAdmin();
+  const validUserId = adminUserIdSchema.parse(userId);
+  return listReservations({ userId: validUserId, status: 'all' });
 }

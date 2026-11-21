@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { hostProfiles, properties, reservations, users } from '@/lib/db/schema';
 import { notifyBookingCancelled, notifyHostApplication } from '@/lib/email/notifications';
@@ -410,4 +410,139 @@ export async function updateHostProfile(
     .returning();
 
   return mapHostRow(updatedRows[0]);
+}
+
+export interface AdminHostsPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  status?: HostStatus | 'all';
+  search?: string;
+}
+
+export interface AdminHostsStatusCounts {
+  all: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  suspended: number;
+}
+
+export interface AdminHostsPaginatedResult {
+  items: HostProfile[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: AdminHostsStatusCounts;
+}
+
+const VALID_HOST_STATUSES = new Set<HostStatus>([
+  'pending',
+  'approved',
+  'rejected',
+  'suspended',
+]);
+
+function escapeIlike(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function normalizePagination(page?: number, pageSize?: number) {
+  const safePage =
+    typeof page === 'number' && Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+  const rawSize =
+    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
+  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    offset: (safePage - 1) * safePageSize,
+  };
+}
+
+/**
+ * Lists host profiles for the Admin Portal using SQL LIMIT/OFFSET pagination,
+ * filtered COUNT(*), and global per-status counts.
+ */
+export async function listAdminHostsPaginated(
+  params?: AdminHostsPaginatedParams
+): Promise<AdminHostsPaginatedResult> {
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+
+  const statusCountRows = await db
+    .select({
+      status: hostProfiles.status,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(hostProfiles)
+    .groupBy(hostProfiles.status);
+
+  const counts: AdminHostsStatusCounts = {
+    all: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    suspended: 0,
+  };
+  for (const row of statusCountRows) {
+    const c = Number(row.count ?? 0);
+    counts.all += c;
+    if (row.status in counts && row.status !== 'all') {
+      counts[row.status as keyof Omit<AdminHostsStatusCounts, 'all'>] = c;
+    }
+  }
+
+  const conditions: SQL[] = [];
+
+  if (params?.status && params.status !== 'all') {
+    if (!VALID_HOST_STATUSES.has(params.status)) {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+    conditions.push(eq(hostProfiles.status, params.status));
+  }
+
+  if (params?.search && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim())}%`;
+    const searchCond = or(
+      ilike(hostProfiles.displayName, pattern),
+      ilike(hostProfiles.cities, pattern),
+      ilike(hostProfiles.phone, pattern),
+      ilike(users.email, pattern)
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [totalRows, itemRows] = await Promise.all([
+    whereClause
+      ? db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(hostProfiles)
+          .leftJoin(users, eq(hostProfiles.userId, users.id))
+          .where(whereClause)
+      : db.select({ count: sql<number>`count(*)::int` }).from(hostProfiles),
+    whereClause
+      ? db
+          .select({ host: hostProfiles })
+          .from(hostProfiles)
+          .leftJoin(users, eq(hostProfiles.userId, users.id))
+          .where(whereClause)
+          .orderBy(desc(hostProfiles.createdAt), desc(hostProfiles.id))
+          .limit(pageSize)
+          .offset(offset)
+      : db
+          .select({ host: hostProfiles })
+          .from(hostProfiles)
+          .orderBy(desc(hostProfiles.createdAt), desc(hostProfiles.id))
+          .limit(pageSize)
+          .offset(offset),
+  ]);
+
+  return {
+    items: itemRows.map((r) => mapHostRow(r.host)),
+    total: Number(totalRows[0]?.count ?? 0),
+    page,
+    pageSize,
+    counts,
+  };
 }

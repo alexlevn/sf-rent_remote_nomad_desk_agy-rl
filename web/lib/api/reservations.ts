@@ -1,5 +1,18 @@
 import { randomInt } from 'node:crypto';
-import { and, asc, desc, eq, inArray, isNotNull, lt, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lt,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { z } from 'zod';
 import { getExchangeRates } from '@/lib/api/rates';
 import { db } from '@/lib/db/client';
@@ -846,4 +859,308 @@ export async function deleteBlockedDate(
     .returning({ id: blockedDates.id });
 
   return deleted.length > 0;
+}
+
+export type AdminDashboardPeriod = 'today' | '7d' | '30d' | 'all';
+
+const adminDashboardPeriodSchema = z.enum(['today', '7d', '30d', 'all']);
+
+const VALID_RESERVATION_STATUSES = new Set<ReservationStatus>([
+  'pending',
+  'confirmed',
+  'rejected',
+  'expired',
+  'cancelled',
+  'completed',
+]);
+
+export interface AdminReservationsPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  status?: ReservationStatus | 'all';
+  hostId?: number;
+  search?: string;
+}
+
+export interface AdminReservationsStatusCounts {
+  all: number;
+  pending: number;
+  confirmed: number;
+  completed: number;
+  cancelled: number;
+  rejected: number;
+  expired: number;
+}
+
+export interface AdminReservationsSummary {
+  totalCount: number;
+  pendingCount: number;
+  confirmedCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  rejectedCount: number;
+  expiredCount: number;
+  gmvCents: number;
+  commissionCents: number;
+  hostPayoutCents: number;
+}
+
+export interface AdminReservationsPaginatedResult {
+  items: Reservation[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: AdminReservationsStatusCounts;
+  summary: AdminReservationsSummary;
+}
+
+export interface AdminDashboardStats {
+  period: AdminDashboardPeriod;
+  publishedProperties: number;
+  totalProperties: number;
+  pendingProperties: number;
+  activeHosts: number;
+  pendingHosts: number;
+  totalUsers: number;
+  totalReservations: number;
+  confirmedReservations: number;
+  pendingReservations: number;
+  cancelledReservations: number;
+  newUsers: number;
+  newProperties: number;
+  gmvCents: number;
+  commissionCents: number;
+  estimatedGmvUSD: number;
+  netCommissionUSD: number;
+}
+
+function escapeIlike(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function normalizePagination(page?: number, pageSize?: number) {
+  const safePage =
+    typeof page === 'number' && Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+  const rawSize =
+    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
+  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    offset: (safePage - 1) * safePageSize,
+  };
+}
+
+/**
+ * Lists reservations for the Admin Portal using SQL LIMIT/OFFSET pagination,
+ * filtered COUNT(*), global status counts, and SQL-aggregated financial KPIs.
+ */
+export async function listAdminReservationsPaginated(
+  params?: AdminReservationsPaginatedParams
+): Promise<AdminReservationsPaginatedResult> {
+  await expireOverduePendingReservations();
+
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+
+  const [aggRow] = await db
+    .select({
+      all: sql<number>`count(*)::int`,
+      pending: sql<number>`count(*) filter (where ${reservations.status} = 'pending')::int`,
+      confirmed: sql<number>`count(*) filter (where ${reservations.status} = 'confirmed')::int`,
+      completed: sql<number>`count(*) filter (where ${reservations.status} = 'completed')::int`,
+      cancelled: sql<number>`count(*) filter (where ${reservations.status} = 'cancelled')::int`,
+      rejected: sql<number>`count(*) filter (where ${reservations.status} = 'rejected')::int`,
+      expired: sql<number>`count(*) filter (where ${reservations.status} = 'expired')::int`,
+      gmvCents: sql<string>`coalesce(sum(${reservations.totalAmount}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+      commissionCents: sql<string>`coalesce(sum(${reservations.commissionAmount}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+      hostPayoutCents: sql<string>`coalesce(sum(${reservations.hostPayout}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+    })
+    .from(reservations);
+
+  const counts: AdminReservationsStatusCounts = {
+    all: Number(aggRow?.all ?? 0),
+    pending: Number(aggRow?.pending ?? 0),
+    confirmed: Number(aggRow?.confirmed ?? 0),
+    completed: Number(aggRow?.completed ?? 0),
+    cancelled: Number(aggRow?.cancelled ?? 0),
+    rejected: Number(aggRow?.rejected ?? 0),
+    expired: Number(aggRow?.expired ?? 0),
+  };
+
+  const summary: AdminReservationsSummary = {
+    totalCount: counts.all,
+    pendingCount: counts.pending,
+    confirmedCount: counts.confirmed,
+    completedCount: counts.completed,
+    cancelledCount: counts.cancelled,
+    rejectedCount: counts.rejected,
+    expiredCount: counts.expired,
+    gmvCents: Number(aggRow?.gmvCents ?? 0),
+    commissionCents: Number(aggRow?.commissionCents ?? 0),
+    hostPayoutCents: Number(aggRow?.hostPayoutCents ?? 0),
+  };
+
+  const conditions: SQL[] = [];
+
+  if (params?.status && params.status !== 'all') {
+    if (!VALID_RESERVATION_STATUSES.has(params.status)) {
+      return { items: [], total: 0, page, pageSize, counts, summary };
+    }
+    conditions.push(eq(reservations.status, params.status));
+  }
+
+  if (params?.hostId != null) {
+    const validHostId = hostInt4IdSchema.safeParse(params.hostId);
+    if (!validHostId.success) {
+      return { items: [], total: 0, page, pageSize, counts, summary };
+    }
+    conditions.push(eq(properties.hostId, validHostId.data));
+  }
+
+  if (params?.search && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim())}%`;
+    const searchCond = or(
+      ilike(reservations.code, pattern),
+      ilike(reservations.guestName, pattern),
+      ilike(reservations.guestEmail, pattern),
+      ilike(properties.title, pattern),
+      ilike(properties.city, pattern)
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [totalRows, itemRows] = await Promise.all([
+    whereClause
+      ? db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(reservations)
+          .innerJoin(properties, eq(reservations.propertyId, properties.id))
+          .where(whereClause)
+      : db.select({ count: sql<number>`count(*)::int` }).from(reservations),
+    whereClause
+      ? db
+          .select({ reservation: reservations })
+          .from(reservations)
+          .innerJoin(properties, eq(reservations.propertyId, properties.id))
+          .where(whereClause)
+          .orderBy(desc(reservations.createdAt), desc(reservations.id))
+          .limit(pageSize)
+          .offset(offset)
+      : db
+          .select({ reservation: reservations })
+          .from(reservations)
+          .orderBy(desc(reservations.createdAt), desc(reservations.id))
+          .limit(pageSize)
+          .offset(offset),
+  ]);
+
+  return {
+    items: itemRows.map((r) => mapReservationRow(r.reservation)),
+    total: Number(totalRows[0]?.count ?? 0),
+    page,
+    pageSize,
+    counts,
+    summary,
+  };
+}
+
+function resolvePeriodCutoff(period: AdminDashboardPeriod): Date | null {
+  const now = new Date();
+  if (period === 'today') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+  if (period === '7d') {
+    return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+  if (period === '30d') {
+    return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+  return null;
+}
+
+/**
+ * Computes real-time Admin Dashboard KPIs from PostgreSQL using SQL aggregations,
+ * scoped by period ('today' | '7d' | '30d' | 'all') for activity metrics.
+ */
+export async function getAdminDashboardStats(
+  period: AdminDashboardPeriod = 'all'
+): Promise<AdminDashboardStats> {
+  const validPeriod = adminDashboardPeriodSchema.parse(period);
+  await expireOverduePendingReservations();
+
+  const cutoff = resolvePeriodCutoff(validPeriod);
+
+  const [propRows, hostRows, userRows, resRows] = await Promise.all([
+    db
+      .select({
+        totalProperties: sql<number>`count(*)::int`,
+        publishedProperties: sql<number>`count(*) filter (where ${properties.status} = 'published')::int`,
+        pendingProperties: sql<number>`count(*) filter (where ${properties.status} = 'pending_review')::int`,
+        newProperties: cutoff
+          ? sql<number>`count(*) filter (where ${properties.createdAt} >= ${cutoff})::int`
+          : sql<number>`count(*)::int`,
+      })
+      .from(properties),
+    db
+      .select({
+        activeHosts: sql<number>`count(*) filter (where ${hostProfiles.status} = 'approved')::int`,
+        pendingHosts: sql<number>`count(*) filter (where ${hostProfiles.status} = 'pending')::int`,
+      })
+      .from(hostProfiles),
+    db
+      .select({
+        totalUsers: sql<number>`count(*)::int`,
+        newUsers: cutoff
+          ? sql<number>`count(*) filter (where ${users.createdAt} >= ${cutoff})::int`
+          : sql<number>`count(*)::int`,
+      })
+      .from(users),
+    cutoff
+      ? db
+          .select({
+            totalReservations: sql<number>`count(*)::int`,
+            confirmedReservations: sql<number>`count(*) filter (where ${reservations.status} in ('confirmed', 'completed'))::int`,
+            pendingReservations: sql<number>`count(*) filter (where ${reservations.status} = 'pending')::int`,
+            cancelledReservations: sql<number>`count(*) filter (where ${reservations.status} = 'cancelled')::int`,
+            gmvCents: sql<string>`coalesce(sum(${reservations.totalAmount}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+            commissionCents: sql<string>`coalesce(sum(${reservations.commissionAmount}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+          })
+          .from(reservations)
+          .where(gte(reservations.createdAt, cutoff))
+      : db
+          .select({
+            totalReservations: sql<number>`count(*)::int`,
+            confirmedReservations: sql<number>`count(*) filter (where ${reservations.status} in ('confirmed', 'completed'))::int`,
+            pendingReservations: sql<number>`count(*) filter (where ${reservations.status} = 'pending')::int`,
+            cancelledReservations: sql<number>`count(*) filter (where ${reservations.status} = 'cancelled')::int`,
+            gmvCents: sql<string>`coalesce(sum(${reservations.totalAmount}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+            commissionCents: sql<string>`coalesce(sum(${reservations.commissionAmount}) filter (where ${reservations.status} in ('confirmed', 'completed')), 0)::bigint`,
+          })
+          .from(reservations),
+  ]);
+
+  const gmvCents = Number(resRows[0]?.gmvCents ?? 0);
+  const commissionCents = Number(resRows[0]?.commissionCents ?? 0);
+
+  return {
+    period: validPeriod,
+    publishedProperties: Number(propRows[0]?.publishedProperties ?? 0),
+    totalProperties: Number(propRows[0]?.totalProperties ?? 0),
+    pendingProperties: Number(propRows[0]?.pendingProperties ?? 0),
+    activeHosts: Number(hostRows[0]?.activeHosts ?? 0),
+    pendingHosts: Number(hostRows[0]?.pendingHosts ?? 0),
+    totalUsers: Number(userRows[0]?.totalUsers ?? 0),
+    totalReservations: Number(resRows[0]?.totalReservations ?? 0),
+    confirmedReservations: Number(resRows[0]?.confirmedReservations ?? 0),
+    pendingReservations: Number(resRows[0]?.pendingReservations ?? 0),
+    cancelledReservations: Number(resRows[0]?.cancelledReservations ?? 0),
+    newUsers: Number(userRows[0]?.newUsers ?? 0),
+    newProperties: Number(propRows[0]?.newProperties ?? 0),
+    gmvCents,
+    commissionCents,
+    estimatedGmvUSD: gmvCents / 100,
+    netCommissionUSD: commissionCents / 100,
+  };
 }

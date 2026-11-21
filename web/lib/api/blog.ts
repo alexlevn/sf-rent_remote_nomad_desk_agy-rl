@@ -1,4 +1,4 @@
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, and, asc, desc, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { blogPosts } from '@/lib/db/schema';
 import type { BlogPost } from '@/lib/types';
@@ -213,4 +213,124 @@ export async function deleteBlogPost(id: number): Promise<boolean> {
     .returning({ id: blogPosts.id });
 
   return deleted.length > 0;
+}
+
+export interface AdminBlogPostsPaginatedParams {
+  page?: number;
+  pageSize?: number;
+  category?: string;
+  status?: 'published' | 'draft' | 'all';
+  search?: string;
+}
+
+export interface AdminBlogPostsPaginatedResult {
+  items: BlogPost[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: {
+    all: number;
+    published: number;
+    draft: number;
+  };
+}
+
+function escapeIlike(input: string): string {
+  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function normalizePagination(page?: number, pageSize?: number) {
+  const safePage =
+    typeof page === 'number' && Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
+  const rawSize =
+    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
+  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
+  return {
+    page: safePage,
+    pageSize: safePageSize,
+    offset: (safePage - 1) * safePageSize,
+  };
+}
+
+/**
+ * Lists blog posts for the Admin Portal using SQL LIMIT/OFFSET pagination,
+ * filtered COUNT(*), and global published/draft counts.
+ */
+export async function listAdminBlogPostsPaginated(
+  params?: AdminBlogPostsPaginatedParams
+): Promise<AdminBlogPostsPaginatedResult> {
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+
+  const [aggRow] = await db
+    .select({
+      all: sql<number>`count(*)::int`,
+      published: sql<number>`count(*) filter (where ${blogPosts.status} = 'published')::int`,
+      draft: sql<number>`count(*) filter (where ${blogPosts.status} = 'draft')::int`,
+    })
+    .from(blogPosts);
+
+  const counts = {
+    all: Number(aggRow?.all ?? 0),
+    published: Number(aggRow?.published ?? 0),
+    draft: Number(aggRow?.draft ?? 0),
+  };
+
+  const conditions: SQL[] = [];
+
+  if (
+    params?.category &&
+    params.category.trim() &&
+    params.category.trim().toLowerCase() !== 'all'
+  ) {
+    conditions.push(eq(sql`lower(${blogPosts.category})`, params.category.trim().toLowerCase()));
+  }
+
+  if (params?.status && params.status !== 'all') {
+    if (params.status === 'published' || params.status === 'draft') {
+      conditions.push(eq(blogPosts.status, params.status));
+    } else {
+      return { items: [], total: 0, page, pageSize, counts };
+    }
+  }
+
+  if (params?.search && params.search.trim()) {
+    const pattern = `%${escapeIlike(params.search.trim())}%`;
+    const searchCond = or(
+      ilike(blogPosts.title, pattern),
+      ilike(blogPosts.slug, pattern),
+      ilike(blogPosts.category, pattern),
+      ilike(blogPosts.author, pattern)
+    );
+    if (searchCond) conditions.push(searchCond);
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [totalRows, itemRows] = await Promise.all([
+    whereClause
+      ? db.select({ count: sql<number>`count(*)::int` }).from(blogPosts).where(whereClause)
+      : db.select({ count: sql<number>`count(*)::int` }).from(blogPosts),
+    whereClause
+      ? db
+          .select()
+          .from(blogPosts)
+          .where(whereClause)
+          .orderBy(asc(blogPosts.position), desc(blogPosts.id))
+          .limit(pageSize)
+          .offset(offset)
+      : db
+          .select()
+          .from(blogPosts)
+          .orderBy(asc(blogPosts.position), desc(blogPosts.id))
+          .limit(pageSize)
+          .offset(offset),
+  ]);
+
+  return {
+    items: itemRows.map(mapBlogRow),
+    total: Number(totalRows[0]?.count ?? 0),
+    page,
+    pageSize,
+    counts,
+  };
 }

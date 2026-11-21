@@ -8,6 +8,8 @@ import {
   deleteLocation,
   reorderTopCities,
   listLocations,
+  listAdminLocationsPaginated,
+  type AdminLocationsPaginatedParams,
 } from '@/lib/api/locations';
 import {
   saveWorkstationPackage,
@@ -18,8 +20,20 @@ import {
   reorderWorkstationItems,
   listWorkstations,
 } from '@/lib/api/workstations';
-import { saveTravelGuide, deleteTravelGuide, listTravelGuides } from '@/lib/api/guides';
-import { saveBlogPost, deleteBlogPost, listBlogPosts } from '@/lib/api/blog';
+import {
+  saveTravelGuide,
+  deleteTravelGuide,
+  listTravelGuides,
+  listAdminGuidesPaginated,
+  type AdminGuidesPaginatedParams,
+} from '@/lib/api/guides';
+import {
+  saveBlogPost,
+  deleteBlogPost,
+  listBlogPosts,
+  listAdminBlogPostsPaginated,
+  type AdminBlogPostsPaginatedParams,
+} from '@/lib/api/blog';
 import { saveVideo, deleteVideo, reorderVideos, listVideos } from '@/lib/api/videos';
 import { reorderFeaturedProperties } from '@/lib/api/properties';
 import { getExchangeRates, updateExchangeRates } from '@/lib/api/rates';
@@ -314,5 +328,26 @@ export async function fetchVideosAction() {
 export async function fetchExchangeRatesAction() {
   await assertAdminRole();
   return await getExchangeRates();
+}
+
+export async function fetchAdminLocationsPaginatedAction(
+  params?: AdminLocationsPaginatedParams
+) {
+  await assertAdminRole();
+  return await listAdminLocationsPaginated(params);
+}
+
+export async function fetchAdminGuidesPaginatedAction(
+  params?: AdminGuidesPaginatedParams
+) {
+  await assertAdminRole();
+  return await listAdminGuidesPaginated(params);
+}
+
+export async function fetchAdminBlogPostsPaginatedAction(
+  params?: AdminBlogPostsPaginatedParams
+) {
+  await assertAdminRole();
+  return await listAdminBlogPostsPaginated(params);
 }
 
