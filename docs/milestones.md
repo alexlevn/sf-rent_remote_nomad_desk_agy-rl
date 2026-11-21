@@ -13,7 +13,7 @@ Stages of the automated build pipeline for this project.
 | S5 | runner | Build: Frontend (mock UI) | ✅ | 27 tasks |
 | S5V | agent | UI vs design check & fixes | ✅ |  |
 | G3 | gate | Owner review: UI mock | ✅ | approved 11-21 19:48 |
-| S6 | agent | Plan: Backend (local Docker) | ⏳ | attempt 1 |
+| S6 | agent | Plan: Backend (local Docker) | ✅ |  |
 | S7 | runner | Build: Backend (local Docker) | 🔲 |  |
 | S7A | agent | Plan: Admin | 🔲 |  |
 | S7B | runner | Build: Admin | 🔲 |  |
