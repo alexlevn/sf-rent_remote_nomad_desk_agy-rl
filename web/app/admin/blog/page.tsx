@@ -192,6 +192,8 @@ export default function AdminBlogPage() {
   };
 
   const handleBackToList = () => {
+    // Prevent abandoning the editor while a save request is still in flight
+    if (isActionRunningRef.current) return;
     if (!confirmLeave()) return;
     setIsEditing(false);
     setCurrentPost(null);
@@ -318,7 +320,7 @@ export default function AdminBlogPage() {
         <Link
           href="/admin/guides"
           onClick={(e) => {
-            if (!confirmLeave()) e.preventDefault();
+            if (isActionRunningRef.current || !confirmLeave()) e.preventDefault();
           }}
           className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-neutral-500 hover:text-neutral-900 transition-colors"
         >
@@ -531,9 +533,10 @@ export default function AdminBlogPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={handleBackToList}
               data-testid="post-back-btn"
-              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[var(--color-brand)] hover:underline cursor-pointer"
+              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[var(--color-brand)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Back to Blog Table</span>
@@ -820,14 +823,20 @@ export default function AdminBlogPage() {
                   · Last saved: {lastSavedLabel}
                 </span>
               )}
+              {formError && (
+                <span role="alert" className="text-red-600 font-semibold">
+                  · {formError}
+                </span>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleBackToList}
                 data-testid="post-cancel-btn"
-                className="min-h-10 px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors cursor-pointer"
+                className="min-h-10 px-4 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Cancel
               </button>
