@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
-import { getHostProfile } from '@/lib/api/hosts';
+import { getHostByUserId } from '@/lib/api/hosts';
 import { listLocations } from '@/lib/api/locations';
 import { getPropertyById, saveHostListing } from '@/lib/api/properties';
 import type { Property } from '@/lib/types';
@@ -49,7 +49,7 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
 
   // Current authenticated user & host
   const user = await getCurrentUser();
-  const host = user ? await getHostProfile(user.id) : null;
+  const host = user ? await getHostByUserId(user.id) : null;
 
   // AC-HOST-7: Isolation check - editing another host's property returns 404
   if (!host || property.hostId !== host.id) {

@@ -2,7 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
-import { getHostProfile } from '@/lib/api/hosts';
+import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
 import { listLocations } from '@/lib/api/locations';
 import { saveHostListing } from '@/lib/api/properties';
 import type { Property } from '@/lib/types';
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default async function NewListingPage() {
   const user = await getCurrentUser();
   const host =
-    (user ? await getHostProfile(user.id) : null) || (await getHostProfile(1));
+    (user ? await getHostByUserId(user.id) : null) || (await getHostProfile(1));
 
   if (!host) {
     return (

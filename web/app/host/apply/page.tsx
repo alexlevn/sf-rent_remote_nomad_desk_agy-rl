@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { getCurrentUser } from '@/lib/auth/session';
-import { getHostProfile, applyHost, updateHostProfile } from '@/lib/api/hosts';
+import { getHostByUserId, applyHost, updateHostProfile } from '@/lib/api/hosts';
 import type { HostApplicationInput, HostProfile } from '@/lib/types';
 import { HostApplyContainer } from '@/features/host/host-apply-container';
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default async function HostApplyPage() {
   const user = await getCurrentUser();
-  const hostProfile = user ? await getHostProfile(user.id) : null;
+  const hostProfile = user ? await getHostByUserId(user.id) : null;
 
   // Server action to handle host application submission or re-submission
   async function submitHostApplicationAction(data: HostApplicationInput): Promise<{
@@ -32,7 +32,7 @@ export default async function HostApplyPage() {
     }
 
     try {
-      const existing = await getHostProfile(currentUser.id);
+      const existing = await getHostByUserId(currentUser.id);
       let savedProfile: HostProfile;
 
       if (existing) {

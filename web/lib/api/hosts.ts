@@ -13,12 +13,21 @@ export async function listHosts(): Promise<HostProfile[]> {
  * Retrieves a host profile by its ID or associated userId.
  */
 export async function getHostProfile(
-  userIdOrId: number
+  id: number
 ): Promise<HostProfile | null> {
   const store = getMockStore();
-  const host = store.hosts.find(
-    (h) => h.id === userIdOrId || h.userId === userIdOrId
-  );
+  const host = store.hosts.find((h) => h.id === id);
+  return host ? { ...host } : null;
+}
+
+/**
+ * Retrieves a host profile specifically by associated userId.
+ */
+export async function getHostByUserId(
+  userId: number
+): Promise<HostProfile | null> {
+  const store = getMockStore();
+  const host = store.hosts.find((h) => h.userId === userId);
   return host ? { ...host } : null;
 }
 
