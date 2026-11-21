@@ -91,6 +91,20 @@ export default function AdminWorkstationsPage() {
     fetchWorkstations();
   }, [fetchWorkstations]);
 
+  // Close active modal on Escape key
+  useEffect(() => {
+    if (!isPkgModalOpen && !isCompModalOpen && !isAddonModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsPkgModalOpen(false);
+        setIsCompModalOpen(false);
+        setIsAddonModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPkgModalOpen, isCompModalOpen, isAddonModalOpen]);
+
   // 1. Package Handlers
   const handleOpenEditPkg = (pkg: WorkstationPackage) => {
     setEditingPkg({ ...pkg });
@@ -830,6 +844,7 @@ export default function AdminWorkstationsPage() {
                                 type="button"
                                 onClick={() => handleDeleteComp(category, item.id)}
                                 data-testid={`delete-comp-${item.id}`}
+                                aria-label={`Delete ${item.name}`}
                                 className="p-1 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
                                 title="Delete"
                               >
@@ -939,6 +954,7 @@ export default function AdminWorkstationsPage() {
                             type="button"
                             onClick={() => handleDeleteAddon(addon.id)}
                             data-testid={`delete-addon-${addon.id}`}
+                            aria-label={`Delete ${addon.name}`}
                             className="p-1 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
                             title="Delete"
                           >

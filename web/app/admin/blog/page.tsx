@@ -167,15 +167,20 @@ export default function AdminBlogPage() {
             .replace(/(^-|-$)/g, ''),
       };
 
+      const isNew = !currentPost.id;
       await saveBlogPostAction(payload);
       showToast(
-        currentPost.id
-          ? `Blog article "${payload.title}" updated successfully!`
-          : `Blog article "${payload.title}" published to /blog!`
+        isNew
+          ? `Blog article "${payload.title}" published to /blog!`
+          : `Blog article "${payload.title}" updated successfully!`
       );
       setIsEditing(false);
       setCurrentPost(null);
-      await fetchPostsPage(page);
+      if (isNew && page !== 1) {
+        setPage(1);
+      } else {
+        await fetchPostsPage(page);
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save blog post.');
     } finally {
@@ -379,6 +384,8 @@ export default function AdminBlogPage() {
                               <Link
                                 href={`/blog/${post.slug}`}
                                 target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`View ${post.title} on live site`}
                                 className="p-1.5 rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
                                 title="View on Live Site"
                               >
@@ -396,6 +403,7 @@ export default function AdminBlogPage() {
                             <button
                               type="button"
                               onClick={() => handleDelete(post.id)}
+                              aria-label={`Delete ${post.title}`}
                               className="p-1 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                               title="Delete Post"
                             >
@@ -563,6 +571,9 @@ export default function AdminBlogPage() {
                     data-testid="post-category-select"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                   >
+                    {currentPost?.category && !BLOG_CATEGORIES.includes(currentPost.category) && (
+                      <option value={currentPost.category}>{currentPost.category}</option>
+                    )}
                     {BLOG_CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
                         {cat}

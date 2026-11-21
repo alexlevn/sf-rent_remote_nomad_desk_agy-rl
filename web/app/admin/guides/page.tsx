@@ -180,15 +180,20 @@ export default function AdminGuidesPage() {
             .replace(/(^-|-$)/g, ''),
       };
 
+      const isNew = !currentGuide.id;
       await saveTravelGuideAction(payload);
       showToast(
-        currentGuide.id
-          ? `Travel Guide "${payload.title}" updated successfully (AC-CMS-3)!`
-          : `Travel Guide "${payload.title}" published to /travel-guide (AC-CMS-3)!`
+        isNew
+          ? `Travel Guide "${payload.title}" published to /travel-guide (AC-CMS-3)!`
+          : `Travel Guide "${payload.title}" updated successfully (AC-CMS-3)!`
       );
       setIsEditing(false);
       setCurrentGuide(null);
-      await fetchGuidesPage(page);
+      if (isNew && page !== 1) {
+        setPage(1);
+      } else {
+        await fetchGuidesPage(page);
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save travel guide.');
     } finally {
@@ -402,6 +407,8 @@ export default function AdminGuidesPage() {
                               <Link
                                 href={`/travel-guide/${guide.city.toLowerCase()}/${guide.category.toLowerCase()}/${guide.slug}`}
                                 target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`View ${guide.title} on live site`}
                                 className="p-1.5 rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
                                 title="View on Live Site"
                               >
@@ -419,6 +426,7 @@ export default function AdminGuidesPage() {
                             <button
                               type="button"
                               onClick={() => handleDelete(guide.id)}
+                              aria-label={`Delete ${guide.title}`}
                               className="p-1 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                               title="Delete Guide"
                             >
@@ -587,6 +595,12 @@ export default function AdminGuidesPage() {
                     data-testid="guide-city-select"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] bg-white focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                   >
+                    {currentGuide?.city &&
+                      !locations.some(
+                        (loc) => loc.city.toLowerCase() === currentGuide.city!.toLowerCase()
+                      ) && (
+                        <option value={currentGuide.city}>{currentGuide.city}</option>
+                      )}
                     {locations.map((loc) => (
                       <option key={loc.id} value={loc.city}>
                         {loc.name} ({loc.country})

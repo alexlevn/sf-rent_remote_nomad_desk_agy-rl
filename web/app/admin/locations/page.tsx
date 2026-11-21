@@ -115,6 +115,16 @@ export default function AdminLocationsPage() {
     fetchLocationsPage(page);
   }, [fetchLocationsPage, page]);
 
+  // Close destination modal on Escape key
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
+
   const handleOpenAdd = () => {
     setEditingLocation({
       name: '',
