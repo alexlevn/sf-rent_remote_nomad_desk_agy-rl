@@ -364,7 +364,9 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
       } else {
         process.env.UPLOAD_DIR = originalUploadDir;
       }
-      await fs.rm(tempRoot, { recursive: true, force: true });
+      if (tempRoot) {
+        await fs.rm(tempRoot, { recursive: true, force: true });
+      }
     }
   });
 
@@ -484,6 +486,8 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
         expect(status).toBe(201);
         const uploaded = (body as UploadSuccessBody).media;
         expect(uploaded.mimeType).toBe('image/webp');
+        expect(uploaded.width).toBe(48);
+        expect(uploaded.height).toBe(36);
         expect(uploaded.storageKey).toMatch(/^[0-9a-f]{32}\.webp$/);
 
         const serveReq = new NextRequest(`http://localhost:3288${uploaded.url}`);
@@ -657,6 +661,13 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
       expect(adminVisibleIds).toContain(adminMedia.id);
       expect(adminVisibleIds).toContain(hostMedia.id);
       expect(adminVisibleIds).toContain(secondHostMedia.id);
+
+      // Approved host can delete their own unused upload
+      setSessionForUser(seededApprovedHost);
+      const deleteOwnMediaRes = await deleteMediaRoute(createMediaDeleteRequest(hostMedia.id), {
+        params: Promise.resolve({ id: String(hostMedia.id) }),
+      });
+      expect(deleteOwnMediaRes.status).toBe(200);
     });
   });
 
@@ -665,9 +676,9 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
       setSessionForUser(seededAdmin);
 
       const [imgGallery, imgDescription, imgGuide] = await Promise.all([
-        uploadAsCurrentActor(samplePng, 'prop-gallery.png', 'image/png', `t7-ref-gallery-${runSuffix}`),
-        uploadAsCurrentActor(samplePng, 'prop-desc.png', 'image/png', `t7-ref-desc-${runSuffix}`),
-        uploadAsCurrentActor(samplePng, 'guide-cover.png', 'image/png', `t7-ref-guide-${runSuffix}`),
+        uploadAsCurrentActor(samplePng, 'prop-gallery.png', 'image/png', `t7-ref-${runSuffix}-gallery`),
+        uploadAsCurrentActor(samplePng, 'prop-desc.png', 'image/png', `t7-ref-${runSuffix}-desc`),
+        uploadAsCurrentActor(samplePng, 'guide-cover.png', 'image/png', `t7-ref-${runSuffix}-guide`),
       ]);
 
       const galleryMedia = (imgGallery.body as UploadSuccessBody).media;
@@ -705,7 +716,7 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
 
       // Verify GET /api/media marks all three as in-use
       const listRes = await getMediaRoute(
-        createMediaListRequest(`pageSize=60&search=t7-ref-`),
+        createMediaListRequest(`pageSize=60&search=t7-ref-${runSuffix}`),
       );
       expect(listRes.status).toBe(200);
       const listBody = (await listRes.json()) as MediaListResult;
@@ -813,6 +824,7 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
         '<img src=x onerror=alert(1)>',
         '<img src="javascript:alert(1)">',
         '<img src="data:image/svg+xml,<svg/>">',
+        '<a href="java&#x09;script&#58;alert(1)">obfuscated</a>',
         '<svg onload=alert(1)><circle r="5" /></svg>',
         '<iframe src="https://evil.com/phish"></iframe>',
       ].join('');
@@ -824,6 +836,7 @@ describe('Upload & Media Pipeline, RBAC, Unused-Only Deletion & XSS (T7)', () =>
       expect(cleaned).not.toMatch(/onerror\s*=/i);
       expect(cleaned).not.toMatch(/onload\s*=/i);
       expect(cleaned).not.toMatch(/javascript\s*:/i);
+      expect(cleaned).not.toMatch(/href\s*=/i);
       expect(cleaned).not.toMatch(/data\s*:\s*image\/svg\+xml/i);
       expect(cleaned).not.toMatch(/<svg/i);
       expect(cleaned).not.toContain('evil.com');
