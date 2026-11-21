@@ -358,6 +358,9 @@ describe('Shared Media Validation & Hardened sanitizeHtml', () => {
       '<form action="https://evil.com"><input name="pw" /></form>',
       '<base href="https://evil.com/" />',
       '<img src="data:image/svg+xml;base64,PHN2Zz4=" />',
+      '<style>body{color:red}</style >',
+      '<a href="java&#x09;script&#58;alert(1)">obfuscated</a>',
+      '<img src="data&#58;image/svg+xml,<svg/>" />',
     ].join('');
 
     const cleaned = sanitizeHtml(dirty);
@@ -366,9 +369,12 @@ describe('Shared Media Validation & Hardened sanitizeHtml', () => {
     expect(cleaned).not.toMatch(/<svg/i);
     expect(cleaned).not.toMatch(/<math/i);
     expect(cleaned).not.toMatch(/<style/i);
+    expect(cleaned).not.toContain('body{color:red}');
     expect(cleaned).not.toMatch(/<form/i);
     expect(cleaned).not.toMatch(/<base/i);
     expect(cleaned).not.toMatch(/data\s*:\s*image\/svg\+xml/i);
+    expect(cleaned).not.toMatch(/href=/i);
+    expect(cleaned).not.toContain('data&#58;');
   });
 });
 

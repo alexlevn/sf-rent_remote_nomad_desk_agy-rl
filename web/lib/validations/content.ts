@@ -18,6 +18,37 @@ function escapeHtmlAttr(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+function decodeHtmlUriValue(value: string): string {
+  return value
+    .replace(/&#x([0-9a-f]+);?/gi, (_match, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : '';
+    })
+    .replace(/&#(\d+);?/g, (_match, dec: string) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : '';
+    })
+    .replace(/&colon;/gi, ':')
+    .replace(/&tab;/gi, '\t')
+    .replace(/&newline;/gi, '\n')
+    .replace(/[\u0000-\u0020]+/g, '')
+    .toLowerCase();
+}
+
+function isDangerousUriScheme(rawValue: string): boolean {
+  const normalized = decodeHtmlUriValue(rawValue);
+  return (
+    normalized.startsWith('javascript:') ||
+    normalized.startsWith('vbscript:') ||
+    normalized.startsWith('data:text/html') ||
+    normalized.startsWith('data:image/svg+xml')
+  );
+}
+
 function sanitizeYoutubeIframe(rawAttrs: string): string {
   const attrs = new Map<string, string>();
   const attrRegex = /([a-zA-Z0-9_-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
@@ -92,14 +123,21 @@ export function sanitizeHtml(html: string): string {
   while (cleaned !== previous) {
     previous = cleaned;
     cleaned = cleaned
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<(object|embed|svg|math|style|form)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+      .replace(/<(object|embed|svg|math|style|form)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
       .replace(/<\/?(script|object|embed|svg|math|style|form|base)\b[^>]*>/gi, '')
-      .replace(/<iframe\b([^>]*)>[\s\S]*?<\/iframe>/gi, (_full, attrs: string) => keepIframe(attrs))
+      .replace(/<iframe\b([^>]*)>[\s\S]*?<\/iframe\s*>/gi, (_full, attrs: string) => keepIframe(attrs))
       .replace(/<iframe\b([^>]*)\/?>/gi, (_full, attrs: string) => keepIframe(attrs))
       .replace(/<\/iframe\s*>/gi, '')
       .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
       .replace(/\bon[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+      .replace(
+        /\s*\b(?:href|src|action|formaction)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+        (fullMatch: string, dq?: string, sq?: string, bare?: string) => {
+          const val = dq ?? sq ?? bare ?? '';
+          return isDangerousUriScheme(val) ? '' : fullMatch;
+        },
+      )
       .replace(/javascript\s*:/gi, '')
       .replace(/vbscript\s*:/gi, '')
       .replace(/data\s*:\s*text\/html/gi, '')
