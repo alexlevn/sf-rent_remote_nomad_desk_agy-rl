@@ -11,10 +11,13 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx lib/db/migrate.ts",
+    "db:seed": "tsx lib/db/seed.ts",
+    "db:verify-seed": "tsx lib/db/verify-seed.ts",
     "verify": "eslint && tsc --noEmit && vitest run && next build",
     "e2e:docker": "E2E_DOCKER=1 playwright test"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
     "lucide-react": "^1.77.0",
@@ -27,6 +30,7 @@
   "devDependencies": {
     "@playwright/test": "^1.50.0",
     "@tailwindcss/postcss": "^4.3.5",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
