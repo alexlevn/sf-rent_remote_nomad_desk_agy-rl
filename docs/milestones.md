@@ -11,7 +11,7 @@ Stages of the automated build pipeline for this project.
 | G2 | gate | Owner review: design | ✅ | approved 11-21 12:53 |
 | S4 | agent | Plan: Frontend (mock UI) | ✅ |  |
 | S5 | runner | Build: Frontend (mock UI) | ✅ | 27 tasks |
-| S5V | agent | UI vs design check & fixes | 🔲 |  |
+| S5V | agent | UI vs design check & fixes | ✅ | 20 mục sửa · ok |
 | G3 | gate | Owner review: UI mock | 🔲 |  |
 | S6 | agent | Plan: Backend (local Docker) | 🔲 |  |
 | S7 | runner | Build: Backend (local Docker) | 🔲 |  |
