@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalSafeImagePathSchema } from '@/lib/validations/media';
 
 const INT4_MAX = 2147483647;
 
@@ -51,7 +52,7 @@ export const updateHostProfileSchema = z.object({
   cities: z.string().trim().max(500).optional(),
   portfolioSize: z.number().int().min(1).max(100000).optional(),
   bio: z.string().trim().max(5000).optional(),
-  avatar: z.string().trim().max(255).nullable().optional(),
+  avatar: optionalSafeImagePathSchema.optional(),
   status: hostStatusSchema.optional(),
   rejectionReason: z.string().trim().max(2000).nullable().optional(),
 });

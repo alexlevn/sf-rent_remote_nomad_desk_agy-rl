@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { safeImagePathSchema } from '@/lib/validations/media';
 
 const INT4_MAX = 2147483647;
 
@@ -62,7 +63,7 @@ export const createPropertySchema = z.object({
   checkOut: z.string().trim().max(20).optional(),
   minimumStayNights: z.number().int().min(1).max(3650).optional(),
   isDirectBooking: z.boolean().optional(),
-  images: z.array(z.string().min(1)).max(50).optional(),
+  images: z.array(safeImagePathSchema).max(50).optional(),
   featuredPosition: z.number().int().min(1).max(INT4_MAX).nullable().optional(),
   status: propertyStatusSchema.optional(),
   rejectionReason: z.string().max(2000).nullable().optional(),
@@ -98,7 +99,7 @@ export const updatePropertySchema = z.object({
   checkOut: z.string().trim().max(20).optional(),
   minimumStayNights: z.number().int().min(1).max(3650).optional(),
   isDirectBooking: z.boolean().optional(),
-  images: z.array(z.string().min(1)).max(50).optional(),
+  images: z.array(safeImagePathSchema).max(50).optional(),
   featuredPosition: z.number().int().min(1).max(INT4_MAX).nullable().optional(),
   status: propertyStatusSchema.optional(),
   rejectionReason: z.string().max(2000).nullable().optional(),

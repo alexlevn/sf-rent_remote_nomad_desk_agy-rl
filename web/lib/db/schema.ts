@@ -276,6 +276,20 @@ export const settings = pgTable('settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// 16. Media
+export const media = pgTable('media', {
+  id: serial('id').primaryKey(),
+  url: varchar('url', { length: 255 }).notNull().unique(),
+  storageKey: varchar('storage_key', { length: 255 }).notNull().unique(),
+  mimeType: varchar('mime_type', { length: 50 }).default('image/webp').notNull(),
+  width: integer('width').notNull(),
+  height: integer('height').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  alt: varchar('alt', { length: 255 }),
+  uploadedBy: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   hostProfile: one(hostProfiles, {
@@ -284,6 +298,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   reservations: many(reservations),
   favorites: many(favorites),
+  media: many(media),
 }));
 
 export const hostProfilesRelations = relations(hostProfiles, ({ one, many }) => ({
@@ -338,5 +353,12 @@ export const favoritesRelations = relations(favorites, ({ one }) => ({
   property: one(properties, {
     fields: [favorites.propertyId],
     references: [properties.id],
+  }),
+}));
+
+export const mediaRelations = relations(media, ({ one }) => ({
+  uploader: one(users, {
+    fields: [media.uploadedBy],
+    references: [users.id],
   }),
 }));

@@ -6,3 +6,4 @@ export * from './reservation';
 export * from './user';
 export * from './content';
 export * from './pricing';
+export * from './media';

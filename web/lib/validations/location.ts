@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { safeImagePathSchema } from '@/lib/validations/media';
 
 /**
  * Zod validation schema for creating a new Location.
@@ -12,7 +13,7 @@ export const locationInputSchema = z.object({
   continent: z.string().trim().optional().default('Europe'),
   propertiesCount: z.number().int().nonnegative().optional().default(0),
   description: z.string().optional().default(''),
-  image: z.string().optional().default('/seed/location/placeholder.jpg'),
+  image: safeImagePathSchema.optional().default('/seed/location/placeholder.jpg'),
   center: z.tuple([z.number(), z.number()]).optional().default([40.4168, -3.7038]),
   isActive: z.boolean().optional().default(true),
   position: z.number().int().nonnegative().optional(),
@@ -32,7 +33,7 @@ export const updateLocationSchema = z.object({
   continent: z.string().trim().optional(),
   propertiesCount: z.number().int().nonnegative().optional(),
   description: z.string().optional(),
-  image: z.string().optional(),
+  image: safeImagePathSchema.optional(),
   center: z.tuple([z.number(), z.number()]).optional(),
   isActive: z.boolean().optional(),
   position: z.number().int().nonnegative().optional(),

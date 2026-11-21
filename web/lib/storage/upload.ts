@@ -1,23 +1,26 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import sharp, { type Metadata, type OutputInfo } from 'sharp';
 
 export const MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 export const MAX_IMAGES_PER_LISTING = 20;
+export const MAX_IMAGE_DIMENSION = 1600;
+export const WEBP_QUALITY = 80;
 
-export type AllowedImageMimeType = 'image/jpeg' | 'image/png' | 'image/webp';
-
-const MIME_TO_EXT: Record<AllowedImageMimeType, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-};
+export type AllowedImageMimeType =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'image/gif';
 
 export type UploadErrorCode =
   | 'EMPTY_FILE'
   | 'FILE_TOO_LARGE'
   | 'INVALID_MIME_TYPE'
-  | 'INVALID_INPUT';
+  | 'INVALID_INPUT'
+  | 'ANIMATED_GIF_NOT_ALLOWED'
+  | 'CORRUPT_IMAGE';
 
 export class UploadValidationError extends Error {
   readonly code: UploadErrorCode;
@@ -31,15 +34,20 @@ export class UploadValidationError extends Error {
 
 export interface UploadedFileResult {
   filename: string;
+  storageKey: string;
   url: string;
-  mimeType: AllowedImageMimeType;
-  size: number;
+  mimeType: 'image/webp';
+  width: number;
+  height: number;
+  sizeBytes: number;
 }
 
 export interface UploadOptions {
   uploadDir?: string;
   fieldName?: string;
 }
+
+const ALLOWED_SHARP_FORMATS = new Set(['jpeg', 'png', 'webp', 'gif']);
 
 export function getUploadDir(overrideDir?: string): string {
   const configured = overrideDir ?? process.env.UPLOAD_DIR;
@@ -74,6 +82,13 @@ export function detectImageMimeType(buffer: Buffer): AllowedImageMimeType | null
     buffer.subarray(8, 12).toString('ascii') === 'WEBP'
   ) {
     return 'image/webp';
+  }
+
+  if (buffer.length >= 6) {
+    const gifHeader = buffer.subarray(0, 6).toString('ascii');
+    if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
+      return 'image/gif';
+    }
   }
 
   return null;
@@ -145,30 +160,108 @@ export async function saveUploadedBuffer(
     );
   }
 
-  const mimeType = detectImageMimeType(buffer);
-  if (!mimeType) {
+  const detectedMime = detectImageMimeType(buffer);
+  if (!detectedMime) {
     throw new UploadValidationError(
       'INVALID_MIME_TYPE',
-      'Unsupported file format. Only JPEG, PNG, and WebP images are allowed.',
+      'Unsupported file format. Only JPEG, PNG, WebP, and static GIF images are allowed.',
+    );
+  }
+
+  let metadata: Metadata;
+  try {
+    metadata = await sharp(buffer, { animated: true }).metadata();
+  } catch {
+    throw new UploadValidationError(
+      'CORRUPT_IMAGE',
+      'The uploaded image is corrupted or unreadable. Please upload a valid JPEG, PNG, WebP, or static GIF image.',
+    );
+  }
+
+  if (!metadata.format || !ALLOWED_SHARP_FORMATS.has(metadata.format)) {
+    throw new UploadValidationError(
+      'INVALID_MIME_TYPE',
+      'Unsupported file format. Only JPEG, PNG, WebP, and static GIF images are allowed.',
+    );
+  }
+
+  if (metadata.format === 'gif' && (metadata.pages ?? 1) > 1) {
+    throw new UploadValidationError(
+      'ANIMATED_GIF_NOT_ALLOWED',
+      'Animated GIFs are not supported. Please upload a static GIF, JPEG, PNG, or WebP image.',
+    );
+  }
+
+  // Apply EXIF orientation before stripping metadata, cap dimensions, and normalize to WebP
+  let processedData: Buffer;
+  let processedInfo: OutputInfo;
+  try {
+    const output = await sharp(buffer)
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_DIMENSION,
+        height: MAX_IMAGE_DIMENSION,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer({ resolveWithObject: true });
+
+    processedData = output.data;
+    processedInfo = output.info;
+  } catch {
+    throw new UploadValidationError(
+      'CORRUPT_IMAGE',
+      'The uploaded image could not be processed. Please upload a valid JPEG, PNG, WebP, or static GIF image.',
     );
   }
 
   const uploadDir = getUploadDir(options?.uploadDir);
   await fs.mkdir(uploadDir, { recursive: true });
 
-  const ext = MIME_TO_EXT[mimeType];
-  const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
+  const filename = `${crypto.randomBytes(16).toString('hex')}.webp`;
   // Avoid Turbopack tracing the entire project directory on runtime volume paths
   const targetPath = path.join(/*turbopackIgnore: true*/ uploadDir, filename);
 
-  await fs.writeFile(targetPath, buffer, { flag: 'wx' });
+  await fs.writeFile(targetPath, processedData, { flag: 'wx' });
 
   return {
     filename,
+    storageKey: filename,
     url: `/uploads/${filename}`,
-    mimeType,
-    size: buffer.length,
+    mimeType: 'image/webp',
+    width: processedInfo.width,
+    height: processedInfo.height,
+    sizeBytes: processedData.length,
   };
+}
+
+/**
+ * Deletes an uploaded file by storageKey inside UPLOAD_DIR, ignoring missing files.
+ */
+export async function deleteUploadFile(
+  storageKey: string,
+  options?: Pick<UploadOptions, 'uploadDir'>,
+): Promise<boolean> {
+  const resolved = resolveUploadFilePath([storageKey], options?.uploadDir);
+  if (!resolved) {
+    throw new UploadValidationError('INVALID_INPUT', 'Invalid storage key.');
+  }
+
+  try {
+    await fs.unlink(resolved);
+    return true;
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'ENOENT'
+    ) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function isBlobLike(value: unknown): value is Blob {

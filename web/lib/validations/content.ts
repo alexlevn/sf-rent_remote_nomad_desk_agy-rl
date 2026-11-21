@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { safeImagePathSchema } from '@/lib/validations/media';
 
 const INT4_MAX = 2_147_483_647;
 
@@ -85,19 +86,25 @@ export function sanitizeHtml(html: string): string {
     return `<!--__SAFE_YT_IFRAME_${idx}__-->`;
   };
 
-  let cleaned = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<\/?script\b[^>]*>/gi, '')
-    .replace(/<(object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<\/?(object|embed)\b[^>]*>/gi, '')
-    .replace(/<iframe\b([^>]*)>[\s\S]*?<\/iframe>/gi, (_full, attrs: string) => keepIframe(attrs))
-    .replace(/<iframe\b([^>]*)\/?>/gi, (_full, attrs: string) => keepIframe(attrs))
-    .replace(/<\/iframe\s*>/gi, '')
-    .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-    .replace(/\bon[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-    .replace(/javascript\s*:/gi, '')
-    .replace(/vbscript\s*:/gi, '')
-    .replace(/data\s*:\s*text\/html/gi, '');
+  let cleaned = html;
+  let previous = '';
+  // Repeat stripping until stable to neutralize nested-tag bypasses like <scr<script>ipt>
+  while (cleaned !== previous) {
+    previous = cleaned;
+    cleaned = cleaned
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<(object|embed|svg|math|style|form)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/<\/?(script|object|embed|svg|math|style|form|base)\b[^>]*>/gi, '')
+      .replace(/<iframe\b([^>]*)>[\s\S]*?<\/iframe>/gi, (_full, attrs: string) => keepIframe(attrs))
+      .replace(/<iframe\b([^>]*)\/?>/gi, (_full, attrs: string) => keepIframe(attrs))
+      .replace(/<\/iframe\s*>/gi, '')
+      .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+      .replace(/\bon[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+      .replace(/javascript\s*:/gi, '')
+      .replace(/vbscript\s*:/gi, '')
+      .replace(/data\s*:\s*text\/html/gi, '')
+      .replace(/data\s*:\s*image\/svg\+xml/gi, '');
+  }
 
   for (let i = 0; i < preservedIframes.length; i += 1) {
     cleaned = cleaned.replace(`<!--__SAFE_YT_IFRAME_${i}__-->`, preservedIframes[i]);
@@ -143,7 +150,7 @@ export const createTravelGuideSchema = z.object({
   category: z.string().trim().min(1).max(100).optional().default('City Guide'),
   publishDate: z.string().trim().max(50).optional(),
   featured: z.boolean().optional().default(false),
-  image: z.string().trim().max(255).optional().default('/seed/guide/placeholder.webp'),
+  image: safeImagePathSchema.optional().default('/seed/guide/placeholder.webp'),
   excerpt: z.string().optional().default(''),
   content: z.string().optional().default(''),
   seoTitle: z.string().trim().max(255).optional(),
@@ -163,7 +170,7 @@ export const updateTravelGuideSchema = z.object({
   category: z.string().trim().min(1).max(100).optional(),
   publishDate: z.string().trim().max(50).optional(),
   featured: z.boolean().optional(),
-  image: z.string().trim().max(255).optional(),
+  image: safeImagePathSchema.optional(),
   excerpt: z.string().optional(),
   content: z.string().optional(),
   seoTitle: z.string().trim().max(255).optional(),
@@ -182,7 +189,7 @@ export const createBlogPostSchema = z.object({
   readTime: z.string().trim().min(1).max(50).optional().default('5 min read'),
   publishDate: z.string().trim().max(50).optional(),
   author: z.string().trim().min(1).max(100).optional().default('NomadDesk Team'),
-  image: z.string().trim().max(255).optional().default('/seed/blog/blog-nomad-gear.webp'),
+  image: safeImagePathSchema.optional().default('/seed/blog/blog-nomad-gear.webp'),
   excerpt: z.string().optional().default(''),
   content: z.string().optional().default(''),
   seoTitle: z.string().trim().max(255).optional(),
@@ -202,7 +209,7 @@ export const updateBlogPostSchema = z.object({
   readTime: z.string().trim().min(1).max(50).optional(),
   publishDate: z.string().trim().max(50).optional(),
   author: z.string().trim().min(1).max(100).optional(),
-  image: z.string().trim().max(255).optional(),
+  image: safeImagePathSchema.optional(),
   excerpt: z.string().optional(),
   content: z.string().optional(),
   seoTitle: z.string().trim().max(255).optional(),
@@ -220,7 +227,7 @@ export const createVideoSchema = z.object({
   embedSrc: z.string().trim().max(255).optional().default(''),
   aspect: z.string().trim().max(20).optional().default('9:16'),
   authorName: z.string().trim().min(1).max(100).optional().default('Guest Story'),
-  avatar: z.string().trim().max(255).optional().default('/seed/location/madrid.jpg'),
+  avatar: safeImagePathSchema.optional().default('/seed/location/madrid.jpg'),
   isActive: z.boolean().optional().default(true),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
@@ -235,7 +242,7 @@ export const updateVideoSchema = z.object({
   embedSrc: z.string().trim().max(255).optional(),
   aspect: z.string().trim().max(20).optional(),
   authorName: z.string().trim().min(1).max(100).optional(),
-  avatar: z.string().trim().max(255).optional(),
+  avatar: safeImagePathSchema.optional(),
   isActive: z.boolean().optional(),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });

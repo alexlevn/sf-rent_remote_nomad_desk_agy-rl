@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  type AllowedImageMimeType,
   detectImageMimeType,
   getUploadDir,
   resolveUploadFilePath,
@@ -13,6 +14,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
+// Only serve raster formats stored on disk; GIFs are converted to WebP during upload
+const SERVABLE_IMAGE_MIMES = new Set<AllowedImageMimeType>([
+  'image/webp',
+  'image/jpeg',
+  'image/png',
+]);
 
 async function readMagicBytes(filePath: string): Promise<Buffer> {
   const handle = await fs.open(filePath, 'r');
@@ -65,7 +72,7 @@ export async function GET(
 
   // Enforce magic-byte verification on read so spoofed extensions are never served
   const mimeType = detectImageMimeType(headerBytes);
-  if (!mimeType) {
+  if (!mimeType || !SERVABLE_IMAGE_MIMES.has(mimeType)) {
     return NextResponse.json({ error: 'Unsupported media type' }, { status: 415 });
   }
 

@@ -8,6 +8,13 @@
       "when": 1795266451326,
       "tag": "0000_closed_dorian_gray",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795287984039,
+      "tag": "0001_worthless_gateway",
+      "breakpoints": true
     }
   ]
 }
