@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { HOME_CONTENT } from '@/content/home';
+import { isSafeImagePath } from '@/lib/validations/media';
 import type { CommunityVideo } from '@/lib/types';
 
 const MAX_DISPLAY_VIDEOS = 7;
@@ -11,6 +14,7 @@ interface CommunityReelsProps {
 }
 
 export function CommunityReels({ videos }: CommunityReelsProps) {
+  const [failedAvatars, setFailedAvatars] = useState<Set<string>>(() => new Set());
   // Use videos from seed
   const displayVideos = videos.slice(0, MAX_DISPLAY_VIDEOS);
 
@@ -32,7 +36,18 @@ export function CommunityReels({ videos }: CommunityReelsProps) {
 
         {/* Reels Horizontal Scroll / Grid */}
         <div className="flex gap-4 overflow-x-auto pb-4 pt-1 snap-x scrollbar-thin">
-          {displayVideos.map((video) => (
+          {displayVideos.map((video) => {
+            const avatarSrc = typeof video.avatar === 'string' ? video.avatar.trim() : '';
+            const showAvatarImage =
+              avatarSrc.length > 0 &&
+              isSafeImagePath(avatarSrc) &&
+              !failedAvatars.has(avatarSrc);
+            const fallbackInitial =
+              video.authorName.replace(/^@/, '').charAt(0).toUpperCase() ||
+              video.authorName.charAt(0).toUpperCase() ||
+              '?';
+
+            return (
             <div
               key={video.id}
               className="shrink-0 w-44 sm:w-52 aspect-[9/16] rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-700 relative shadow-md flex flex-col justify-between p-3 text-white snap-start group"
@@ -55,8 +70,27 @@ export function CommunityReels({ videos }: CommunityReelsProps) {
 
               {/* Bottom Author Meta */}
               <div className="relative z-10 flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-neutral-700 border border-white/50 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                  {video.authorName.charAt(0).toUpperCase()}
+                <div className="relative w-7 h-7 rounded-full overflow-hidden bg-neutral-700 border border-white/50 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                  {showAvatarImage ? (
+                    <Image
+                      src={avatarSrc}
+                      alt={`${video.authorName} avatar`}
+                      fill
+                      unoptimized
+                      sizes="28px"
+                      className="object-cover"
+                      onError={() =>
+                        setFailedAvatars((prev) => {
+                          if (prev.has(avatarSrc)) return prev;
+                          const next = new Set(prev);
+                          next.add(avatarSrc);
+                          return next;
+                        })
+                      }
+                    />
+                  ) : (
+                    fallbackInitial
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold truncate">@{video.authorName}</div>
@@ -64,7 +98,8 @@ export function CommunityReels({ videos }: CommunityReelsProps) {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </section>

@@ -8,6 +8,8 @@ import {
   reorderVideosAction,
   fetchVideosAction,
 } from '@/app/admin/cms-actions';
+import { ImagePickerField } from '@/features/media/image-picker-field';
+import { isSafeImagePath } from '@/lib/validations/media';
 import {
   Video,
   Plus,
@@ -49,6 +51,16 @@ export default function AdminVideosPage() {
   useEffect(() => {
     fetchVideos();
   }, []);
+
+  // Close reel modal on Escape key
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -139,12 +151,18 @@ export default function AdminVideosPage() {
       return;
     }
 
+    const trimmedAvatar = (editingVideo.avatar || '').trim();
+    if (!trimmedAvatar || !isSafeImagePath(trimmedAvatar)) {
+      setFormError('Avatar image must be a valid /uploads/, /seed/, or https:// URL.');
+      return;
+    }
+
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
 
     try {
-      await saveVideoAction(editingVideo);
+      await saveVideoAction({ ...editingVideo, avatar: trimmedAvatar });
       showToast(
         editingVideo.id
           ? `Reel for ${editingVideo.authorName} updated successfully!`
@@ -323,7 +341,7 @@ export default function AdminVideosPage() {
       {/* Modal: Add / Edit Reel */}
       {isModalOpen && editingVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-[var(--color-border-light)] shadow-2xl p-6">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <Video className="w-5 h-5 text-[var(--color-brand)]" />
@@ -332,6 +350,7 @@ export default function AdminVideosPage() {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
+                aria-label="Close modal"
                 className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -387,16 +406,20 @@ export default function AdminVideosPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block font-semibold text-neutral-700 mb-1">Avatar / Thumbnail URL</label>
-                <input
-                  type="text"
-                  value={editingVideo.avatar || ''}
-                  onChange={(e) => setEditingVideo((prev) => ({ ...prev, avatar: e.target.value }))}
-                  placeholder="/seed/location/madrid.jpg"
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
-                />
-              </div>
+              <ImagePickerField
+                id="video-avatar-image"
+                label="Avatar / Thumbnail"
+                value={editingVideo.avatar || ''}
+                onChange={(url) =>
+                  setEditingVideo((prev) => (prev ? { ...prev, avatar: url } : null))
+                }
+                placeholder="/seed/location/madrid.jpg"
+                helperText="Shown as the circular creator avatar in the homepage community reels."
+                testIdPrefix="video-avatar-image"
+                previewAlt={editingVideo.authorName || 'Creator avatar'}
+                previewAspect="square"
+                modalTitle="Choose Creator Avatar"
+              />
 
               <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200">
                 <label className="flex items-center gap-2 cursor-pointer">

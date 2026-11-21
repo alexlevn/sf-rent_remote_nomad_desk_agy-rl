@@ -10,6 +10,8 @@ import {
 } from '@/app/admin/cms-actions';
 import { TiptapEditor } from '@/features/admin/tiptap-editor';
 import { PaginationBar } from '@/features/admin/pagination-bar';
+import { ImagePickerField } from '@/features/media/image-picker-field';
+import { isSafeImagePath } from '@/lib/validations/media';
 import {
   MapPin,
   Search,
@@ -184,6 +186,12 @@ export default function AdminLocationsPage() {
       return;
     }
 
+    const trimmedImage = (editingLocation.image || '').trim();
+    if (!trimmedImage || !isSafeImagePath(trimmedImage)) {
+      setFormError('Cover image must be a valid /uploads/, /seed/, or https:// URL.');
+      return;
+    }
+
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
@@ -191,6 +199,7 @@ export default function AdminLocationsPage() {
     try {
       const payload: Partial<Location> = {
         ...editingLocation,
+        image: trimmedImage,
         city: editingLocation.city || editingLocation.name,
         slug:
           editingLocation.slug ||
@@ -614,18 +623,19 @@ export default function AdminLocationsPage() {
                 />
               </div>
 
-              <div>
-                <label className="block font-semibold text-neutral-700 mb-1">Cover Image URL</label>
-                <input
-                  type="text"
-                  value={editingLocation.image || ''}
-                  onChange={(e) =>
-                    setEditingLocation((prev) => ({ ...prev, image: e.target.value }))
-                  }
-                  placeholder="/seed/location/2077.jpg"
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
-                />
-              </div>
+              <ImagePickerField
+                id="location-cover-image"
+                label="Cover Image"
+                value={editingLocation.image || ''}
+                onChange={(url) =>
+                  setEditingLocation((prev) => (prev ? { ...prev, image: url } : null))
+                }
+                placeholder="/seed/location/2077.jpg"
+                helperText="Choose from the Media Library, upload a new photo, or enter a /uploads/, /seed/, or https:// path."
+                testIdPrefix="location-cover-image"
+                previewAlt={editingLocation.name || 'Destination cover'}
+                modalTitle="Choose Destination Cover Image"
+              />
 
               {/* Coordinates */}
               <div className="grid grid-cols-2 gap-3">

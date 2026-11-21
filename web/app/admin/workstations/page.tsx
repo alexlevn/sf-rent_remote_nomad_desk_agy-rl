@@ -17,6 +17,7 @@ import {
   reorderWorkstationItemsAction,
   fetchAdminWorkstationsAction,
 } from '@/app/admin/cms-actions';
+import { CurrencyInput } from '@/features/media/currency-input';
 import {
   Monitor,
   Package,
@@ -32,6 +33,9 @@ import {
   ArrowDown,
 } from 'lucide-react';
 
+const MAX_FEATURE_LENGTH = 80;
+const MAX_FEATURES_COUNT = 12;
+
 export default function AdminWorkstationsPage() {
   const [data, setData] = useState<WorkstationData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,16 +47,18 @@ export default function AdminWorkstationsPage() {
   // Modal states
   const [isPkgModalOpen, setIsPkgModalOpen] = useState(false);
   const [editingPkg, setEditingPkg] = useState<WorkstationPackage | null>(null);
-  const [pkgPriceEUR, setPkgPriceEUR] = useState<number>(0);
+  const [pkgPriceEUR, setPkgPriceEUR] = useState<number | ''>(0);
+  const [featureDraft, setFeatureDraft] = useState('');
+  const [featureError, setFeatureError] = useState<string | null>(null);
 
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
   const [editingComp, setEditingComp] = useState<Partial<WorkstationComponentOption> | null>(null);
   const [compCategory, setCompCategory] = useState<keyof WorkstationComponents>('monitor');
-  const [compPriceEUR, setCompPriceEUR] = useState<number>(0);
+  const [compPriceEUR, setCompPriceEUR] = useState<number | ''>(0);
 
   const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
   const [editingAddon, setEditingAddon] = useState<Partial<WorkstationAddon> | null>(null);
-  const [addonPriceEUR, setAddonPriceEUR] = useState<number>(0);
+  const [addonPriceEUR, setAddonPriceEUR] = useState<number | ''>(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -107,35 +113,91 @@ export default function AdminWorkstationsPage() {
 
   // 1. Package Handlers
   const handleOpenEditPkg = (pkg: WorkstationPackage) => {
-    setEditingPkg({ ...pkg });
+    setEditingPkg({ ...pkg, features: [...(pkg.features ?? [])] });
     setPkgPriceEUR(Math.round(pkg.pricePerMonth / 100));
+    setFeatureDraft('');
+    setFeatureError(null);
     setFormError(null);
     setActionError(null);
     setIsPkgModalOpen(true);
+  };
+
+  const handleAddFeature = () => {
+    const trimmed = featureDraft.trim();
+    if (!trimmed || !editingPkg) return;
+
+    if (trimmed.length > MAX_FEATURE_LENGTH) {
+      setFeatureError(`Each feature must be ${MAX_FEATURE_LENGTH} characters or fewer.`);
+      return;
+    }
+
+    const currentFeatures = editingPkg.features ?? [];
+    if (currentFeatures.length >= MAX_FEATURES_COUNT) {
+      setFeatureError(`You can add up to ${MAX_FEATURES_COUNT} features per package.`);
+      return;
+    }
+
+    const isDuplicate = currentFeatures.some(
+      (item) => item.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (isDuplicate) {
+      setFeatureError('This feature is already listed.');
+      return;
+    }
+
+    setEditingPkg((prev) =>
+      prev ? { ...prev, features: [...(prev.features ?? []), trimmed] } : null
+    );
+    setFeatureDraft('');
+    setFeatureError(null);
+  };
+
+  const handleFeatureKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      // Prevent Enter in chip input from submitting the package form prematurely
+      e.preventDefault();
+      handleAddFeature();
+    }
+  };
+
+  const handleRemoveFeature = (index: number) => {
+    setEditingPkg((prev) =>
+      prev
+        ? { ...prev, features: (prev.features ?? []).filter((_, idx) => idx !== index) }
+        : null
+    );
+    setFeatureError(null);
   };
 
   const handleSavePkg = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPkg || isSubmitting || isActionRunningRef.current) return;
 
+    if (pkgPriceEUR === '' || !Number.isFinite(pkgPriceEUR) || pkgPriceEUR < 0) {
+      setFormError('Please enter a valid monthly price in EUR.');
+      return;
+    }
+
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
 
     try {
-      const priceCents = Math.round(Number(pkgPriceEUR) * 100);
+      const priceCents = Math.round(pkgPriceEUR * 100);
       await saveWorkstationPackageAction({
         id: editingPkg.id,
         name: editingPkg.name,
         pricePerMonth: priceCents,
         description: editingPkg.description,
-        features: editingPkg.features,
+        features: editingPkg.features ?? [],
         isActive: editingPkg.isActive !== false,
       });
 
       showToast(`Workstation package "${editingPkg.name}" updated to €${pkgPriceEUR}/mo (AC-CMS-2)!`);
       setIsPkgModalOpen(false);
       setEditingPkg(null);
+      setFeatureDraft('');
+      setFeatureError(null);
       await fetchWorkstations();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to update package');
@@ -219,12 +281,17 @@ export default function AdminWorkstationsPage() {
     e.preventDefault();
     if (!editingComp || !editingComp.name || isSubmitting || isActionRunningRef.current) return;
 
+    if (compPriceEUR === '' || !Number.isFinite(compPriceEUR) || compPriceEUR < 0) {
+      setFormError('Please enter a valid monthly upgrade price in EUR (0 for included).');
+      return;
+    }
+
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
 
     try {
-      const priceCents = Math.round(Number(compPriceEUR) * 100);
+      const priceCents = Math.round(compPriceEUR * 100);
       await saveWorkstationComponentAction(compCategory, {
         id: editingComp.id || `comp-${Date.now()}`,
         name: editingComp.name,
@@ -346,12 +413,17 @@ export default function AdminWorkstationsPage() {
     e.preventDefault();
     if (!editingAddon || !editingAddon.name || isSubmitting || isActionRunningRef.current) return;
 
+    if (addonPriceEUR === '' || !Number.isFinite(addonPriceEUR) || addonPriceEUR < 0) {
+      setFormError('Please enter a valid monthly add-on price in EUR.');
+      return;
+    }
+
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
 
     try {
-      const priceCents = Math.round(Number(addonPriceEUR) * 100);
+      const priceCents = Math.round(addonPriceEUR * 100);
       await saveWorkstationAddonAction({
         id: editingAddon.id || `addon-${Date.now()}`,
         name: editingAddon.name,
@@ -974,7 +1046,7 @@ export default function AdminWorkstationsPage() {
       {/* Modal: Edit Package (AC-CMS-2) */}
       {isPkgModalOpen && editingPkg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-[var(--color-border-light)] shadow-2xl p-6">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <Package className="w-5 h-5 text-[var(--color-brand)]" />
@@ -1010,22 +1082,23 @@ export default function AdminWorkstationsPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-neutral-700 mb-1">
+                <label
+                  htmlFor="pkg-price-input"
+                  className="block font-semibold text-neutral-700 mb-1"
+                >
                   Monthly Price (€ / month) — AC-CMS-2
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-neutral-500">€</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    required
-                    value={pkgPriceEUR}
-                    onChange={(e) => setPkgPriceEUR(Number(e.target.value))}
-                    data-testid="pkg-price-input"
-                    className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-[var(--color-border-light)] font-bold text-sm focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
-                  />
-                </div>
+                <CurrencyInput
+                  id="pkg-price-input"
+                  value={pkgPriceEUR}
+                  onChange={setPkgPriceEUR}
+                  currencySymbol="€"
+                  suffix="/ mo"
+                  min={0}
+                  required
+                  testId="pkg-price-input"
+                  ariaInvalid={pkgPriceEUR === '' && formError !== null}
+                />
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Changes update /workstations, Builder, and widget immediately. Existing bookings retain their original rate.
                 </p>
@@ -1039,6 +1112,87 @@ export default function AdminWorkstationsPage() {
                   onChange={(e) => setEditingPkg((prev) => (prev ? { ...prev, description: e.target.value } : null))}
                   className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] resize-none"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label
+                    htmlFor="pkg-feature-input"
+                    className="block font-semibold text-neutral-700"
+                  >
+                    Included Features
+                  </label>
+                  <span className="text-[11px] text-neutral-400">
+                    {(editingPkg.features ?? []).length}/{MAX_FEATURES_COUNT}
+                  </span>
+                </div>
+
+                {(editingPkg.features ?? []).length > 0 && (
+                  <div
+                    data-testid="pkg-features-list"
+                    className="flex flex-wrap gap-1.5 mb-2 p-2.5 rounded-xl border border-[var(--color-border-light)] bg-neutral-50/70"
+                  >
+                    {(editingPkg.features ?? []).map((feat, idx) => (
+                      <span
+                        key={`${feat}-${idx}`}
+                        data-testid={`pkg-feature-chip-${idx}`}
+                        className="inline-flex items-center gap-1.5 max-w-full rounded-full border border-[var(--color-border-light)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--color-text-on-light)] shadow-2xs"
+                      >
+                        <span className="truncate">{feat}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFeature(idx)}
+                          aria-label={`Remove feature ${feat}`}
+                          data-testid={`pkg-feature-remove-${idx}`}
+                          className="inline-flex items-center justify-center rounded-full p-0.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer shrink-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    id="pkg-feature-input"
+                    type="text"
+                    value={featureDraft}
+                    onChange={(e) => {
+                      setFeatureDraft(e.target.value);
+                      if (featureError) setFeatureError(null);
+                    }}
+                    onKeyDown={handleFeatureKeyDown}
+                    placeholder="Type a feature and press Enter..."
+                    data-testid="pkg-feature-input"
+                    aria-invalid={featureError ? true : undefined}
+                    className="flex-1 min-w-0 min-h-10 px-3 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-xs text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddFeature}
+                    disabled={!featureDraft.trim()}
+                    data-testid="pkg-feature-add-btn"
+                    className="inline-flex items-center gap-1 min-h-10 px-3.5 py-2 rounded-xl border border-[var(--color-border-light)] bg-[var(--color-bg-light-alt)] text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-surface-muted)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+
+                {featureError ? (
+                  <p
+                    role="alert"
+                    data-testid="pkg-feature-error"
+                    className="text-[11px] text-red-600 mt-1"
+                  >
+                    {featureError}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-neutral-400 mt-1">
+                    Press Enter or click Add to include a feature (max {MAX_FEATURE_LENGTH} chars, up to {MAX_FEATURES_COUNT} items).
+                  </p>
+                )}
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1078,7 +1232,7 @@ export default function AdminWorkstationsPage() {
       {/* Modal: Add / Edit Component */}
       {isCompModalOpen && editingComp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-[var(--color-border-light)] shadow-2xl p-6">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                 {editingComp.name ? `Edit Component: ${editingComp.name}` : 'Add Hardware Component'}
@@ -1128,14 +1282,23 @@ export default function AdminWorkstationsPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-neutral-700 mb-1">Monthly Upgrade Price (€/mo)</label>
-                <input
-                  type="number"
-                  min={0}
+                <label
+                  htmlFor="comp-price-input"
+                  className="block font-semibold text-neutral-700 mb-1"
+                >
+                  Monthly Upgrade Price (€/mo)
+                </label>
+                <CurrencyInput
+                  id="comp-price-input"
                   value={compPriceEUR}
-                  onChange={(e) => setCompPriceEUR(Number(e.target.value))}
+                  onChange={setCompPriceEUR}
+                  currencySymbol="€"
+                  suffix="/ mo"
                   placeholder="0 for included base hardware"
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                  min={0}
+                  required
+                  testId="comp-price-input"
+                  ariaInvalid={compPriceEUR === '' && formError !== null}
                 />
               </div>
 
@@ -1185,7 +1348,7 @@ export default function AdminWorkstationsPage() {
       {/* Modal: Add / Edit Addon */}
       {isAddonModalOpen && editingAddon && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-[var(--color-border-light)] shadow-2xl p-6">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                 {editingAddon.name ? `Edit Add-on: ${editingAddon.name}` : 'Add Accessory Add-on'}
@@ -1221,14 +1384,23 @@ export default function AdminWorkstationsPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-neutral-700 mb-1">Monthly Add-on Price (€/mo)</label>
-                <input
-                  type="number"
-                  min={0}
+                <label
+                  htmlFor="addon-price-input"
+                  className="block font-semibold text-neutral-700 mb-1"
+                >
+                  Monthly Add-on Price (€/mo)
+                </label>
+                <CurrencyInput
+                  id="addon-price-input"
                   value={addonPriceEUR}
-                  onChange={(e) => setAddonPriceEUR(Number(e.target.value))}
-                  placeholder="e.g. 20"
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                  onChange={setAddonPriceEUR}
+                  currencySymbol="€"
+                  suffix="/ mo"
+                  placeholder="20"
+                  min={0}
+                  required
+                  testId="addon-price-input"
+                  ariaInvalid={addonPriceEUR === '' && formError !== null}
                 />
               </div>
 
