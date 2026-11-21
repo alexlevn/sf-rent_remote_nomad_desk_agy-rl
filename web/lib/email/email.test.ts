@@ -96,6 +96,9 @@ describe('Email SMTP client & config', () => {
   it('falls back to 11188 when SMTP_PORT is invalid', () => {
     process.env.SMTP_PORT = 'not-a-port';
     expect(getSmtpConfig().port).toBe(11188);
+
+    process.env.SMTP_PORT = '11188abc';
+    expect(getSmtpConfig().port).toBe(11188);
   });
 
   it('strips CR/LF characters to prevent header injection', () => {
@@ -199,6 +202,9 @@ describe('Email templates', () => {
 
     const badReset = passwordResetTemplate('demo@example.com', 'javascript:alert(1)');
     expect(badReset.html).not.toContain('javascript:');
+
+    const protoRelativeReset = passwordResetTemplate('demo@example.com', '//evil.example/reset');
+    expect(protoRelativeReset.html).not.toContain('//evil.example');
   });
 });
 

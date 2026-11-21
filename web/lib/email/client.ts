@@ -37,8 +37,9 @@ interface GlobalEmailCache {
 const globalForEmail = globalThis as unknown as GlobalEmailCache;
 
 function parseSmtpPort(rawPort: string | undefined): number {
-  if (!rawPort) return DEFAULT_SMTP_PORT;
-  const parsed = Number.parseInt(rawPort.trim(), 10);
+  const trimmed = rawPort?.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) return DEFAULT_SMTP_PORT;
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
     return DEFAULT_SMTP_PORT;
   }
@@ -55,14 +56,14 @@ export function getSmtpConfig(): SmtpConfig {
   return { host, port, from, user, pass };
 }
 
-// Strip CR/LF to prevent SMTP header injection.
+// Strip CR/LF/NUL to prevent SMTP header injection.
 export function sanitizeHeaderValue(value: string): string {
-  return value.replace(/[\r\n]+/g, ' ').trim();
+  return value.replace(/[\r\n\0]+/g, ' ').trim();
 }
 
 export function getEmailTransporter(): Transporter {
   const config = getSmtpConfig();
-  const cacheKey = `${config.host}:${config.port}:${config.user ?? ''}`;
+  const cacheKey = `${config.host}:${config.port}:${config.user ?? ''}:${Boolean(config.pass)}`;
 
   if (globalForEmail.__nomadDeskEmailTransporter?.key === cacheKey) {
     return globalForEmail.__nomadDeskEmailTransporter.transporter;
@@ -72,6 +73,9 @@ export function getEmailTransporter(): Transporter {
     host: config.host,
     port: config.port,
     secure: false,
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 10000,
     ...(config.user && config.pass
       ? { auth: { user: config.user, pass: config.pass } }
       : {}),

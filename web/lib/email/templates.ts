@@ -42,7 +42,7 @@ export function escapeHtml(value: string): string {
 }
 
 function formatUsdFromCents(cents: number): string {
-  const dollars = cents / 100;
+  const dollars = Number.isFinite(cents) ? cents / 100 : 0;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -53,7 +53,7 @@ function formatUsdFromCents(cents: number): string {
 
 function sanitizeSafeUrl(rawUrl: string): string {
   const trimmed = rawUrl.trim();
-  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('/')) {
+  if (/^https?:\/\//i.test(trimmed) || (trimmed.startsWith('/') && !trimmed.startsWith('//'))) {
     return trimmed;
   }
   return '#';
