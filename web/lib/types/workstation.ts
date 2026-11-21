@@ -1,0 +1,47 @@
+export interface WorkstationPackage {
+  id: string;
+  name: string;
+  slug: string;
+  pricePerMonth: number; // EUR cents
+  isIncluded: boolean;
+  description: string;
+  features: string[];
+}
+
+export interface WorkstationComponentOption {
+  id: string;
+  name: string;
+  pricePerMonth: number; // EUR cents
+  isIncluded: boolean;
+  description: string;
+}
+
+export interface WorkstationAddon {
+  id: string;
+  name: string;
+  pricePerMonth: number; // EUR cents
+  description: string;
+}
+
+export interface WorkstationComponents {
+  desk: WorkstationComponentOption[];
+  chair: WorkstationComponentOption[];
+  monitor: WorkstationComponentOption[];
+  keyboardMouse: WorkstationComponentOption[];
+}
+
+export interface WorkstationData {
+  packages: WorkstationPackage[];
+  components: WorkstationComponents;
+  addons: WorkstationAddon[];
+}
+
+export interface WorkstationSelection {
+  packageId?: string;
+  deskId?: string;
+  chairId?: string;
+  monitorId?: string;
+  keyboardMouseId?: string;
+  addonIds?: string[];
+  customMonthlyPriceEUR?: number; // EUR cents
+}

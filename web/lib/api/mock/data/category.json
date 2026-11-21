@@ -1,0 +1,44 @@
+[
+  {
+    "id": 9,
+    "name": "Garden",
+    "slug": "garden",
+    "icon": null,
+    "description": null
+  },
+  {
+    "id": 7,
+    "name": "Gym",
+    "slug": "gym",
+    "icon": null,
+    "description": "Has a gym in building"
+  },
+  {
+    "id": 5,
+    "name": "Pet Friendly",
+    "slug": "pet-friendly",
+    "icon": "pets",
+    "description": null
+  },
+  {
+    "id": 2,
+    "name": "Swimming Pool",
+    "slug": "swimming-pool",
+    "icon": "pool",
+    "description": null
+  },
+  {
+    "id": 6,
+    "name": "Terrace",
+    "slug": "terrace",
+    "icon": "terrace",
+    "description": null
+  },
+  {
+    "id": 1,
+    "name": "Luxury",
+    "slug": "luxury",
+    "icon": null,
+    "description": "Premium properties with the highest price per square meter in each city"
+  }
+]

@@ -1,0 +1,546 @@
+[
+  {
+    "id": 1993,
+    "city": "Barcelona",
+    "name": "Barcelona",
+    "slug": "barcelona",
+    "country": "Spain",
+    "countryCode": "ES",
+    "continent": "Europe",
+    "propertiesCount": 94,
+    "description": "Furnished apartments in Barcelona",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2007,
+    "city": "Medellin",
+    "name": "Medellin",
+    "slug": "medellin",
+    "country": "Colombia",
+    "countryCode": "CO",
+    "continent": "South America",
+    "propertiesCount": 26,
+    "description": "Furnished apartments in Medellin",
+    "image": "/seed/location/2007.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2024,
+    "city": "Amsterdam",
+    "name": "Amsterdam",
+    "slug": "amsterdam",
+    "country": "Netherlands",
+    "countryCode": "NL",
+    "continent": "Europe",
+    "propertiesCount": 30,
+    "description": "Furnished apartments in Amsterdam",
+    "image": "/seed/location/2024.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2039,
+    "city": "Valencia",
+    "name": "Valencia",
+    "slug": "valencia",
+    "country": "Spain",
+    "countryCode": "ES",
+    "continent": "Europe",
+    "propertiesCount": 34,
+    "description": "Furnished apartments in Valencia",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2058,
+    "city": "Mexico City",
+    "name": "Mexico City",
+    "slug": "mexico-city",
+    "country": "Mexico",
+    "countryCode": "MX",
+    "continent": "North America",
+    "propertiesCount": 275,
+    "description": "Furnished apartments in Mexico City",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2110,
+    "city": "Santo Domingo",
+    "name": "Santo Domingo",
+    "slug": "santo-domingo",
+    "country": "Dominican Republic",
+    "countryCode": "DO",
+    "continent": "Central America",
+    "propertiesCount": 11,
+    "description": "Furnished apartments in Santo Domingo",
+    "image": "/seed/location/2110.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2200,
+    "city": "Miami",
+    "name": "Miami",
+    "slug": "miami",
+    "country": "United States",
+    "countryCode": "US",
+    "continent": "North America",
+    "propertiesCount": 27,
+    "description": "Furnished apartments in Miami",
+    "image": "/seed/location/2200.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2212,
+    "city": "Lisbon",
+    "name": "Lisbon",
+    "slug": "lisbon",
+    "country": "Portugal",
+    "countryCode": "PT",
+    "continent": "Europe",
+    "propertiesCount": 6,
+    "description": "Furnished apartments in Lisbon",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2241,
+    "city": "Madrid",
+    "name": "Madrid",
+    "slug": "madrid",
+    "country": "Spain",
+    "countryCode": "ES",
+    "continent": "Europe",
+    "propertiesCount": 697,
+    "description": "Furnished apartments in Madrid",
+    "image": "/seed/location/2241.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2242,
+    "city": "London",
+    "name": "London",
+    "slug": "london",
+    "country": "United Kingdom",
+    "countryCode": "GB",
+    "continent": "Europe",
+    "propertiesCount": 73,
+    "description": "Furnished apartments in London",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2411,
+    "city": "Basel",
+    "name": "Basel",
+    "slug": "basel",
+    "country": "Switzerland",
+    "countryCode": "CH",
+    "continent": "Europe",
+    "propertiesCount": 14,
+    "description": "Furnished apartments in Basel",
+    "image": "/seed/location/2411.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2429,
+    "city": "Riga",
+    "name": "Riga",
+    "slug": "riga",
+    "country": "Latvia",
+    "countryCode": "LV",
+    "continent": "Europe",
+    "propertiesCount": 22,
+    "description": "Furnished apartments in Riga",
+    "image": "/seed/location/2429.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2462,
+    "city": "Malaga",
+    "name": "Malaga",
+    "slug": "malaga",
+    "country": "Spain",
+    "countryCode": "ES",
+    "continent": "Europe",
+    "propertiesCount": 27,
+    "description": "Furnished apartments in Malaga",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2485,
+    "city": "Valparaiso",
+    "name": "Valparaiso",
+    "slug": "valparaiso",
+    "country": "Chile",
+    "countryCode": "CL",
+    "continent": "South America",
+    "propertiesCount": 13,
+    "description": "Furnished apartments in Valparaiso",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2687,
+    "city": "Guadalajara",
+    "name": "Guadalajara",
+    "slug": "guadalajara",
+    "country": "Mexico",
+    "countryCode": "MX",
+    "continent": "North America",
+    "propertiesCount": 72,
+    "description": "Furnished apartments in Guadalajara",
+    "image": "/seed/location/2687.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2688,
+    "city": "Buenos Aires",
+    "name": "Buenos Aires",
+    "slug": "buenos-aires",
+    "country": "Argentina",
+    "countryCode": "AR",
+    "continent": "South America",
+    "propertiesCount": 167,
+    "description": "Furnished apartments in Buenos Aires",
+    "image": "/seed/location/2688.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2704,
+    "city": "Dubai",
+    "name": "Dubai",
+    "slug": "dubai",
+    "country": "United Arab Emirates",
+    "countryCode": "AE",
+    "continent": "Middle East",
+    "propertiesCount": 32,
+    "description": "Furnished apartments in Dubai",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 2810,
+    "city": "Auckland",
+    "name": "Auckland",
+    "slug": "auckland",
+    "country": "New Zealand",
+    "countryCode": "NZ",
+    "continent": "Oceania",
+    "propertiesCount": 127,
+    "description": "Furnished apartments in Auckland",
+    "image": "/seed/location/2810.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3061,
+    "city": "Dübendorf",
+    "name": "Dübendorf",
+    "slug": "dubendorf",
+    "country": "Switzerland",
+    "countryCode": "CH",
+    "continent": "Europe",
+    "propertiesCount": 1,
+    "description": "Furnished apartments in Dübendorf",
+    "image": "/seed/location/3061.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3290,
+    "city": "Ibiza",
+    "name": "Ibiza",
+    "slug": "ibiza",
+    "country": "Spain",
+    "countryCode": "ES",
+    "continent": "Europe",
+    "propertiesCount": 13,
+    "description": "Furnished apartments in Ibiza",
+    "image": "/seed/location/3290.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3291,
+    "city": "Antofagasta",
+    "name": "Antofagasta",
+    "slug": "antofagasta",
+    "country": "Chile",
+    "countryCode": "CL",
+    "continent": "South America",
+    "propertiesCount": 17,
+    "description": "Furnished apartments in Antofagasta",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3292,
+    "city": "Puerto Varas",
+    "name": "Puerto Varas",
+    "slug": "puerto-varas",
+    "country": "Chile",
+    "countryCode": "CL",
+    "continent": "South America",
+    "propertiesCount": 10,
+    "description": "Furnished apartments in Puerto Varas",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3293,
+    "city": "Santiago",
+    "name": "Santiago",
+    "slug": "santiago",
+    "country": "Chile",
+    "countryCode": "CL",
+    "continent": "South America",
+    "propertiesCount": 18,
+    "description": "Furnished apartments in Santiago",
+    "image": "/seed/location/3293.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3296,
+    "city": "La Serena",
+    "name": "La Serena",
+    "slug": "la-serena",
+    "country": "Chile",
+    "countryCode": "CL",
+    "continent": "South America",
+    "propertiesCount": 12,
+    "description": "Furnished apartments in La Serena",
+    "image": "/seed/location/placeholder.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3302,
+    "city": "Abu Dhabi",
+    "name": "Abu Dhabi",
+    "slug": "abu-dhabi",
+    "country": "United Arab Emirates",
+    "countryCode": "AE",
+    "continent": "Middle East",
+    "propertiesCount": 12,
+    "description": "Furnished apartments in Abu Dhabi",
+    "image": "/seed/location/3302.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3303,
+    "city": "New Delhi",
+    "name": "New Delhi",
+    "slug": "new-delhi",
+    "country": "India",
+    "countryCode": "IN",
+    "continent": "Asia",
+    "propertiesCount": 10,
+    "description": "Furnished apartments in New Delhi",
+    "image": "/seed/location/3303.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3305,
+    "city": "Nainital",
+    "name": "Nainital",
+    "slug": "nainital",
+    "country": "India",
+    "countryCode": "IN",
+    "continent": "Asia",
+    "propertiesCount": 3,
+    "description": "Furnished apartments in Nainital",
+    "image": "/seed/location/3305.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3307,
+    "city": "Goa",
+    "name": "Goa",
+    "slug": "goa",
+    "country": "India",
+    "countryCode": "IN",
+    "continent": "Asia",
+    "propertiesCount": 233,
+    "description": "Furnished apartments in Goa",
+    "image": "/seed/location/3307.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3319,
+    "city": "Hong Kong",
+    "name": "Hong Kong",
+    "slug": "hong-kong",
+    "country": "Hong Kong",
+    "countryCode": "HK",
+    "continent": "Asia",
+    "propertiesCount": 51,
+    "description": "Furnished apartments in Hong Kong",
+    "image": "/seed/location/3319.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3321,
+    "city": "Tokyo",
+    "name": "Tokyo",
+    "slug": "tokyo",
+    "country": "Japan",
+    "countryCode": "JP",
+    "continent": "Asia",
+    "propertiesCount": 61,
+    "description": "Furnished apartments in Tokyo",
+    "image": "/seed/location/3321.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3749,
+    "city": "Zurich",
+    "name": "Zurich",
+    "slug": "zurich",
+    "country": "Switzerland",
+    "countryCode": "CH",
+    "continent": "Europe",
+    "propertiesCount": 11,
+    "description": "Furnished apartments in Zurich",
+    "image": "/seed/location/3749.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 3750,
+    "city": "Zug",
+    "name": "Zug",
+    "slug": "zug",
+    "country": "Switzerland",
+    "countryCode": "CH",
+    "continent": "Europe",
+    "propertiesCount": 5,
+    "description": "Furnished apartments in Zug",
+    "image": "/seed/location/3750.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 4193,
+    "city": "Monterrey",
+    "name": "Monterrey",
+    "slug": "monterrey",
+    "country": "Mexico",
+    "countryCode": "MX",
+    "continent": "North America",
+    "propertiesCount": 29,
+    "description": "Furnished apartments in Monterrey",
+    "image": "/seed/location/4193.jpg",
+    "center": [
+      0,
+      0
+    ]
+  },
+  {
+    "id": 4360,
+    "city": "Lima",
+    "name": "Lima",
+    "slug": "lima",
+    "country": "Peru",
+    "countryCode": "PE",
+    "continent": "South America",
+    "propertiesCount": 262,
+    "description": "Furnished apartments in Lima",
+    "image": "/seed/location/4360.jpg",
+    "center": [
+      0,
+      0
+    ]
+  }
+]
