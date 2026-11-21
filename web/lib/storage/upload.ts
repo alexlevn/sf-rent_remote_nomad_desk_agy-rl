@@ -13,13 +13,6 @@ const MIME_TO_EXT: Record<AllowedImageMimeType, string> = {
   'image/webp': '.webp',
 };
 
-const EXT_TO_MIME: Record<string, AllowedImageMimeType> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-};
-
 export type UploadErrorCode =
   | 'EMPTY_FILE'
   | 'FILE_TOO_LARGE'
@@ -84,11 +77,6 @@ export function detectImageMimeType(buffer: Buffer): AllowedImageMimeType | null
   }
 
   return null;
-}
-
-export function getMimeTypeFromExtension(filePath: string): AllowedImageMimeType | null {
-  const ext = path.extname(filePath).toLowerCase();
-  return EXT_TO_MIME[ext] ?? null;
 }
 
 /**
@@ -170,7 +158,8 @@ export async function saveUploadedBuffer(
 
   const ext = MIME_TO_EXT[mimeType];
   const filename = `${crypto.randomBytes(16).toString('hex')}${ext}`;
-  const targetPath = path.join(uploadDir, filename);
+  // Avoid Turbopack tracing the entire project directory on runtime volume paths
+  const targetPath = path.join(/*turbopackIgnore: true*/ uploadDir, filename);
 
   await fs.writeFile(targetPath, buffer, { flag: 'wx' });
 

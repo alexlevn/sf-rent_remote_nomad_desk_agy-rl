@@ -34,8 +34,11 @@ export class MockPaymentDriver implements PaymentDriver {
     currency: string,
     cardInfo: CardInfo,
   ): Promise<PaymentTransactionResult> {
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new PaymentDriverError('INVALID_AMOUNT', 'Payment amount must be a positive number.');
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new PaymentDriverError(
+        'INVALID_AMOUNT',
+        'Payment amount must be a positive integer in cents.',
+      );
     }
 
     const normalizedCurrency = typeof currency === 'string' ? currency.trim().toUpperCase() : '';

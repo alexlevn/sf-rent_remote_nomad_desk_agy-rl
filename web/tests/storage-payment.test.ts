@@ -158,6 +158,17 @@ describe('Local Volume Storage Upload & Route Handler', () => {
     });
     expect(res.status).toBe(404);
   });
+
+  it('rejects files with spoofed image extensions (invalid magic bytes) with HTTP 415', async () => {
+    const spoofedFile = path.join(tempUploadDir, 'spoofed.jpg');
+    await fs.writeFile(spoofedFile, Buffer.from('<svg onload=alert(1)>'));
+
+    const req = new NextRequest('http://localhost:3288/uploads/spoofed.jpg');
+    const res = await getUploadRoute(req, {
+      params: Promise.resolve({ path: ['spoofed.jpg'] }),
+    });
+    expect(res.status).toBe(415);
+  });
 });
 
 describe('Mock Payment Driver', () => {
@@ -201,6 +212,10 @@ describe('Mock Payment Driver', () => {
     await expect(
       driver.authorize(0, 'USD', { cardNumber: '4242424242424242' }),
     ).rejects.toBeInstanceOf(PaymentDriverError);
+
+    await expect(
+      driver.authorize(100.5, 'USD', { cardNumber: '4242424242424242' }),
+    ).rejects.toMatchObject({ code: 'INVALID_AMOUNT' });
 
     await expect(
       driver.authorize(10000, 'INVALID', { cardNumber: '4242424242424242' }),

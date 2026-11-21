@@ -5,7 +5,6 @@ import { Readable } from 'node:stream';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   detectImageMimeType,
-  getMimeTypeFromExtension,
   getUploadDir,
   resolveUploadFilePath,
 } from '@/lib/storage/upload';
@@ -57,8 +56,15 @@ export async function GET(
     return NextResponse.json({ error: 'File not found' }, { status: 404 });
   }
 
-  const headerBytes = await readMagicBytes(realFilePath);
-  const mimeType = detectImageMimeType(headerBytes) ?? getMimeTypeFromExtension(realFilePath);
+  let headerBytes: Buffer;
+  try {
+    headerBytes = await readMagicBytes(realFilePath);
+  } catch {
+    return NextResponse.json({ error: 'File not found' }, { status: 404 });
+  }
+
+  // Enforce magic-byte verification on read so spoofed extensions are never served
+  const mimeType = detectImageMimeType(headerBytes);
   if (!mimeType) {
     return NextResponse.json({ error: 'Unsupported media type' }, { status: 415 });
   }
