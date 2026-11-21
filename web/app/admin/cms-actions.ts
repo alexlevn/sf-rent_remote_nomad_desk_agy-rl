@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
+import { AuthError, requireAdmin } from '@/lib/auth/guards';
+import { sanitizeHtml } from '@/lib/validations/content';
 import {
   saveLocation,
   deleteLocation,
@@ -37,26 +38,26 @@ import type {
  * Strips dangerous executable script tags and event handlers (AC-CMS-8).
  */
 export async function sanitizeHtmlContent(html: string): Promise<string> {
-  if (!html) return '';
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\bon\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-    .replace(/javascript:/gi, '');
+  return sanitizeHtml(html);
 }
 
 /**
- * Asserts admin role. Throws 403 error if guest or host calls CMS action (AC-CMS-8).
+ * Asserts admin role directly against PostgreSQL (Risk #10).
+ * Throws 403 error if unauthenticated, guest, or host calls CMS action (AC-CMS-8).
  */
 async function assertAdminRole() {
-  const user = await getCurrentUser();
-  if (!user || user.role !== 'admin') {
-    const error = new Error('Forbidden: Admin role required.');
-    // Set 403 status property for HTTP handlers / test assertions
-    (error as unknown as { status: number; statusCode: number }).status = 403;
-    (error as unknown as { status: number; statusCode: number }).statusCode = 403;
-    throw error;
+  try {
+    return await requireAdmin();
+  } catch (err) {
+    if (err instanceof AuthError) {
+      const error = new Error('Forbidden: Admin role required.');
+      // Normalize to 403 for CMS HTTP handlers / test assertions
+      (error as unknown as { status: number; statusCode: number }).status = 403;
+      (error as unknown as { status: number; statusCode: number }).statusCode = 403;
+      throw error;
+    }
+    throw err;
   }
-  return user;
 }
 
 // ==========================================
@@ -102,6 +103,7 @@ export async function saveWorkstationPackageAction(
   revalidatePath('/workstations');
   revalidatePath('/workstations/build');
   revalidatePath('/admin/workstations');
+  revalidatePath('/l/apartments/[slug]', 'page');
   return { success: true, package: updated };
 }
 

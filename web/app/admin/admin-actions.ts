@@ -1,23 +1,62 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { requireAdmin } from '@/lib/auth/guards';
 import {
   listProperties,
   updatePropertyStatus,
   deleteProperty,
 } from '@/lib/api/properties';
-import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
-import { listUsers, updateUser } from '@/lib/api/users';
+import { getHostProfile, listHosts, reviewHostApplication } from '@/lib/api/hosts';
+import { getUserById, listUsers, updateUser } from '@/lib/api/users';
 import {
   listReservations,
   updateReservationStatus,
 } from '@/lib/api/reservations';
-import type { PropertyStatus, HostStatus } from '@/lib/types';
+import { notifyListingModeration } from '@/lib/email/notifications';
+import type { PropertyStatus, HostStatus, Property } from '@/lib/types';
+
+const INT4_MAX = 2_147_483_647;
+const adminUserIdSchema = z.number().int().positive().max(INT4_MAX);
+const adminUpdateUserSchema = z.object({
+  role: z.enum(['guest', 'host', 'admin']).optional(),
+  isActive: z.boolean().optional(),
+  firstName: z.string().trim().max(100).optional(),
+  lastName: z.string().trim().max(100).optional(),
+});
+
+async function dispatchListingModerationEmail(
+  property: Property,
+  status: PropertyStatus,
+  reason?: string
+) {
+  if (status !== 'published' && status !== 'rejected') {
+    return;
+  }
+  const host = await getHostProfile(property.hostId);
+  if (!host) return;
+  const hostUser = await getUserById(host.userId);
+  if (!hostUser?.email) return;
+
+  const action = status === 'published' ? 'approved' : 'rejected';
+  await notifyListingModeration(
+    {
+      title: property.title,
+      city: property.city,
+      reference: property.reference,
+    },
+    action,
+    hostUser.email,
+    reason
+  );
+}
 
 /**
- * Fetches properties and hosts for the Admin Property Moderation table from server store.
+ * Fetches properties and hosts for the Admin Property Moderation table from PostgreSQL.
  */
 export async function fetchAdminPropertiesAction() {
+  await requireAdmin();
   const [propList, hostList] = await Promise.all([
     listProperties({ status: 'all' }),
     listHosts(),
@@ -29,7 +68,12 @@ export async function fetchAdminPropertiesAction() {
  * Approves and publishes a property (AC-ADMIN-2).
  */
 export async function approvePropertyAction(id: number) {
-  const updated = await updatePropertyStatus(id, 'published');
+  await requireAdmin();
+  const updated = await updatePropertyStatus(id, 'published', null);
+  if (updated) {
+    await dispatchListingModerationEmail(updated, 'published');
+    revalidatePath(`/l/apartments/${updated.slug}`);
+  }
   revalidatePath('/');
   revalidatePath('/admin/properties');
   revalidatePath('/c/[city]', 'page');
@@ -44,7 +88,12 @@ export async function updatePropertyStatusAction(
   status: PropertyStatus,
   reason?: string
 ) {
+  await requireAdmin();
   const updated = await updatePropertyStatus(id, status, reason);
+  if (updated) {
+    await dispatchListingModerationEmail(updated, status, reason);
+    revalidatePath(`/l/apartments/${updated.slug}`);
+  }
   revalidatePath('/');
   revalidatePath('/admin/properties');
   revalidatePath('/c/[city]', 'page');
@@ -55,16 +104,19 @@ export async function updatePropertyStatusAction(
  * Deletes a property listing.
  */
 export async function deletePropertyAction(id: number) {
+  await requireAdmin();
   const res = await deleteProperty(id);
   revalidatePath('/');
   revalidatePath('/admin/properties');
+  revalidatePath('/c/[city]', 'page');
   return res;
 }
 
 /**
- * Fetches host profiles and users for the Admin Host Applications table from server store.
+ * Fetches host profiles and users for the Admin Host Applications table from PostgreSQL.
  */
 export async function fetchAdminHostsAction() {
+  await requireAdmin();
   const [hostList, userList] = await Promise.all([listHosts(), listUsers()]);
   return { hostList, userList };
 }
@@ -77,6 +129,7 @@ export async function reviewHostAction(
   status: HostStatus,
   reason?: string
 ) {
+  await requireAdmin();
   const updated = await reviewHostApplication(id, status, reason);
   revalidatePath('/');
   revalidatePath('/admin/hosts');
@@ -86,9 +139,10 @@ export async function reviewHostAction(
 }
 
 /**
- * Fetches all reservations, properties, and hosts for the Admin Booking Monitor table from server store.
+ * Fetches all reservations, properties, and hosts for the Admin Booking Monitor table from PostgreSQL.
  */
 export async function fetchAdminReservationsAction() {
+  await requireAdmin();
   const [resList, propList, hostList] = await Promise.all([
     listReservations({ status: 'all' }),
     listProperties({ status: 'all' }),
@@ -104,6 +158,7 @@ export async function cancelReservationAdminAction(
   id: number,
   reason: string
 ) {
+  await requireAdmin();
   const updated = await updateReservationStatus(
     id,
     'cancelled',
@@ -113,6 +168,7 @@ export async function cancelReservationAdminAction(
   revalidatePath('/');
   revalidatePath('/admin/reservations');
   revalidatePath('/guests/reservations');
+  revalidatePath('/host/requests');
   return updated;
 }
 
@@ -120,17 +176,50 @@ export async function cancelReservationAdminAction(
  * Fetches all users for the Admin Directory table.
  */
 export async function fetchAdminUsersAction() {
+  await requireAdmin();
   return listUsers();
 }
 
 /**
  * Updates a user account (e.g. role, active status) from the admin portal.
+ * Enforces last-admin and self-suspension protections server-side.
  */
 export async function updateUserAction(
   id: number,
   data: Parameters<typeof updateUser>[1]
 ) {
-  const updated = await updateUser(id, data);
+  const currentAdmin = await requireAdmin();
+  const validId = adminUserIdSchema.parse(id);
+  const parsed = adminUpdateUserSchema.parse(data);
+
+  if (currentAdmin.id === validId && parsed.isActive === false) {
+    throw new Error('You cannot suspend your own active administrator account.');
+  }
+
+  const targetUser = await getUserById(validId);
+  if (!targetUser) {
+    throw new Error(`User ${validId} not found`);
+  }
+
+  const isTargetActiveAdmin =
+    targetUser.role === 'admin' && targetUser.isActive !== false;
+  const wouldRemoveAdmin =
+    (parsed.role !== undefined && parsed.role !== 'admin') ||
+    parsed.isActive === false;
+
+  if (isTargetActiveAdmin && wouldRemoveAdmin) {
+    const allUsers = await listUsers();
+    const activeAdminCount = allUsers.filter(
+      (u) => u.role === 'admin' && u.isActive !== false
+    ).length;
+    if (activeAdminCount <= 1) {
+      throw new Error(
+        'Cannot demote or suspend the last remaining active administrator account.'
+      );
+    }
+  }
+
+  const updated = await updateUser(validId, parsed);
   revalidatePath('/admin');
   revalidatePath('/admin/users');
   return updated;
