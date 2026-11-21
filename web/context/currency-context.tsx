@@ -21,6 +21,7 @@ interface CurrencyContextValue {
   symbol: string;
   rates: ExchangeRates;
   setCurrency: (code: CurrencyCode) => void;
+  updateRates?: (newRates: Partial<ExchangeRates>) => void;
   formatPrice: (
     amountUSDCents: number,
     options?: { showCents?: boolean; perMonth?: boolean }
@@ -32,10 +33,11 @@ interface CurrencyContextValue {
 const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
 const STORAGE_KEY = 'nomaddesk_currency';
+const RATES_STORAGE_KEY = 'nomaddesk_exchange_rates';
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<CurrencyCode>('USD');
-  const [rates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
+  const [rates, setRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
   const [, startTransition] = useTransition();
 
   // Synchronize with localStorage after mount to prevent SSR hydration mismatch
@@ -47,10 +49,48 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
           setCurrencyState(stored);
         });
       }
+      const storedRates = localStorage.getItem(RATES_STORAGE_KEY);
+      if (storedRates) {
+        const parsed = JSON.parse(storedRates);
+        startTransition(() => {
+          setRates((prev) => ({ ...prev, ...parsed, USD_USD: 1.0 }));
+        });
+      }
     } catch {
       // Ignore localStorage read failures in sandboxed environments
     }
+
+    const handleRatesUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<ExchangeRates>;
+      if (customEvent.detail) {
+        startTransition(() => {
+          setRates((prev) => ({ ...prev, ...customEvent.detail, USD_USD: 1.0 }));
+        });
+      }
+    };
+
+    window.addEventListener('nomaddesk_rates_updated', handleRatesUpdate);
+    return () => {
+      window.removeEventListener('nomaddesk_rates_updated', handleRatesUpdate);
+    };
   }, []);
+
+  const updateRates = (newRates: Partial<ExchangeRates>) => {
+    const updatedRates: ExchangeRates = {
+      ...rates,
+      ...newRates,
+      USD_USD: 1.0,
+    };
+    setRates(updatedRates);
+    try {
+      localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(updatedRates));
+      window.dispatchEvent(
+        new CustomEvent('nomaddesk_rates_updated', { detail: updatedRates })
+      );
+    } catch {
+      // Ignore localStorage write failures
+    }
+  };
 
   const setCurrency = (code: CurrencyCode) => {
     setCurrencyState(code);
@@ -102,6 +142,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     symbol: getSymbol(currency),
     rates,
     setCurrency,
+    updateRates,
     formatPrice,
     convertPrice,
     currencies: SUPPORTED_CURRENCIES,
