@@ -4,13 +4,15 @@ import { Badge } from '@/components/ui/badge';
 import { HOME_CONTENT } from '@/content/home';
 import type { CommunityVideo } from '@/lib/types';
 
+const MAX_DISPLAY_VIDEOS = 7;
+
 interface CommunityReelsProps {
   videos: CommunityVideo[];
 }
 
 export function CommunityReels({ videos }: CommunityReelsProps) {
-  // Use 7 videos if available
-  const displayVideos = videos.slice(0, 7);
+  // Use videos from seed
+  const displayVideos = videos.slice(0, MAX_DISPLAY_VIDEOS);
 
   return (
     <section className="py-16 sm:py-20 bg-[var(--color-bg-light)] text-[var(--color-text-on-light)] border-t border-[var(--color-border-light)]">

@@ -6,12 +6,14 @@ import { HOME_CONTENT } from '@/content/home';
 import { SITE_CONFIG } from '@/content/site';
 import type { TravelGuide } from '@/lib/types';
 
+const MAX_DISPLAY_GUIDES = 3;
+
 interface GuideHighlightsProps {
   guides: TravelGuide[];
 }
 
 export function GuideHighlights({ guides }: GuideHighlightsProps) {
-  const displayGuides = guides.slice(0, 3);
+  const displayGuides = guides.slice(0, MAX_DISPLAY_GUIDES);
   const normalizeSrc = (src: string) => (src.startsWith('/') ? src : `/${src}`);
 
   return (

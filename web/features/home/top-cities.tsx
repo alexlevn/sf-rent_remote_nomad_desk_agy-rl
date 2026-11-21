@@ -6,13 +6,15 @@ import { HOME_CONTENT } from '@/content/home';
 import { SITE_CONFIG } from '@/content/site';
 import type { Location } from '@/lib/types';
 
+const MAX_DISPLAY_CITIES = 8;
+
 interface TopCitiesProps {
   locations: Location[];
 }
 
 export function TopCities({ locations }: TopCitiesProps) {
-  // Take top 8 cities
-  const displayCities = locations.slice(0, 8);
+  // Take top cities
+  const displayCities = locations.slice(0, MAX_DISPLAY_CITIES);
 
   const normalizeSrc = (src: string) => (src.startsWith('/') ? src : `/${src}`);
 

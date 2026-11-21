@@ -10,6 +10,8 @@ import { HOME_CONTENT } from '@/content/home';
 import { SITE_CONFIG } from '@/content/site';
 import type { Property } from '@/lib/types';
 
+const MAX_DISPLAY_FEATURED = 6;
+
 interface FeaturedApartmentsProps {
   properties: Property[];
 }
@@ -161,8 +163,8 @@ function ApartmentCard({ property }: { property: Property }) {
 }
 
 export function FeaturedApartments({ properties }: FeaturedApartmentsProps) {
-  // Ensure we display at least 3 featured properties
-  const displayProperties = properties.slice(0, 6);
+  // Ensure we display up to MAX_DISPLAY_FEATURED featured properties
+  const displayProperties = properties.slice(0, MAX_DISPLAY_FEATURED);
 
   return (
     <section className="py-16 sm:py-20 bg-[var(--color-bg-light)] text-[var(--color-text-on-light)]">

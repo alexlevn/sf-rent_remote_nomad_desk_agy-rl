@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HOME_CONTENT } from '@/content/home';
 import type { Location } from '@/lib/types';
+
+const MIN_STAY_DAYS = 30;
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
 
 interface HeroSearchProps {
   locations: Location[];
@@ -17,23 +20,27 @@ export function HeroSearch({ locations }: HeroSearchProps) {
   const [moveIn, setMoveIn] = useState('2026-12-01');
   const [moveOut, setMoveOut] = useState('2026-12-31');
   const [warning, setWarning] = useState<string | null>(null);
+  const isNavigatingRef = useRef(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isNavigatingRef.current) return;
 
     if (moveIn && moveOut) {
       const start = new Date(moveIn);
       const end = new Date(moveOut);
       const diffTime = end.getTime() - start.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffDays = Math.ceil(diffTime / MILLISECONDS_PER_DAY);
 
-      if (diffDays < 30) {
+      if (diffDays < MIN_STAY_DAYS) {
         setWarning(HOME_CONTENT.hero.dateWarning);
         return;
       }
     }
 
     setWarning(null);
+    isNavigatingRef.current = true;
 
     const query = new URLSearchParams();
     if (moveIn) query.set('move_in', moveIn);
