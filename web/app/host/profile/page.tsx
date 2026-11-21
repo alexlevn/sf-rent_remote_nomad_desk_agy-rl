@@ -34,13 +34,14 @@ export default function HostProfilePage() {
   );
 
   const isSubmittingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
     async function loadData() {
       try {
         const profile = await fetchCurrentHostProfileAction();
-        if (profile && isMounted) {
+        if (profile && isMountedRef.current) {
           setDisplayName(profile.displayName || 'Casa Urbana Stays');
           setPhone(profile.phone || '+34 600 000 001');
           setBio(
@@ -56,12 +57,12 @@ export default function HostProfilePage() {
       } catch {
         // Fallback to initial seed values
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMountedRef.current) setIsLoading(false);
       }
     }
     loadData();
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
   }, []);
 
@@ -97,6 +98,7 @@ export default function HostProfilePage() {
         avatar: trimmedAvatar || null,
       });
 
+      if (!isMountedRef.current) return;
       setAvatar(updated.avatar || '');
       setFailedPreviewAvatar(null);
       setFeedback({
@@ -104,6 +106,7 @@ export default function HostProfilePage() {
         message: 'Host profile updated successfully! Changes are live on your listings.',
       });
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       setFeedback({
         type: 'error',
         message:
@@ -112,7 +115,7 @@ export default function HostProfilePage() {
             : 'Failed to update profile. Please check your network and try again.',
       });
     } finally {
-      setIsSaving(false);
+      if (isMountedRef.current) setIsSaving(false);
       isSubmittingRef.current = false;
     }
   };

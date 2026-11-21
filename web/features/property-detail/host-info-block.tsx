@@ -9,7 +9,7 @@ interface HostInfoBlockProps {
 }
 
 export function HostInfoBlock({ host, property }: HostInfoBlockProps) {
-  const displayName = host?.displayName || 'Casa Urbana Stays';
+  const displayName = host?.displayName?.trim() || 'Casa Urbana Stays';
   const cities = host?.cities || property.city;
   const portfolioSize = host?.portfolioSize || 12;
   const memberSince = host?.createdAt

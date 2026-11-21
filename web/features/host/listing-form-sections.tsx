@@ -137,9 +137,10 @@ export function ListingFormSections({
   );
 
   // Section 5: Pricing & Rules
-  const initialRentDollars = initialData?.pricePerMonth
-    ? Math.round(initialData.pricePerMonth / 100)
-    : 2850;
+  const initialRentDollars =
+    initialData?.pricePerMonth != null
+      ? Math.round(initialData.pricePerMonth / 100)
+      : 2850;
   const [monthlyRentUsd, setMonthlyRentUsd] = useState<number | ''>(
     initialRentDollars
   );
@@ -623,12 +624,9 @@ export function ListingFormSections({
             </div>
 
             <div>
-              <label
-                htmlFor="listing-description"
-                className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-1.5"
-              >
+              <span className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-1.5">
                 Description (WYSIWYG Editorial)
-              </label>
+              </span>
               <TiptapEditor
                 value={description}
                 onChange={setDescription}
@@ -730,7 +728,7 @@ export function ListingFormSections({
                             title="Set as Cover Photo"
                             aria-label={`Set photo ${idx + 1} as cover`}
                             data-testid={`host-photo-cover-${idx}`}
-                            className="min-h-8 px-2 py-1 rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 text-[11px] font-semibold cursor-pointer"
+                            className="min-h-10 sm:min-h-8 px-2.5 sm:px-2 py-1 rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-100 text-[11px] font-semibold cursor-pointer"
                           >
                             Set Cover
                           </button>
@@ -748,7 +746,7 @@ export function ListingFormSections({
                           title="Move photo up"
                           aria-label={`Move photo ${idx + 1} up`}
                           data-testid={`host-photo-up-${idx}`}
-                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          className="inline-flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
                         </button>
@@ -759,7 +757,7 @@ export function ListingFormSections({
                           title="Move photo down"
                           aria-label={`Move photo ${idx + 1} down`}
                           data-testid={`host-photo-down-${idx}`}
-                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                          className="inline-flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
@@ -769,7 +767,7 @@ export function ListingFormSections({
                           title="Remove photo"
                           aria-label={`Remove photo ${idx + 1}`}
                           data-testid={`host-photo-remove-${idx}`}
-                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          className="inline-flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1287,12 +1285,9 @@ export function ListingFormSections({
           </div>
 
           <div>
-            <label
-              htmlFor="rules-houserules"
-              className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-1.5"
-            >
+            <span className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-1.5">
               House Rules & Quiet Hours
-            </label>
+            </span>
             <TiptapEditor
               value={houseRules}
               onChange={setHouseRules}
@@ -1336,9 +1331,10 @@ export function ListingFormSections({
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={handleCancel}
               data-testid="host-cancel-btn"
-              className="min-h-10 px-4 py-2 rounded-lg border border-neutral-300 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors text-center cursor-pointer"
+              className="min-h-10 px-4 py-2 rounded-lg border border-neutral-300 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors text-center disabled:opacity-50 cursor-pointer"
             >
               Cancel
             </button>
