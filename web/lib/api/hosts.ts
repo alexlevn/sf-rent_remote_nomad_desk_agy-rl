@@ -1,23 +1,70 @@
+import { asc, desc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { hostProfiles, users } from '@/lib/db/schema';
+import { notifyHostApplication } from '@/lib/email/notifications';
 import type { HostApplicationInput, HostProfile, HostStatus } from '@/lib/types';
-import { getMockStore } from './mock/seed-data';
+import {
+  hostApplicationSchema,
+  hostInt4IdSchema,
+  reviewHostApplicationSchema,
+  updateHostProfileSchema,
+} from '@/lib/validations/host';
+
+function mapHostRow(row: typeof hostProfiles.$inferSelect): HostProfile {
+  return {
+    id: row.id,
+    userId: row.userId,
+    displayName: row.displayName,
+    slug: row.slug || `host-${row.id}`,
+    phone: row.phone,
+    website: row.website ?? null,
+    cities: row.cities ?? '',
+    portfolioSize: row.portfolioSize ?? 1,
+    bio: row.bio ?? '',
+    avatar: row.avatar ?? null,
+    status: row.status as HostStatus,
+    rejectionReason: row.rejectionReason ?? null,
+    approvedAt: row.approvedAt ? row.approvedAt.toISOString() : null,
+    createdAt: row.createdAt ? row.createdAt.toISOString() : undefined,
+  };
+}
+
+function slugifyHostName(name: string, fallbackSuffix: number): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 120);
+  return base || `host-${fallbackSuffix}`;
+}
 
 /**
  * Lists all registered host profiles.
  */
 export async function listHosts(): Promise<HostProfile[]> {
-  const store = getMockStore();
-  return store.hosts.map((h) => ({ ...h }));
+  const rows = await db
+    .select()
+    .from(hostProfiles)
+    .orderBy(asc(hostProfiles.id));
+  return rows.map(mapHostRow);
 }
 
 /**
- * Retrieves a host profile by its ID or associated userId.
+ * Retrieves a host profile by its ID.
  */
 export async function getHostProfile(
   id: number
 ): Promise<HostProfile | null> {
-  const store = getMockStore();
-  const host = store.hosts.find((h) => h.id === id);
-  return host ? { ...host } : null;
+  const parsed = hostInt4IdSchema.safeParse(id);
+  if (!parsed.success) return null;
+
+  const rows = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.id, parsed.data))
+    .limit(1);
+
+  return rows.length > 0 ? mapHostRow(rows[0]) : null;
 }
 
 /**
@@ -26,98 +73,201 @@ export async function getHostProfile(
 export async function getHostByUserId(
   userId: number
 ): Promise<HostProfile | null> {
-  const store = getMockStore();
-  const host = store.hosts.find((h) => h.userId === userId);
-  return host ? { ...host } : null;
+  const parsed = hostInt4IdSchema.safeParse(userId);
+  if (!parsed.success) return null;
+
+  const rows = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.userId, parsed.data))
+    .limit(1);
+
+  return rows.length > 0 ? mapHostRow(rows[0]) : null;
 }
 
 /**
  * Retrieves a host profile by URL slug.
  */
 export async function getHostBySlug(slug: string): Promise<HostProfile | null> {
-  const store = getMockStore();
-  const host = store.hosts.find((h) => h.slug === slug);
-  return host ? { ...host } : null;
+  if (!slug || typeof slug !== 'string') return null;
+  const cleanSlug = slug.trim();
+  if (!cleanSlug) return null;
+
+  const rows = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.slug, cleanSlug))
+    .limit(1);
+
+  return rows.length > 0 ? mapHostRow(rows[0]) : null;
 }
 
 /**
  * Submits a new host application (/host/apply, D10).
+ * Creates a pending host profile in PostgreSQL and notifies admin via Mailpit.
  */
 export async function applyHost(
   data: HostApplicationInput
 ): Promise<HostProfile> {
-  const store = getMockStore();
+  const parsed = hostApplicationSchema.parse(data);
+  const targetUserId = parsed.userId ?? 5;
 
-  const maxId = store.hosts.reduce((max, h) => Math.max(max, h.id), 0);
-  const newId = maxId + 1;
-  const slug = data.displayName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
+  const existing = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.userId, targetUserId))
+    .limit(1);
 
-  const newProfile: HostProfile = {
-    id: newId,
-    userId: data.userId || 5, // Default applicant if unassigned
-    displayName: data.displayName,
-    slug: slug || `host-${newId}`,
-    phone: data.phone,
-    website: data.website || null,
-    cities: data.cities,
-    portfolioSize: data.portfolioSize,
-    bio: data.bio,
-    avatar: null,
-    status: 'pending',
-    rejectionReason: null,
-    approvedAt: null,
-    createdAt: new Date().toISOString(),
-  };
+  let saved: HostProfile;
 
-  store.hosts.push(newProfile);
-  return { ...newProfile };
+  if (existing.length > 0) {
+    const updatedRows = await db
+      .update(hostProfiles)
+      .set({
+        displayName: parsed.displayName,
+        phone: parsed.phone,
+        website: parsed.website ?? null,
+        cities: parsed.cities ?? '',
+        portfolioSize: parsed.portfolioSize ?? 1,
+        bio: parsed.bio ?? '',
+        status: 'pending',
+        rejectionReason: null,
+      })
+      .where(eq(hostProfiles.id, existing[0].id))
+      .returning();
+
+    saved = mapHostRow(updatedRows[0]);
+  } else {
+    let candidateSlug = slugifyHostName(parsed.displayName, targetUserId);
+    const slugConflict = await db
+      .select({ id: hostProfiles.id })
+      .from(hostProfiles)
+      .where(eq(hostProfiles.slug, candidateSlug))
+      .limit(1);
+
+    if (slugConflict.length > 0) {
+      candidateSlug = `${candidateSlug}-${targetUserId}`;
+    }
+
+    const insertedRows = await db
+      .insert(hostProfiles)
+      .values({
+        userId: targetUserId,
+        displayName: parsed.displayName,
+        slug: candidateSlug,
+        phone: parsed.phone,
+        website: parsed.website ?? null,
+        cities: parsed.cities ?? '',
+        portfolioSize: parsed.portfolioSize ?? 1,
+        bio: parsed.bio ?? '',
+        avatar: null,
+        status: 'pending',
+        rejectionReason: null,
+        approvedAt: null,
+      })
+      .returning();
+
+    saved = mapHostRow(insertedRows[0]);
+  }
+
+  await notifyHostApplication(
+    {
+      displayName: saved.displayName,
+      cities: saved.cities,
+      rejectionReason: saved.rejectionReason,
+    },
+    'submitted'
+  );
+
+  return saved;
 }
 
 /**
- * Lists host applications (admin review queue).
+ * Lists host applications awaiting admin review.
  */
 export async function listHostApplications(): Promise<HostProfile[]> {
-  const store = getMockStore();
-  return store.hosts
-    .filter((h) => h.status === 'pending')
-    .map((h) => ({ ...h }));
+  const rows = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.status, 'pending'))
+    .orderBy(desc(hostProfiles.createdAt), asc(hostProfiles.id));
+
+  return rows.map(mapHostRow);
 }
 
 /**
  * Reviews a host application: approve, reject, or suspend (admin portal).
+ * Elevates associated user role to 'host' on approval and notifies applicant.
  */
 export async function reviewHostApplication(
   id: number,
   status: HostStatus,
   reason?: string
 ): Promise<HostProfile> {
-  const store = getMockStore();
-  const index = store.hosts.findIndex((h) => h.id === id);
-  if (index === -1) {
-    throw new Error(`Host profile ${id} not found`);
-  }
+  const parsed = reviewHostApplicationSchema.parse({ id, status, reason });
 
-  const existing = store.hosts[index];
-  const updated: HostProfile = {
-    ...existing,
-    status,
-    rejectionReason: reason || null,
-    approvedAt: status === 'approved' ? new Date().toISOString() : existing.approvedAt,
-  };
+  const result = await db.transaction(async (tx) => {
+    const existingRows = await tx
+      .select()
+      .from(hostProfiles)
+      .where(eq(hostProfiles.id, parsed.id))
+      .limit(1);
 
-  // If approved, elevate associated user role to 'host'
-  if (status === 'approved') {
-    const user = store.users.find((u) => u.id === existing.userId);
-    if (user) {
-      user.role = 'host';
+    if (existingRows.length === 0) {
+      throw new Error(`Host profile ${parsed.id} not found`);
     }
+
+    const existing = existingRows[0];
+    const updatedRows = await tx
+      .update(hostProfiles)
+      .set({
+        status: parsed.status,
+        rejectionReason: parsed.reason || null,
+        approvedAt:
+          parsed.status === 'approved' ? new Date() : existing.approvedAt,
+      })
+      .where(eq(hostProfiles.id, parsed.id))
+      .returning();
+
+    const userRows = await tx
+      .select({ id: users.id, email: users.email, role: users.role })
+      .from(users)
+      .where(eq(users.id, existing.userId))
+      .limit(1);
+
+    const user = userRows[0];
+    // Elevate guest role to 'host' upon approval without downgrading an admin
+    if (parsed.status === 'approved' && user && user.role !== 'admin') {
+      await tx
+        .update(users)
+        .set({ role: 'host' })
+        .where(eq(users.id, user.id));
+    }
+
+    return {
+      profile: mapHostRow(updatedRows[0]),
+      userEmail: user?.email,
+    };
+  });
+
+  if (
+    result.userEmail &&
+    (parsed.status === 'approved' ||
+      parsed.status === 'rejected' ||
+      parsed.status === 'suspended')
+  ) {
+    await notifyHostApplication(
+      {
+        displayName: result.profile.displayName,
+        cities: result.profile.cities,
+        rejectionReason: result.profile.rejectionReason,
+      },
+      parsed.status,
+      result.userEmail
+    );
   }
 
-  store.hosts[index] = updated;
-  return { ...updated };
+  return result.profile;
 }
 
 /**
@@ -127,17 +277,42 @@ export async function updateHostProfile(
   id: number,
   data: Partial<HostProfile>
 ): Promise<HostProfile> {
-  const store = getMockStore();
-  const index = store.hosts.findIndex((h) => h.id === id);
-  if (index === -1) {
-    throw new Error(`Host profile ${id} not found`);
+  const validId = hostInt4IdSchema.parse(id);
+  const parsed = updateHostProfileSchema.parse(data);
+
+  const existingRows = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.id, validId))
+    .limit(1);
+
+  if (existingRows.length === 0) {
+    throw new Error(`Host profile ${validId} not found`);
   }
 
-  const updated: HostProfile = {
-    ...store.hosts[index],
-    ...data,
-    id: store.hosts[index].id,
-  };
-  store.hosts[index] = updated;
-  return { ...updated };
+  const updatePayload: Partial<typeof hostProfiles.$inferInsert> = {};
+  if (parsed.displayName !== undefined) updatePayload.displayName = parsed.displayName;
+  if (parsed.slug !== undefined) updatePayload.slug = parsed.slug;
+  if (parsed.phone !== undefined) updatePayload.phone = parsed.phone;
+  if (parsed.website !== undefined) updatePayload.website = parsed.website;
+  if (parsed.cities !== undefined) updatePayload.cities = parsed.cities;
+  if (parsed.portfolioSize !== undefined) updatePayload.portfolioSize = parsed.portfolioSize;
+  if (parsed.bio !== undefined) updatePayload.bio = parsed.bio;
+  if (parsed.avatar !== undefined) updatePayload.avatar = parsed.avatar;
+  if (parsed.status !== undefined) updatePayload.status = parsed.status;
+  if (parsed.rejectionReason !== undefined) {
+    updatePayload.rejectionReason = parsed.rejectionReason;
+  }
+
+  if (Object.keys(updatePayload).length === 0) {
+    return mapHostRow(existingRows[0]);
+  }
+
+  const updatedRows = await db
+    .update(hostProfiles)
+    .set(updatePayload)
+    .where(eq(hostProfiles.id, validId))
+    .returning();
+
+  return mapHostRow(updatedRows[0]);
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth/session';
+import { requireHost } from '@/lib/auth/guards';
 import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
 import { listProperties } from '@/lib/api/properties';
 import {
@@ -53,12 +54,16 @@ export default async function HostCalendarPage() {
   }) {
     'use server';
     try {
-      const created = await addBlockedDate({
-        propertyId: data.propertyId,
-        startDate: data.startDate,
-        endDate: data.endDate,
-        reason: data.reason,
-      });
+      const { hostId } = await requireHost();
+      const created = await addBlockedDate(
+        {
+          propertyId: data.propertyId,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          reason: data.reason,
+        },
+        { hostId }
+      );
 
       revalidatePath('/host/calendar');
       return { success: true, data: created };
@@ -77,7 +82,8 @@ export default async function HostCalendarPage() {
   async function unblockDatesAction(blockedDateId: number) {
     'use server';
     try {
-      const removed = await deleteBlockedDate(blockedDateId);
+      const { hostId } = await requireHost();
+      const removed = await deleteBlockedDate(blockedDateId, { hostId });
       if (!removed) {
         return { success: false, error: 'Blocked date record not found.' };
       }

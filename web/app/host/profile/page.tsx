@@ -7,11 +7,12 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { getHostProfile, updateHostProfile } from '@/lib/api/hosts';
-import type { HostProfile } from '@/lib/types';
+import {
+  fetchCurrentHostProfileAction,
+  updateCurrentHostProfileAction,
+} from '@/app/host/profile/actions';
 
 export default function HostProfilePage() {
-  const [host, setHost] = useState<HostProfile | null>(null);
   const [displayName, setDisplayName] = useState('Casa Urbana Stays');
   const [phone, setPhone] = useState('+34 600 000 001');
   const [bio, setBio] = useState(
@@ -33,9 +34,8 @@ export default function HostProfilePage() {
     let isMounted = true;
     async function loadData() {
       try {
-        const profile = await getHostProfile(1);
+        const profile = await fetchCurrentHostProfileAction();
         if (profile && isMounted) {
-          setHost(profile);
           setDisplayName(profile.displayName || 'Casa Urbana Stays');
           setPhone(profile.phone || '+34 600 000 001');
           setBio(
@@ -73,8 +73,7 @@ export default function HostProfilePage() {
         return;
       }
 
-      const hostId = host?.id || 1;
-      const updated = await updateHostProfile(hostId, {
+      await updateCurrentHostProfileAction({
         displayName: displayName.trim(),
         phone: phone.trim(),
         bio: bio.trim(),
@@ -83,7 +82,6 @@ export default function HostProfilePage() {
         website: website.trim() || null,
       });
 
-      setHost(updated);
       setFeedback({
         type: 'success',
         message: 'Host profile updated successfully! Changes are live on your listings.',

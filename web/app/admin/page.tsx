@@ -6,11 +6,12 @@ import {
   AdminKpiCards,
   type AdminKpiStats,
 } from '@/features/admin/admin-kpi-cards';
-import { listHosts, reviewHostApplication } from '@/lib/api/hosts';
-import { listReservations } from '@/lib/api/reservations';
 import {
+  fetchAdminHostsAction,
   fetchAdminPropertiesAction,
+  fetchAdminReservationsAction,
   fetchAdminUsersAction,
+  reviewHostAction,
 } from '@/app/admin/admin-actions';
 import type { HostProfile, Property, User } from '@/lib/types';
 import {
@@ -43,13 +44,15 @@ export default function AdminDashboardPage() {
   // Load initial platform data
   const loadData = async () => {
     try {
-      const [adminPropsData, allHosts, allReservations, allUsers] = await Promise.all([
+      const [adminPropsData, hostsData, reservationsData, allUsers] = await Promise.all([
         fetchAdminPropertiesAction(),
-        listHosts(),
-        listReservations(),
+        fetchAdminHostsAction(),
+        fetchAdminReservationsAction(),
         fetchAdminUsersAction(),
       ]);
       const allProperties = adminPropsData.propList;
+      const allHosts = hostsData.hostList;
+      const allReservations = reservationsData.resList;
 
       const published = allProperties.filter((p) => p.status === 'published');
       const activeH = allHosts.filter((h) => h.status === 'approved');
@@ -89,7 +92,7 @@ export default function AdminDashboardPage() {
 
   const handleApproveHost = async (hostId: number, displayName: string) => {
     try {
-      await reviewHostApplication(hostId, 'approved');
+      await reviewHostAction(hostId, 'approved');
       setNotification(`Host application for "${displayName}" has been approved!`);
       setTimeout(() => setNotification(null), 4000);
       await loadData();
@@ -100,7 +103,7 @@ export default function AdminDashboardPage() {
 
   const handleRejectHost = async (hostId: number, displayName: string) => {
     try {
-      await reviewHostApplication(hostId, 'rejected', 'Portfolio does not meet NomadDesk remote standards');
+      await reviewHostAction(hostId, 'rejected', 'Portfolio does not meet NomadDesk remote standards');
       setNotification(`Host application for "${displayName}" was rejected.`);
       setTimeout(() => setNotification(null), 4000);
       await loadData();

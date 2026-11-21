@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/db/client';
+import { reservations } from '@/lib/db/schema';
 import {
   listReservations,
   getReservationByCode,
@@ -128,16 +131,31 @@ describe('Reservations & Availability Mock API Layer', () => {
     const seed1 = await getReservationByCode('ND-SEED1');
     expect(seed1).not.toBeNull();
 
-    // Host accepts pending reservation
-    const accepted = await updateReservationStatus(seed1!.id, 'confirmed');
-    expect(accepted.status).toBe('confirmed');
-    expect(accepted.paymentStatus).toBe('captured');
+    try {
+      // Host accepts pending reservation
+      const accepted = await updateReservationStatus(seed1!.id, 'confirmed');
+      expect(accepted.status).toBe('confirmed');
+      expect(accepted.paymentStatus).toBe('captured');
 
-    // Guest cancels reservation
-    const cancelled = await updateReservationStatus(seed1!.id, 'cancelled', undefined, 'guest');
-    expect(cancelled.status).toBe('cancelled');
-    expect(cancelled.cancelledBy).toBe('guest');
-    expect(cancelled.paymentStatus).toBe('refunded');
+      // Guest cancels reservation
+      const cancelled = await updateReservationStatus(seed1!.id, 'cancelled', undefined, 'guest');
+      expect(cancelled.status).toBe('cancelled');
+      expect(cancelled.cancelledBy).toBe('guest');
+      expect(cancelled.paymentStatus).toBe('refunded');
+    } finally {
+      // Restore ND-SEED1 to initial pending state so other suites remain isolated
+      await db
+        .update(reservations)
+        .set({
+          status: 'pending',
+          paymentStatus: 'authorized',
+          rejectionReason: null,
+          cancelledBy: null,
+          respondBy: new Date(Date.now() + 48 * 3600 * 1000),
+          updatedAt: new Date(),
+        })
+        .where(eq(reservations.id, seed1!.id));
+    }
   });
 
   it('manages blocked dates (list, add, delete)', async () => {

@@ -441,6 +441,10 @@ export async function saveHostListing(
     }
 
     const parsed = updatePropertySchema.parse(data);
+    // Hosts cannot directly self-publish listings; require admin moderation
+    if (parsed.status === 'published' && existing.status !== 'published') {
+      throw new Error('Hosts cannot publish listings directly; submit for review instead');
+    }
     const payload = buildUpdatePayload(parsed);
     // Prevent hosts from self-featuring listings or overwriting admin moderation fields
     delete payload.featuredPosition;
@@ -457,6 +461,11 @@ export async function saveHostListing(
 
   // Create new listing inside a transaction with advisory lock (properties.id is non-serial integer PK)
   const parsed = createPropertySchema.parse(data);
+  if (parsed.status === 'published') {
+    throw new Error('Hosts cannot publish listings directly; submit for review instead');
+  }
+  const initialStatus: PropertyStatus =
+    parsed.status === 'pending_review' ? 'pending_review' : 'draft';
   const cityName = parsed.city || 'Madrid';
 
   // Resolve valid locationId foreign key from locations table if not explicitly provided
@@ -548,7 +557,7 @@ export async function saveHostListing(
             ? parsed.images
             : ['/seed/property/prop-madrid-1.webp'],
         featuredPosition: null,
-        status: parsed.status || 'draft',
+        status: initialStatus,
         rejectionReason: null,
         createdAt: now,
         updatedAt: now,
