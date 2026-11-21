@@ -46,6 +46,7 @@ test.describe('Admin Platform Management E2E Suite', () => {
     await expect(host403.getByText(/host@example.com/i)).toBeVisible();
 
     // 5. Unauthenticated user attempts to access /admin -> blocked with 403 Forbidden
+    await page.context().clearCookies();
     await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
     await page.goto('/admin');
     const unauth403 = page.getByTestId('admin-403');

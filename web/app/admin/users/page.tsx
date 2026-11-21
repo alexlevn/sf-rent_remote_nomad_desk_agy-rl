@@ -1,7 +1,19 @@
 import React from 'react';
+import { auth } from '@/lib/auth/config';
+import { getUserById } from '@/lib/api/users';
 import { UserTable } from '@/features/admin/user-table';
 
-export default function AdminUsersPage() {
+export default async function AdminUsersPage() {
+  const session = await auth();
+  const rawUserId = session?.user?.id ? Number(session.user.id) : NaN;
+  const freshUser =
+    Number.isInteger(rawUserId) && rawUserId > 0 ? await getUserById(rawUserId) : null;
+
+  // Layout renders 403 for unauthorized users; guard here too since layouts and pages render in parallel.
+  if (!freshUser || !freshUser.isActive || freshUser.role !== 'admin') {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -19,7 +31,7 @@ export default function AdminUsersPage() {
         </p>
       </div>
 
-      <UserTable />
+      <UserTable currentAdminId={freshUser.id} currentAdminEmail={freshUser.email} />
     </div>
   );
 }

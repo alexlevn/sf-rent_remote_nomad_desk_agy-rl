@@ -15,14 +15,22 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-export function UserTable() {
+interface UserTableProps {
+  currentAdminId?: number | null;
+  currentAdminEmail?: string;
+}
+
+export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: UserTableProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [currentAdminEmail, setCurrentAdminEmail] = useState<string>('admin@example.com');
+
+  const isSameAdmin = (targetUser: User) =>
+    (currentAdminId != null && targetUser.id === currentAdminId) ||
+    (Boolean(currentAdminEmail) && targetUser.email === currentAdminEmail);
 
   const fetchUsers = async () => {
     try {
@@ -40,20 +48,6 @@ export function UserTable() {
 
   useEffect(() => {
     fetchUsers();
-
-    try {
-      const stored = localStorage.getItem('nomaddesk_user');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.email) {
-          startTransition(() => {
-            setCurrentAdminEmail(parsed.email);
-          });
-        }
-      }
-    } catch {
-      // Ignore localStorage read errors
-    }
   }, []);
 
   // Show temporary toast message
@@ -93,7 +87,7 @@ export function UserTable() {
   // Handle Account Suspension / Activation Toggle
   const handleToggleStatus = async (targetUser: User) => {
     // Protection: Cannot suspend the current logged-in admin or the last remaining admin
-    if (targetUser.email === currentAdminEmail && targetUser.isActive) {
+    if (isSameAdmin(targetUser) && targetUser.isActive) {
       alert('You cannot suspend your own active administrator account.');
       return;
     }
@@ -230,7 +224,7 @@ export function UserTable() {
                 </tr>
               ) : (
                 filteredUsers.map((user) => {
-                  const isCurrentAdmin = user.email === currentAdminEmail;
+                  const isCurrentAdmin = isSameAdmin(user);
                   const isLastAdmin = user.role === 'admin' && adminCount <= 1;
 
                   return (
