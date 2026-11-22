@@ -9,8 +9,8 @@ import {
   reorderVideosAction,
   fetchVideosAction,
 } from '@/app/admin/cms-actions';
-import { ImagePickerField } from '@/features/media/image-picker-field';
-import { isSafeImagePath } from '@/lib/validations/media';
+import { VideoEditModal } from '@/features/admin/videos/video-edit-modal';
+import { isSafeHttpUrl } from '@/features/admin/videos/is-safe-http-url';
 import {
   Video,
   Plus,
@@ -25,27 +25,13 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-function isSafeHttpUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url.trim());
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
 export default function AdminVideosPage() {
   const [videos, setVideos] = useState<CommunityVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Partial<CommunityVideo> | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const isActionRunningRef = useRef(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -72,18 +58,6 @@ export default function AdminVideosPage() {
     };
   }, []);
 
-  // Close reel modal on Escape key (skip if media picker is open or save is in flight)
-  useEffect(() => {
-    if (!isModalOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && !isMediaPickerOpen && !isActionRunningRef.current) {
-        setIsModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, isMediaPickerOpen]);
-
   const showToast = (msg: string) => {
     setActionError(null);
     setToastMessage(msg);
@@ -101,18 +75,12 @@ export default function AdminVideosPage() {
       isActive: true,
       position: videos.length + 1,
     });
-    setIsMediaPickerOpen(false);
-    setFormError(null);
     setActionError(null);
-    setIsModalOpen(true);
   };
 
   const handleOpenEdit = (v: CommunityVideo) => {
     setEditingVideo({ ...v });
-    setIsMediaPickerOpen(false);
-    setFormError(null);
     setActionError(null);
-    setIsModalOpen(true);
   };
 
   const handleToggleVisible = async (v: CommunityVideo) => {
@@ -173,56 +141,10 @@ export default function AdminVideosPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingVideo || isSubmitting || isActionRunningRef.current) return;
-
-    const rawHandle = (editingVideo.authorName || '').trim();
-    const trimmedUrl = (editingVideo.url || '').trim();
-
-    if (!rawHandle || !trimmedUrl) {
-      setFormError('Please enter creator handle and embed URL.');
-      return;
-    }
-
-    if (!isSafeHttpUrl(trimmedUrl)) {
-      setFormError('Embed URL must start with https:// or http://.');
-      return;
-    }
-
-    const trimmedAvatar = (editingVideo.avatar || '').trim();
-    if (!trimmedAvatar || !isSafeImagePath(trimmedAvatar)) {
-      setFormError('Avatar image must be a valid /uploads/, /seed/, or https:// URL.');
-      return;
-    }
-
-    const normalizedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
-
-    isActionRunningRef.current = true;
-    setIsSubmitting(true);
-    setFormError(null);
-
-    try {
-      await saveVideoAction({
-        ...editingVideo,
-        authorName: normalizedHandle,
-        url: trimmedUrl,
-        avatar: trimmedAvatar,
-      });
-      showToast(
-        editingVideo.id
-          ? `Reel for ${normalizedHandle} updated successfully!`
-          : `New reel for ${normalizedHandle} added to homepage carousel!`
-      );
-      setIsModalOpen(false);
-      setEditingVideo(null);
-      await fetchVideos();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to save video reel');
-    } finally {
-      setIsSubmitting(false);
-      isActionRunningRef.current = false;
-    }
+  const handleSaved = async (message: string) => {
+    showToast(message);
+    setEditingVideo(null);
+    await fetchVideos();
   };
 
   return (
@@ -422,138 +344,8 @@ export default function AdminVideosPage() {
         )}
       </div>
 
-      {/* Modal: Add / Edit Reel */}
-      {isModalOpen && editingVideo && (
-        <div
-          className={cn(
-            'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in',
-            isMediaPickerOpen ? 'hidden' : '',
-          )}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) {
-              setIsModalOpen(false);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={editingVideo.id ? 'Edit Reel' : 'Add Community Reel'}
-            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
-              <h2 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
-                <Video className="w-5 h-5 text-[var(--color-brand)]" />
-                <span>{editingVideo.id ? 'Edit Reel' : 'Add Community Reel'}</span>
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                aria-label="Close modal"
-                className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-neutral-700 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {formError && (
-              <div className="p-3 mb-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-neutral-700 mb-1">
-                  Creator Handle <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editingVideo.authorName || ''}
-                  onChange={(e) => setEditingVideo((prev) => ({ ...prev, authorName: e.target.value }))}
-                  placeholder="e.g. @gringagoiana"
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-neutral-700 mb-1">
-                  Embed URL <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={editingVideo.url || ''}
-                  onChange={(e) => setEditingVideo((prev) => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://www.instagram.com/p/DeJ6Y_ROFUP/"
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] font-mono text-[11px]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-neutral-700 mb-1">Platform</label>
-                <select
-                  value={editingVideo.platform || 'Instagram'}
-                  onChange={(e) => setEditingVideo((prev) => ({ ...prev, platform: e.target.value }))}
-                  className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
-                >
-                  <option value="Instagram">Instagram</option>
-                  <option value="TikTok">TikTok</option>
-                  <option value="YouTube">YouTube Shorts</option>
-                </select>
-              </div>
-
-              <ImagePickerField
-                id="video-avatar-image"
-                label="Avatar / Thumbnail"
-                value={editingVideo.avatar || ''}
-                onChange={(url) =>
-                  setEditingVideo((prev) => (prev ? { ...prev, avatar: url } : null))
-                }
-                onModalOpenChange={setIsMediaPickerOpen}
-                placeholder="/seed/location/2241.jpg"
-                helperText="Shown as the circular creator avatar in the homepage community reels."
-                testIdPrefix="video-avatar-image"
-                previewAlt={editingVideo.authorName || 'Creator avatar'}
-                previewAspect="square"
-                modalTitle="Choose Creator Avatar"
-              />
-
-              <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editingVideo.isActive !== false}
-                    onChange={(e) => setEditingVideo((prev) => ({ ...prev, isActive: e.target.checked }))}
-                    className="rounded border-neutral-300 text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
-                  />
-                  <span className="font-semibold text-neutral-800">
-                    Visible in Community Showcase on Homepage
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--color-border-light)]">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-[var(--color-border-light)] text-neutral-700 text-xs font-medium hover:bg-neutral-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 cursor-pointer shadow-xs"
-                >
-                  {isSubmitting ? 'Saving...' : 'Save Reel'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {editingVideo && (
+        <VideoEditModal initial={editingVideo} onClose={() => setEditingVideo(null)} onSaved={handleSaved} />
       )}
     </div>
   );
