@@ -118,9 +118,15 @@ test.describe('Admin Platform Management E2E Suite', () => {
     await page.locator('#listing-title').fill(testTitle);
     await page.locator('#listing-city').selectOption('Madrid');
     await page.locator('#listing-neighborhood').fill('Salamanca');
-    await page.locator('#listing-description').fill(
+    const descEditable = page.locator('#listing-description');
+    await expect(descEditable).toBeVisible();
+    await descEditable.click();
+    await expect(descEditable).toBeFocused();
+    await descEditable.pressSequentially(
       'Executive penthouse with ultra-fast fiber internet and dual 4K monitors.'
     );
+    await page.getByTestId('host-custom-photo-input').fill('/seed/property/prop-madrid-1.webp');
+    await page.getByTestId('host-add-photo-btn').click();
 
     const submitBtn = page.getByRole('button', { name: /Submit for Review/i });
     await expect(submitBtn).toBeVisible();

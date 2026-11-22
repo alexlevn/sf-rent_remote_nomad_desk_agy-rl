@@ -164,7 +164,7 @@ test.describe('Public Discovery & Workstations E2E Suite', () => {
     const summaryCard = page.locator('.sticky').filter({ hasText: 'Configuration Summary' });
     await expect(summaryCard.getByText('4K UHD Ultrawide Monitor')).toBeVisible();
     await expect(summaryCard.getByText('+€40.00')).toBeVisible();
-    await expect(summaryCard.getByText('Herman Miller Aeron')).toBeVisible();
+    await expect(summaryCard.getByText('Premium Ergonomic Chair')).toBeVisible();
     await expect(summaryCard.getByText('+€45.00')).toBeVisible();
   });
 

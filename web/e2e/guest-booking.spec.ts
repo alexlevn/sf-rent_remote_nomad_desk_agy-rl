@@ -183,6 +183,7 @@ test.describe('Auth, Guest Portal & Booking Flow E2E Suite', () => {
     // Session 2 completes booking for the exact same dates first
     secondContext = await browser.newContext();
     const page2 = await secondContext.newPage();
+    await loginAsGuest(page2);
     await page2.goto(`/booking/checkout?propertyId=16061&moveIn=${moveIn}&moveOut=${moveOut}`);
     await page2.getByTestId('checkout-submit-btn').click();
     await page2.waitForURL(/\/booking\/confirmation/);

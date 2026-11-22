@@ -70,12 +70,14 @@ test.describe('Admin CMS Content Updates E2E Suite', () => {
     await expect(heroDestSelect).toBeVisible();
     await expect(heroDestSelect.locator('option[value="lisbon"]')).toBeAttached();
 
-    // 8. Verify presence in Host listing creation city select (/host/listings/new)
+    // 8. Verify presence in Host listing creation city select (/host/listings/new) as an approved Host
+    await loginAs(page, 'host@example.com', 'host1234');
     await page.goto('/host/listings/new');
     const hostCitySelect = page.locator('select#listing-city');
     await expect(hostCitySelect.locator('option:has-text("Lisbon")')).toBeAttached();
 
-    // 9. Back to /admin/locations, hide Lisbon
+    // 9. Back to /admin/locations as Admin, hide Lisbon
+    await loginAs(page, 'admin@example.com', 'admin1234');
     await page.goto('/admin/locations');
     await page.getByTestId('city-search-input').fill('Lisbon');
     const toggleBtn = page.getByTestId('toggle-active-lisbon');
@@ -96,7 +98,8 @@ test.describe('Admin CMS Content Updates E2E Suite', () => {
     // Hero search
     await expect(page.locator('select#hero-destination option[value="lisbon"]')).not.toBeAttached();
 
-    // /host/listings/new
+    // /host/listings/new as Host
+    await loginAs(page, 'host@example.com', 'host1234');
     await page.goto('/host/listings/new');
     await expect(page.locator('select#listing-city option:has-text("Lisbon")')).not.toBeAttached();
   });

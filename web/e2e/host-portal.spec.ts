@@ -177,7 +177,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await expect(requestRow).not.toBeVisible();
 
     // 6. Switch to "Upcoming" tab and verify ND-SEED1 is now listed as Confirmed
-    await page.getByRole('button', { name: /Upcoming/i }).click();
+    await page.getByRole('tab', { name: /Upcoming/i }).click();
     const confirmedRow = page.locator('tr').filter({ hasText: 'ND-SEED1' });
     await expect(confirmedRow).toBeVisible();
     await expect(confirmedRow.getByText(/Confirmed/i)).toBeVisible();
@@ -250,7 +250,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.locator('#calendar-property-select').selectOption({ value: '16061' });
 
     // 3. Overlap check: Attempt to block dates overlapping confirmed booking (T+25 -> T+35)
-    await page.getByRole('button', { name: /\+ Block Custom Dates/i }).click();
+    await page.getByRole('button', { name: /Block Custom Dates/i }).click();
 
     const overlapStart = getOffsetDateStr(25);
     const overlapEnd = getOffsetDateStr(35);
@@ -266,7 +266,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
     // 4. Valid block: Block a free period far in the future (T+120 -> T+150)
-    await page.getByRole('button', { name: /\+ Block Custom Dates/i }).click();
+    await page.getByRole('button', { name: /Block Custom Dates/i }).click();
 
     const freeStart = getOffsetDateStr(120);
     const freeEnd = getOffsetDateStr(150);
