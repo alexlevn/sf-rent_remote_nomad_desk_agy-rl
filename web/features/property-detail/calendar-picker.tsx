@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { parseUtcDate, toUtcDateString } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -47,17 +47,20 @@ export function CalendarPicker({
     return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
   }, [moveIn]);
 
+  const [prevMoveIn, setPrevMoveIn] = useState(moveIn);
   const [currentYear, setCurrentYear] = useState(initialUtcDate.getUTCFullYear());
   const [currentMonth, setCurrentMonth] = useState(initialUtcDate.getUTCMonth()); // 0-indexed
   const [selectionStep, setSelectionStep] = useState<'in' | 'out'>('in');
 
   // Sync displayed calendar month when moveIn input changes externally
-  useEffect(() => {
+  if (prevMoveIn !== moveIn) {
+    setPrevMoveIn(moveIn);
     const parsed = moveIn ? parseUtcDate(moveIn) : null;
-    if (!parsed) return;
-    setCurrentYear(parsed.getUTCFullYear());
-    setCurrentMonth(parsed.getUTCMonth());
-  }, [moveIn]);
+    if (parsed) {
+      setCurrentYear(parsed.getUTCFullYear());
+      setCurrentMonth(parsed.getUTCMonth());
+    }
+  }
 
   const todayStr = getLocalTodayString();
 

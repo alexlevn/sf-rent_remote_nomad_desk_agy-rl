@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ChevronDown, Globe, LogOut, ShieldCheck, Home, Briefcase, Sparkles } from 'lucide-react';
@@ -28,13 +28,15 @@ export const Header: React.FC<HeaderProps> = ({ initialUser = null }) => {
   const pathname = usePathname();
   const router = useRouter();
   const { currency, setCurrency, currencies } = useCurrency();
+  const [prevInitialUser, setPrevInitialUser] = useState<HeaderUser | null>(initialUser);
   const [authUser, setAuthUser] = useState<HeaderUser | null>(initialUser);
   const isSigningOutRef = useRef(false);
 
   // Sync client header state whenever the server re-renders RootLayout with a fresh Auth.js session
-  useEffect(() => {
+  if (prevInitialUser !== initialUser) {
+    setPrevInitialUser(initialUser);
     setAuthUser(initialUser ?? null);
-  }, [initialUser]);
+  }
 
   const handleSignOut = async () => {
     if (isSigningOutRef.current) return;

@@ -50,6 +50,8 @@ export function FilterBar({
   const { currency, setCurrency } = useCurrency();
 
   const [openDropdown, setOpenDropdown] = useState<'bedrooms' | 'price' | 'amenities' | null>(null);
+  const priceFilterKey = `${filters.minPrice ?? ''}:${filters.maxPrice ?? ''}`;
+  const [prevPriceFilterKey, setPrevPriceFilterKey] = useState(priceFilterKey);
   const [minPriceInput, setMinPriceInput] = useState<string>(
     filters.minPrice !== null ? String(Math.round(filters.minPrice / 100)) : ''
   );
@@ -60,10 +62,11 @@ export function FilterBar({
   const filterBarRef = useRef<HTMLDivElement>(null);
 
   // Sync draft price inputs when URL filters are reset or changed externally
-  useEffect(() => {
+  if (prevPriceFilterKey !== priceFilterKey) {
+    setPrevPriceFilterKey(priceFilterKey);
     setMinPriceInput(filters.minPrice !== null ? String(Math.round(filters.minPrice / 100)) : '');
     setMaxPriceInput(filters.maxPrice !== null ? String(Math.round(filters.maxPrice / 100)) : '');
-  }, [filters.minPrice, filters.maxPrice]);
+  }
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

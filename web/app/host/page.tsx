@@ -21,23 +21,15 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function HostDashboardPage() {
-  const { host, isReadOnly } = await getHostPortalContext('/host');
-
-  const [properties, rawReservations] = await Promise.all([
-    listProperties({ hostId: host.id, status: 'all' }),
-    listReservations({ hostId: host.id }),
-  ]);
-
-  const reservations = rawReservations.map(redactUnconfirmedReservation);
-
+function buildDashboardMetrics(
+  properties: Property[],
+  reservations: Awaited<ReturnType<typeof listReservations>>
+) {
   const propertyMap = new Map<number, Property>();
   properties.forEach((p) => propertyMap.set(p.id, p));
 
-  // Compute KPI: Live published listings (no synthetic fallback)
   const liveListingsCount = properties.filter((p) => p.status === 'published').length;
 
-  // Compute pending requests with real respondBy - Date.now() countdown
   const nowMs = Date.now();
   const pendingRaw = reservations.filter((r) => r.status === 'pending');
   const pendingRequests: PendingRequestItem[] = pendingRaw.map((r) => {
@@ -53,7 +45,6 @@ export default async function HostDashboardPage() {
     };
   });
 
-  // Upcoming confirmed check-ins in the next 30 days (UTC)
   const todayIso = toUtcDateString(new Date(nowMs));
   const in30DaysIso = getUtcOffsetDateString(30);
   const upcomingRaw = reservations
@@ -69,6 +60,26 @@ export default async function HostDashboardPage() {
     reservation: r,
     property: propertyMap.get(r.propertyId) || null,
   }));
+
+  return {
+    todayIso,
+    liveListingsCount,
+    pendingRequests,
+    upcomingCheckIns,
+  };
+}
+
+export default async function HostDashboardPage() {
+  const { host, isReadOnly } = await getHostPortalContext('/host');
+
+  const [properties, rawReservations] = await Promise.all([
+    listProperties({ hostId: host.id, status: 'all' }),
+    listReservations({ hostId: host.id }),
+  ]);
+
+  const reservations = rawReservations.map(redactUnconfirmedReservation);
+  const { todayIso, liveListingsCount, pendingRequests, upcomingCheckIns } =
+    buildDashboardMetrics(properties, reservations);
 
   // Expected net payout for active confirmed/completed stays starting or active this month
   const currentMonthPrefix = todayIso.slice(0, 7);

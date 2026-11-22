@@ -37,6 +37,8 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
 }) => {
   const router = useRouter();
   const { formatPrice } = useCurrency();
+  const [prevInitialReservations, setPrevInitialReservations] =
+    useState<Reservation[]>(initialReservations);
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [selectedDrawerReservation, setSelectedDrawerReservation] = useState<Reservation | null>(
@@ -48,9 +50,10 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
+  if (prevInitialReservations !== initialReservations) {
+    setPrevInitialReservations(initialReservations);
     setReservations(initialReservations);
-  }, [initialReservations]);
+  }
 
   useEffect(() => {
     return () => {
