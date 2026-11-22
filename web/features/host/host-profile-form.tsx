@@ -12,6 +12,7 @@ import type { HostProfile } from '@/lib/types';
 import { updateCurrentHostProfileAction } from '@/app/host/profile/actions';
 import { ImagePickerField } from '@/features/media/image-picker-field';
 import { isSafeImagePath } from '@/lib/validations/media';
+import { cn } from '@/lib/utils';
 
 interface HostProfileFormProps {
   initialProfile: HostProfile;
@@ -119,11 +120,12 @@ export function HostProfileForm({
       {feedback && (
         <div
           role="alert"
-          className={`p-4 rounded-xl flex items-center justify-between text-sm shadow-xs ${
+          className={cn(
+            'p-4 rounded-xl flex items-center justify-between text-sm shadow-xs',
             feedback.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
-          }`}
+              : 'bg-red-50 text-red-800 border border-red-200',
+          )}
         >
           <div className="flex items-center gap-3">
             {feedback.type === 'success' ? (

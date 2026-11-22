@@ -23,6 +23,7 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
 
@@ -250,32 +251,32 @@ export function AllReservationsTable() {
     const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
     switch (status) {
       case 'confirmed':
-        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Confirmed</span>;
+        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Confirmed</span>;
       case 'pending':
-        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending</span>;
+        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending</span>;
       case 'completed':
-        return <span className={`${base} bg-blue-100 text-blue-800 border-blue-200`}>Completed</span>;
+        return <span className={cn(base, 'bg-blue-100 text-blue-800 border-blue-200')}>Completed</span>;
       case 'cancelled':
-        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Cancelled</span>;
+        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Cancelled</span>;
       case 'rejected':
-        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
+        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
       case 'expired':
-        return <span className={`${base} bg-neutral-100 text-neutral-600 border-neutral-300`}>Expired</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-600 border-neutral-300')}>Expired</span>;
       default:
-        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
     }
   };
 
   const renderPaymentBadge = (paymentStatus?: string) => {
     switch (paymentStatus) {
       case 'captured':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200">Captured</span>;
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Captured</span>;
       case 'authorized':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200">Hold</span>;
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">Hold</span>;
       case 'refunded':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200">Refunded</span>;
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700 border border-purple-200">Refunded</span>;
       case 'voided':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 border border-neutral-300">Voided</span>;
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-neutral-100 text-neutral-600 border border-neutral-300">Voided</span>;
       default:
         return <span className="text-xs text-neutral-400">{paymentStatus || 'Pending'}</span>;
     }
@@ -309,7 +310,7 @@ export function AllReservationsTable() {
       {errorMessage && (
         <div
           role="alert"
-          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
         >
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -328,7 +329,7 @@ export function AllReservationsTable() {
 
       {/* KPI Audit Summary Cards (SQL-aggregated across all reservations) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] shadow-sm">
+        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
           <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
             Total Bookings
           </div>
@@ -340,11 +341,11 @@ export function AllReservationsTable() {
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] shadow-sm">
+        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
           <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
             Active Stay Pipeline
           </div>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+          <div className="text-2xl font-bold text-emerald-600 mt-1">
             {summary.confirmedCount} Stays
           </div>
           <div className="text-xs text-neutral-400 mt-1">
@@ -352,7 +353,7 @@ export function AllReservationsTable() {
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] shadow-sm">
+        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
           <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
             Confirmed GMV
           </div>
@@ -364,7 +365,7 @@ export function AllReservationsTable() {
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] shadow-sm">
+        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
           <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
             Platform Commission (10%)
           </div>
@@ -378,7 +379,7 @@ export function AllReservationsTable() {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 bg-neutral-50 dark:bg-neutral-800/40 rounded-xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 bg-neutral-50 rounded-xl border border-[var(--color-border-light)]">
         <div className="flex flex-wrap items-center gap-3">
           {/* Status Filter */}
           <div>
@@ -389,7 +390,7 @@ export function AllReservationsTable() {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="text-sm py-1.5 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+              className="text-sm py-1.5 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
             >
               <option value="all">All Statuses ({counts.all})</option>
               <option value="confirmed">Confirmed ({counts.confirmed})</option>
@@ -410,7 +411,7 @@ export function AllReservationsTable() {
                 setHostFilter(e.target.value);
                 setPage(1);
               }}
-              className="text-sm py-1.5 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+              className="text-sm py-1.5 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
             >
               <option value="all">All Hosts ({hosts.length})</option>
               {hosts.map((h) => (
@@ -440,7 +441,7 @@ export function AllReservationsTable() {
       <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+            <thead className="bg-neutral-50 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)]">
               <tr>
                 <th className="px-6 py-3.5">Booking ID</th>
                 <th className="px-6 py-3.5">Guest</th>
@@ -452,7 +453,7 @@ export function AllReservationsTable() {
                 <th className="px-6 py-3.5 text-right">Intervention</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--color-border-light)] dark:divide-[var(--color-border-dark)]">
+            <tbody className="divide-y divide-[var(--color-border-light)]">
               {loading ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center text-neutral-400">
@@ -466,7 +467,7 @@ export function AllReservationsTable() {
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
-                      <div className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto text-neutral-400">
+                      <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-400">
                         <BookmarkCheck className="w-5 h-5" />
                       </div>
                       <p className="font-medium text-[var(--color-text-on-light)]">No reservations found</p>
@@ -540,7 +541,7 @@ export function AllReservationsTable() {
                       </td>
 
                       {/* Commission */}
-                      <td className="px-6 py-4 font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                      <td className="px-6 py-4 font-medium text-emerald-600 whitespace-nowrap">
                         ${commissionItemUSD.toLocaleString()}
                       </td>
 
@@ -621,7 +622,7 @@ export function AllReservationsTable() {
             aria-label={`Reservation audit details for #${selectedReservation.code}`}
             className="w-full max-w-xl bg-white max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] space-y-6"
           >
-            <div className="flex items-start justify-between pb-4 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+            <div className="flex items-start justify-between pb-4 border-b border-[var(--color-border-light)]">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-mono text-sm font-bold text-[var(--color-brand)]">
@@ -638,7 +639,7 @@ export function AllReservationsTable() {
                 type="button"
                 onClick={() => setSelectedReservation(null)}
                 aria-label="Close reservation details"
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -647,7 +648,7 @@ export function AllReservationsTable() {
             {/* Info Grid */}
             <div className="space-y-4 text-sm">
               {/* Stay Period & Property */}
-              <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 space-y-2">
+              <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
                 <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
                   Stay & Property
                 </div>
@@ -667,7 +668,7 @@ export function AllReservationsTable() {
 
               {/* Guest & Payment Details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 space-y-2">
+                <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
                     Guest Information
                   </div>
@@ -684,7 +685,7 @@ export function AllReservationsTable() {
                   )}
                 </div>
 
-                <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 space-y-2">
+                <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
                     Financial Audit
                   </div>
@@ -716,7 +717,7 @@ export function AllReservationsTable() {
 
               {/* Cancellation Audit Notice if cancelled */}
               {selectedReservation.status === 'cancelled' && (
-                <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 text-red-800 dark:text-red-300 space-y-1 text-xs">
+                <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 space-y-1 text-xs">
                   <div className="font-semibold flex items-center gap-1.5">
                     <AlertTriangle className="w-4 h-4" />
                     Cancellation Event Audit

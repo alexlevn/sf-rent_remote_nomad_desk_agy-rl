@@ -16,6 +16,7 @@ import type { Reservation, Property } from '@/lib/types';
 import { useCurrency } from '@/context/currency-context';
 import { BOOKING_RULES } from '@/content/booking-rules';
 import { formatUtcDateRange, getSmartLockPasscode } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export interface PendingRequestItem {
   reservation: Reservation;
@@ -144,11 +145,12 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
       {feedback && (
         <div
           role="alert"
-          className={`p-4 rounded-xl flex items-center justify-between text-sm shadow-xs ${
+          className={cn(
+            'p-4 rounded-xl flex items-center justify-between text-sm shadow-xs',
             feedback.type === 'success'
               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-red-50 text-red-800 border border-red-200'
-          }`}
+              : 'bg-red-50 text-red-800 border border-red-200',
+          )}
         >
           <div className="flex items-center gap-3">
             {feedback.type === 'success' ? (
@@ -258,11 +260,12 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                       {/* Time Remaining */}
                       <td className="py-4 px-4 sm:px-6 align-middle whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                          className={cn(
+                            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border',
                             item.hoursRemaining <= 12
                               ? 'bg-red-50 text-red-700 border-red-200'
-                              : 'bg-amber-50 text-amber-800 border-amber-200'
-                          }`}
+                              : 'bg-amber-50 text-amber-800 border-amber-200',
+                          )}
                         >
                           <Clock className="w-3.5 h-3.5" />
                           <span>

@@ -25,6 +25,7 @@ import {
   BookmarkCheck,
   X,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface UserTableProps {
   currentAdminId?: number | null;
@@ -280,19 +281,19 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
     const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border';
     switch (status) {
       case 'confirmed':
-        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Confirmed</span>;
+        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Confirmed</span>;
       case 'pending':
-        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending</span>;
+        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending</span>;
       case 'completed':
-        return <span className={`${base} bg-blue-100 text-blue-800 border-blue-200`}>Completed</span>;
+        return <span className={cn(base, 'bg-blue-100 text-blue-800 border-blue-200')}>Completed</span>;
       case 'cancelled':
-        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Cancelled</span>;
+        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Cancelled</span>;
       case 'rejected':
-        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
+        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
       case 'expired':
-        return <span className={`${base} bg-neutral-100 text-neutral-600 border-neutral-300`}>Expired</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-600 border-neutral-300')}>Expired</span>;
       default:
-        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
     }
   };
 
@@ -367,11 +368,12 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                   setRoleFilter(r);
                   setPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-lg capitalize transition-all ${
+                className={cn(
+                  'px-3 py-1.5 rounded-lg capitalize transition-all',
                   roleFilter === r
                     ? 'bg-white text-neutral-900 shadow-xs'
-                    : 'text-neutral-500 hover:text-neutral-800'
-                }`}
+                    : 'text-neutral-500 hover:text-neutral-800',
+                )}
               >
                 {r === 'all' ? `All Roles (${counts.all})` : `${r} (${counts[r]})`}
               </button>
@@ -558,11 +560,12 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                                   ? 'Cannot suspend the last admin account'
                                   : 'Suspend user account'
                               }
-                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1 ${
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1',
                                 isCurrentAdmin || isLastAdmin
                                   ? 'opacity-40 cursor-not-allowed text-neutral-400'
-                                  : 'text-red-600 hover:bg-red-50 hover:border-red-200 border border-transparent'
-                              }`}
+                                  : 'text-red-600 hover:bg-red-50 hover:border-red-200 border border-transparent',
+                              )}
                             >
                               <Lock className="w-3 h-3" />
                               <span>Suspend</span>

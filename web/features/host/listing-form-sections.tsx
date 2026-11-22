@@ -34,6 +34,7 @@ import {
   type SelectedMediaItem,
 } from '@/features/media/media-library-modal';
 import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { cn } from '@/lib/utils';
 
 const MAX_IMAGES = 50;
 
@@ -541,11 +542,12 @@ export function ListingFormSections({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Work Remotely Above Madrid: Curated 3-br Sky Home, Jerónimos"
-                className={`w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors ${
+                className={cn(
+                  'w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors',
                   errors.title
                     ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
-                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]'
-                }`}
+                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]',
+                )}
                 aria-invalid={Boolean(errors.title)}
               />
               {errors.title && (
@@ -797,11 +799,12 @@ export function ListingFormSections({
                       key={optUrl}
                       type="button"
                       onClick={() => handleToggleGalleryPhoto(optUrl)}
-                      className={`relative aspect-4/3 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                      className={cn(
+                        'relative aspect-4/3 rounded-lg overflow-hidden border-2 transition-all cursor-pointer',
                         isSelected
                           ? 'border-[var(--color-brand)] ring-2 ring-[var(--color-brand)]/20'
-                          : 'border-transparent opacity-75 hover:opacity-100'
-                      }`}
+                          : 'border-transparent opacity-75 hover:opacity-100',
+                      )}
                     >
                       <Image
                         src={optUrl}
@@ -843,11 +846,12 @@ export function ListingFormSections({
                 aria-label="Image URL or path"
                 aria-invalid={Boolean(imageError)}
                 placeholder="Or add photo URL: /uploads/..., /seed/..., or https://..."
-                className={`flex-1 min-h-10 px-3.5 py-2 rounded-lg border text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none ${
+                className={cn(
+                  'flex-1 min-h-10 px-3.5 py-2 rounded-lg border text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none',
                   imageError
                     ? 'border-rose-400 focus:border-rose-500'
-                    : 'border-neutral-300 focus:border-[var(--color-brand)]'
-                }`}
+                    : 'border-neutral-300 focus:border-[var(--color-brand)]',
+                )}
               />
               <button
                 type="button"
@@ -1069,11 +1073,12 @@ export function ListingFormSections({
                 value={desk}
                 onChange={(e) => setDesk(e.target.value)}
                 placeholder="e.g. Bespoke Executive Standing Desk with Library Wall"
-                className={`w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors ${
+                className={cn(
+                  'w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors',
                   errors.desk
                     ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
-                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]'
-                }`}
+                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]',
+                )}
                 aria-invalid={Boolean(errors.desk)}
               />
               {errors.desk && (
@@ -1094,11 +1099,12 @@ export function ListingFormSections({
                 value={chair}
                 onChange={(e) => setChair(e.target.value)}
                 placeholder="e.g. Herman Miller Aeron / Ergonomic Executive Seating"
-                className={`w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors ${
+                className={cn(
+                  'w-full px-4 py-2.5 rounded-lg border text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none transition-colors',
                   errors.chair
                     ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
-                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]'
-                }`}
+                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]',
+                )}
                 aria-invalid={Boolean(errors.chair)}
               />
               {errors.chair && (
@@ -1139,11 +1145,12 @@ export function ListingFormSections({
                 max="2000"
                 value={wifiSpeed}
                 onChange={(e) => setWifiSpeed(Number(e.target.value))}
-                className={`w-full px-4 py-2.5 rounded-lg border text-sm font-semibold text-neutral-900 text-center focus:outline-none transition-colors ${
+                className={cn(
+                  'w-full px-4 py-2.5 rounded-lg border text-sm font-semibold text-neutral-900 text-center focus:outline-none transition-colors',
                   errors.wifiSpeed
                     ? 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-rose-50/20'
-                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]'
-                }`}
+                    : 'border-neutral-300 focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]',
+                )}
                 aria-invalid={Boolean(errors.wifiSpeed)}
               />
               {errors.wifiSpeed && (
@@ -1312,9 +1319,10 @@ export function ListingFormSections({
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
             <span
               aria-hidden="true"
-              className={`h-2 w-2 rounded-full ${
-                isDirty ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
+              className={cn(
+                'h-2 w-2 rounded-full',
+                isDirty ? 'bg-amber-500' : 'bg-emerald-500',
+              )}
             />
             <span
               data-testid="host-dirty-status"

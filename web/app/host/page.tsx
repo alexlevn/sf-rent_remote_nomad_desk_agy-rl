@@ -13,6 +13,7 @@ import {
   type PendingRequestItem,
   type UpcomingCheckInItem,
 } from '@/features/host/requests-table';
+import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'Host Dashboard & Operations | NomadDesk Host Portal',
@@ -138,9 +139,10 @@ export default async function HostDashboardPage() {
           <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
             Portfolio overview for {host.cities || 'your properties'} • Partner status:{' '}
             <span
-              className={`font-semibold uppercase ${
-                host.status === 'suspended' ? 'text-amber-700' : 'text-emerald-700'
-              }`}
+              className={cn(
+                'font-semibold uppercase',
+                host.status === 'suspended' ? 'text-amber-700' : 'text-emerald-700',
+              )}
             >
               {host.status}
             </span>

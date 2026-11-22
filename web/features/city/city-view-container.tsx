@@ -8,6 +8,7 @@ import { InteractiveMapMock } from './interactive-map-mock';
 import { NeighborhoodModal } from './neighborhood-modal';
 import { FAQS } from '@/content/faqs';
 import type { Location, Property } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const PRESERVED_WORKSTATION_PARAMS = [
   'workstation',
@@ -308,9 +309,10 @@ export function CityViewContainer({ city, allCityProperties }: CityViewContainer
                     >
                       <span>{faq.question}</span>
                       <span
-                        className={`ml-3 text-neutral-400 transition-transform ${
-                          isOpen ? 'rotate-180 text-[var(--color-brand)]' : ''
-                        }`}
+                        className={cn(
+                          'ml-3 text-neutral-400 transition-transform',
+                          isOpen ? 'rotate-180 text-[var(--color-brand)]' : '',
+                        )}
                       >
                         ▾
                       </span>

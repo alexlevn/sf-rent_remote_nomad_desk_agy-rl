@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Monitor,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type ModerationTab = 'pending_review' | 'published' | 'hidden' | 'draft' | 'rejected' | 'all';
 
@@ -314,17 +315,17 @@ export function PropertyModerationTable() {
     const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
     switch (status) {
       case 'published':
-        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Published</span>;
+        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Published</span>;
       case 'pending_review':
-        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending Review</span>;
+        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending Review</span>;
       case 'hidden':
-        return <span className={`${base} bg-neutral-200 text-neutral-800 border-neutral-300`}>Hidden</span>;
+        return <span className={cn(base, 'bg-neutral-200 text-neutral-800 border-neutral-300')}>Hidden</span>;
       case 'draft':
-        return <span className={`${base} bg-neutral-100 text-neutral-600 border-neutral-300`}>Draft</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-600 border-neutral-300')}>Draft</span>;
       case 'rejected':
-        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
+        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
       default:
-        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
     }
   };
 
@@ -355,7 +356,7 @@ export function PropertyModerationTable() {
           ref={errorBannerRef}
           role="alert"
           data-testid="property-action-error"
-          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
         >
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -364,7 +365,7 @@ export function PropertyModerationTable() {
           <button
             type="button"
             onClick={() => setErrorMessage(null)}
-            className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-0.5 cursor-pointer"
+            className="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"
             aria-label="Dismiss error"
           >
             <X className="w-4 h-4" />
@@ -380,11 +381,12 @@ export function PropertyModerationTable() {
             setActiveTab('pending_review');
             setPage(1);
           }}
-          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={cn(
+            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
             activeTab === 'pending_review'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+          )}
         >
           Pending Review ({counts.pending_review})
         </button>
@@ -394,11 +396,12 @@ export function PropertyModerationTable() {
             setActiveTab('published');
             setPage(1);
           }}
-          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={cn(
+            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
             activeTab === 'published'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+          )}
         >
           Published ({counts.published})
         </button>
@@ -408,11 +411,12 @@ export function PropertyModerationTable() {
             setActiveTab('hidden');
             setPage(1);
           }}
-          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={cn(
+            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
             activeTab === 'hidden'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+          )}
         >
           Hidden ({counts.hidden})
         </button>
@@ -422,11 +426,12 @@ export function PropertyModerationTable() {
             setActiveTab('draft');
             setPage(1);
           }}
-          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={cn(
+            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
             activeTab === 'draft'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+          )}
         >
           Draft ({counts.draft})
         </button>
@@ -436,11 +441,12 @@ export function PropertyModerationTable() {
             setActiveTab('rejected');
             setPage(1);
           }}
-          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={cn(
+            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
             activeTab === 'rejected'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+          )}
         >
           Rejected ({counts.rejected})
         </button>
@@ -450,18 +456,19 @@ export function PropertyModerationTable() {
             setActiveTab('all');
             setPage(1);
           }}
-          className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+          className={cn(
+            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
             activeTab === 'all'
               ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+          )}
         >
           All Listings ({counts.all})
         </button>
       </div>
 
       {/* Filter Controls (City, Host, Search) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-neutral-50 dark:bg-neutral-800/40 p-3.5 rounded-xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-neutral-50 p-3.5 rounded-xl border border-[var(--color-border-light)]">
         {/* City Filter */}
         <div>
           <label className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1">
@@ -473,7 +480,7 @@ export function PropertyModerationTable() {
               setCityFilter(e.target.value);
               setPage(1);
             }}
-            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           >
             <option value="all">All Cities ({uniqueCities.length})</option>
             {uniqueCities.map((c) => (
@@ -495,7 +502,7 @@ export function PropertyModerationTable() {
               setHostFilter(e.target.value);
               setPage(1);
             }}
-            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           >
             <option value="all">All Hosts ({hosts.length})</option>
             {hosts.map((h) => (
@@ -532,7 +539,7 @@ export function PropertyModerationTable() {
       <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+            <thead className="bg-neutral-50 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)]">
               <tr>
                 <th className="px-6 py-3.5">Property Title</th>
                 <th className="px-6 py-3.5">Host</th>
@@ -542,7 +549,7 @@ export function PropertyModerationTable() {
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--color-border-light)] dark:divide-[var(--color-border-dark)]">
+            <tbody className="divide-y divide-[var(--color-border-light)]">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-neutral-400">
@@ -556,7 +563,7 @@ export function PropertyModerationTable() {
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
-                      <div className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto text-neutral-400">
+                      <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-400">
                         <Building className="w-5 h-5" />
                       </div>
                       <p className="font-medium text-[var(--color-text-on-light)]">No properties found</p>
@@ -576,7 +583,7 @@ export function PropertyModerationTable() {
                   return (
                     <tr
                       key={property.id}
-                      className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors"
+                      className="hover:bg-neutral-50/70 transition-colors"
                     >
                       {/* Title & Preview */}
                       <td className="px-6 py-4 max-w-md">
@@ -781,7 +788,7 @@ export function PropertyModerationTable() {
             aria-label={`Inspect ${selectedProperty.title}`}
             className="w-full max-w-2xl bg-white max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] space-y-6"
           >
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--color-border-light)]">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   {renderStatusBadge(selectedProperty.status)}
@@ -798,7 +805,7 @@ export function PropertyModerationTable() {
                 type="button"
                 onClick={() => setSelectedProperty(null)}
                 aria-label="Close inspection modal"
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -822,7 +829,7 @@ export function PropertyModerationTable() {
             )}
 
             {/* Workstation Specification Highlight */}
-            <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] space-y-3">
+            <div className="p-4 rounded-xl bg-neutral-50 border border-[var(--color-border-light)] space-y-3">
               <div className="flex items-center gap-2 font-semibold text-sm text-[var(--color-text-on-light)]">
                 <Monitor className="w-4 h-4 text-[var(--color-brand)]" />
                 <span>Verified Remote Workstation Specs</span>
@@ -852,7 +859,7 @@ export function PropertyModerationTable() {
             </div>
 
             {/* Property Overview */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-neutral-50 dark:bg-neutral-800/40 rounded-xl text-center text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-neutral-50 rounded-xl text-center text-xs">
               <div>
                 <span className="text-neutral-400 block">Monthly Rent</span>
                 <span className="font-bold text-sm text-[var(--color-text-on-light)]">
@@ -884,7 +891,7 @@ export function PropertyModerationTable() {
               <span className="font-semibold text-xs uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
                 Description
               </span>
-              <p className="text-neutral-700 dark:text-neutral-300 leading-relaxed text-xs">
+              <p className="text-neutral-700 leading-relaxed text-xs">
                 {selectedProperty.description
                   ? stripHtmlTags(selectedProperty.description)
                   : 'No detailed description provided.'}
@@ -893,7 +900,7 @@ export function PropertyModerationTable() {
 
             {/* Rejection Notice if any */}
             {selectedProperty.rejectionReason && (
-              <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 text-red-800 dark:text-red-300 text-xs space-y-1">
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs space-y-1">
                 <div className="font-semibold flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4 text-red-600" />
                   Rejection Reason:

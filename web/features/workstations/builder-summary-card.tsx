@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { ArrowRight, RotateCcw, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export interface SummaryBreakdownItem {
   name: string;
@@ -66,11 +67,12 @@ export function BuilderSummaryCard({
           <button
             type="button"
             onClick={onReset}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+            className={cn(
+              'px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer',
               totalUpgradeEUR === 0
                 ? 'bg-white text-[var(--color-text-on-light)] border-neutral-400 shadow-xs'
-                : 'bg-transparent text-[var(--color-text-on-light-muted)] border-neutral-300 hover:bg-white'
-            }`}
+                : 'bg-transparent text-[var(--color-text-on-light-muted)] border-neutral-300 hover:bg-white',
+            )}
           >
             Comfort (€0)
           </button>
@@ -78,11 +80,12 @@ export function BuilderSummaryCard({
             type="button"
             onClick={onApplyProPreset}
             data-testid="preset-pro-btn"
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center justify-center gap-1 cursor-pointer ${
+            className={cn(
+              'px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center justify-center gap-1 cursor-pointer',
               isProPreset
                 ? 'bg-[var(--color-brand)] text-white border-transparent shadow-xs'
-                : 'bg-transparent text-[var(--color-brand)] border-[var(--color-brand)]/40 hover:bg-orange-50'
-            }`}
+                : 'bg-transparent text-[var(--color-brand)] border-[var(--color-brand)]/40 hover:bg-orange-50',
+            )}
           >
             <Zap className="w-3 h-3" />
             <span>Pro (+€{formatEurValue(proPriceEUR)})</span>

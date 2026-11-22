@@ -11,6 +11,7 @@ import { HOME_CONTENT } from '@/content/home';
 import { SITE_CONFIG } from '@/content/site';
 import { normalizeImageSrc } from '@/lib/format';
 import type { Property } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const MAX_DISPLAY_FEATURED = 6;
 
@@ -116,9 +117,10 @@ function ApartmentCard({ property }: ApartmentCardProps) {
               {images.map((_, idx) => (
                 <span
                   key={idx}
-                  className={`h-1.5 rounded-full transition-all ${
-                    idx === activeImageIndex ? 'bg-white w-3' : 'bg-white/60 w-1.5'
-                  }`}
+                  className={cn(
+                    'h-1.5 rounded-full transition-all',
+                    idx === activeImageIndex ? 'bg-white w-3' : 'bg-white/60 w-1.5',
+                  )}
                 />
               ))}
             </div>

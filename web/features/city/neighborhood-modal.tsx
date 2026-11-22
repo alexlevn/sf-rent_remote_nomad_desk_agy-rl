@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 interface NeighborhoodModalProps {
   isOpen: boolean;
@@ -77,11 +78,12 @@ export function NeighborhoodModal({
               onSelectNeighborhood(null);
               onClose();
             }}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all ${
+            className={cn(
+              'w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all',
               selectedNeighborhood === null
                 ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                : 'border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-[var(--color-text-on-light)]'
-            }`}
+                : 'border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-[var(--color-text-on-light)]',
+            )}
           >
             <span>All Neighborhoods</span>
             {selectedNeighborhood === null && <span className="text-xs font-bold">✓ Selected</span>}
@@ -100,11 +102,12 @@ export function NeighborhoodModal({
                   onSelectNeighborhood(isSelected ? null : n.name);
                   onClose();
                 }}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all ${
+                className={cn(
+                  'w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition-all',
                   isSelected
                     ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                    : 'border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-[var(--color-text-on-light)]'
-                }`}
+                    : 'border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-[var(--color-text-on-light)]',
+                )}
               >
                 <div className="flex items-center gap-2">
                   <span className="text-base">📍</span>

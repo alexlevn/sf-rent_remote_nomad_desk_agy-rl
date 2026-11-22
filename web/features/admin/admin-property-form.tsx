@@ -42,6 +42,7 @@ import {
   type SelectedMediaItem,
 } from '@/features/media/media-library-modal';
 import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { cn } from '@/lib/utils';
 
 const SEED_GALLERY_OPTIONS = [
   '/seed/property/prop-madrid-1.webp',
@@ -589,7 +590,7 @@ export function AdminPropertyForm({
           <div
             role="alert"
             data-testid="property-form-error"
-            className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+            className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
           >
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div>
@@ -605,7 +606,7 @@ export function AdminPropertyForm({
           <div className="lg:col-span-2 space-y-6 min-w-0">
             {/* Basics: Title & Slug */}
             <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <Building2 className="w-4 h-4 text-[var(--color-brand)]" />
                 <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                   Basics
@@ -658,7 +659,7 @@ export function AdminPropertyForm({
 
             {/* Rich Description & House Rules (Tiptap) */}
             <section className={cardClass}>
-              <div className="flex items-start justify-between gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-start justify-between gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <div>
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-[var(--color-brand)]" />
@@ -699,7 +700,7 @@ export function AdminPropertyForm({
 
             {/* Pricing, Stay Rules & Booking Mode */}
             <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <DollarSign className="w-4 h-4 text-[var(--color-brand)]" />
                 <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                   Pricing, Stay Rules & Booking Mode
@@ -791,18 +792,20 @@ export function AdminPropertyForm({
                     type="button"
                     onClick={() => setIsDirectBooking(true)}
                     data-testid="booking-mode-instant"
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={cn(
+                      'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
                       isDirectBooking
                         ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)]'
-                        : 'border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
-                    }`}
+                        : 'border-[var(--color-border-light)] hover:bg-neutral-50',
+                    )}
                   >
                     <CalendarCheck
-                      className={`w-5 h-5 shrink-0 mt-0.5 ${
+                      className={cn(
+                        'w-5 h-5 shrink-0 mt-0.5',
                         isDirectBooking
                           ? 'text-[var(--color-brand)]'
-                          : 'text-neutral-400'
-                      }`}
+                          : 'text-neutral-400',
+                      )}
                     />
                     <div>
                       <div className="text-sm font-semibold text-[var(--color-text-on-light)]">
@@ -818,18 +821,20 @@ export function AdminPropertyForm({
                     type="button"
                     onClick={() => setIsDirectBooking(false)}
                     data-testid="booking-mode-request"
-                    className={`flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={cn(
+                      'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
                       !isDirectBooking
                         ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)]'
-                        : 'border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
-                    }`}
+                        : 'border-[var(--color-border-light)] hover:bg-neutral-50',
+                    )}
                   >
                     <CalendarCheck
-                      className={`w-5 h-5 shrink-0 mt-0.5 ${
+                      className={cn(
+                        'w-5 h-5 shrink-0 mt-0.5',
                         !isDirectBooking
                           ? 'text-[var(--color-brand)]'
-                          : 'text-neutral-400'
-                      }`}
+                          : 'text-neutral-400',
+                      )}
                     />
                     <div>
                       <div className="text-sm font-semibold text-[var(--color-text-on-light)]">
@@ -846,7 +851,7 @@ export function AdminPropertyForm({
 
             {/* Property Specs & Amenities */}
             <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <Sliders className="w-4 h-4 text-[var(--color-brand)]" />
                 <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                   Property Specs & Amenities
@@ -972,11 +977,12 @@ export function AdminPropertyForm({
                   ).map(([label, checked, setter]) => (
                     <label
                       key={label}
-                      className={`flex min-h-10 items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium cursor-pointer transition-colors ${
+                      className={cn(
+                        'flex min-h-10 items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium cursor-pointer transition-colors',
                         checked
                           ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                          : 'border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] text-[var(--color-text-on-light)] hover:bg-neutral-50 dark:hover:bg-neutral-800/40'
-                      }`}
+                          : 'border-[var(--color-border-light)] text-[var(--color-text-on-light)] hover:bg-neutral-50',
+                      )}
                     >
                       <input
                         type="checkbox"
@@ -993,7 +999,7 @@ export function AdminPropertyForm({
 
             {/* Remote Workstation Specs */}
             <section className={cardClass}>
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--color-border-light)]">
                 <div className="flex items-center gap-2">
                   <Laptop className="w-4 h-4 text-[var(--color-brand)]" />
                   <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
@@ -1096,7 +1102,7 @@ export function AdminPropertyForm({
           <div className="space-y-5 min-w-0">
             {/* 1. Publish Card */}
             <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <Send className="w-4 h-4 text-[var(--color-brand)]" />
                 <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                   Publish
@@ -1208,7 +1214,7 @@ export function AdminPropertyForm({
 
             {/* 2. Property Photos Card */}
             <section className={cardClass}>
-              <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <div className="flex items-center gap-2">
                   <ImageIcon className="w-4 h-4 text-[var(--color-brand)]" />
                   <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
@@ -1277,7 +1283,7 @@ export function AdminPropertyForm({
                     }}
                     placeholder="/uploads/..., /seed/..., or https://..."
                     aria-label="Image URL or path"
-                    className="flex-1 min-w-0 min-h-10 text-xs py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/25"
+                    className="flex-1 min-w-0 min-h-10 text-xs py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/25"
                   />
                   <button
                     type="button"
@@ -1314,7 +1320,7 @@ export function AdminPropertyForm({
 
               {/* Optional Seed Gallery Picker */}
               {showSeedPicker && (
-                <div className="p-3 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+                <div className="p-3 rounded-xl bg-neutral-50 border border-[var(--color-border-light)]">
                   <p className="text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-2">
                     Click to add or remove seed photos:
                   </p>
@@ -1326,11 +1332,12 @@ export function AdminPropertyForm({
                           key={url}
                           type="button"
                           onClick={() => handleToggleSeedImage(url)}
-                          className={`relative h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                          className={cn(
+                            'relative h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer',
                             selected
                               ? 'border-[var(--color-brand)] ring-2 ring-[var(--color-brand)]/25'
-                              : 'border-transparent hover:border-neutral-300'
-                          }`}
+                              : 'border-transparent hover:border-neutral-300',
+                          )}
                         >
                           <Image
                             src={url}
@@ -1365,7 +1372,7 @@ export function AdminPropertyForm({
                     {images.map((img, idx) => (
                       <li
                         key={`${img}-${idx}`}
-                        className="flex items-center gap-2.5 p-2 rounded-xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50/70 dark:bg-neutral-800/40"
+                        className="flex items-center gap-2.5 p-2 rounded-xl border border-[var(--color-border-light)] bg-neutral-50/70"
                       >
                         <div className="relative w-12 h-10 rounded-lg overflow-hidden bg-neutral-200 shrink-0">
                           <Image
@@ -1405,7 +1412,7 @@ export function AdminPropertyForm({
                             disabled={idx === 0}
                             title="Move up"
                             aria-label={`Move photo ${idx + 1} up`}
-                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
                           </button>
@@ -1415,7 +1422,7 @@ export function AdminPropertyForm({
                             disabled={idx === images.length - 1}
                             title="Move down"
                             aria-label={`Move photo ${idx + 1} down`}
-                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
                           </button>
@@ -1424,7 +1431,7 @@ export function AdminPropertyForm({
                             onClick={() => handleRemoveImage(idx)}
                             title="Remove photo"
                             aria-label={`Remove photo ${idx + 1}`}
-                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-red-200 bg-white dark:bg-neutral-800 text-red-600 hover:bg-red-50 cursor-pointer"
+                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1438,7 +1445,7 @@ export function AdminPropertyForm({
 
             {/* 3. Location Card */}
             <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
                 <MapPin className="w-4 h-4 text-[var(--color-brand)]" />
                 <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
                   Location
@@ -1512,20 +1519,21 @@ export function AdminPropertyForm({
         {/* Sticky Save Bar */}
         <div
           data-testid="property-sticky-save-bar"
-          className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white/95 dark:bg-[var(--color-bg-dark-surface)]/95 backdrop-blur-xs px-4 py-3 shadow-lg"
+          className="sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border-light)] bg-white/95 backdrop-blur-xs px-4 py-3 shadow-lg"
         >
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
             <span
               aria-hidden="true"
-              className={`h-2 w-2 rounded-full ${
-                isDirty ? 'bg-amber-500' : 'bg-emerald-500'
-              }`}
+              className={cn(
+                'h-2 w-2 rounded-full',
+                isDirty ? 'bg-amber-500' : 'bg-emerald-500',
+              )}
             />
             <span
               data-testid="property-dirty-status"
               className={
                 isDirty
-                  ? 'text-amber-700 dark:text-amber-400 font-semibold'
+                  ? 'text-amber-700 font-semibold'
                   : 'text-[var(--color-text-on-light-muted)]'
               }
             >

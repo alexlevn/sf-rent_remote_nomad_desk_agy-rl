@@ -23,6 +23,7 @@ import {
   X,
   ExternalLink,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type TabKey = 'pending' | 'approved' | 'suspended' | 'rejected';
 
@@ -241,15 +242,15 @@ export function HostApplicationsTable() {
     const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
     switch (status) {
       case 'pending':
-        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending Review</span>;
+        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending Review</span>;
       case 'approved':
-        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Approved</span>;
+        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Approved</span>;
       case 'suspended':
-        return <span className={`${base} bg-neutral-200 text-neutral-800 border-neutral-300`}>Suspended</span>;
+        return <span className={cn(base, 'bg-neutral-200 text-neutral-800 border-neutral-300')}>Suspended</span>;
       case 'rejected':
-        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
+        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
       default:
-        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
+        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
     }
   };
 
@@ -278,7 +279,7 @@ export function HostApplicationsTable() {
       {errorMessage && (
         <div
           role="alert"
-          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 text-sm"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
         >
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -304,11 +305,12 @@ export function HostApplicationsTable() {
               setActiveTab('pending');
               setPage(1);
             }}
-            className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={cn(
+              'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
               activeTab === 'pending'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
-                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
+                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+            )}
           >
             Applications ({counts.pending})
           </button>
@@ -318,11 +320,12 @@ export function HostApplicationsTable() {
               setActiveTab('approved');
               setPage(1);
             }}
-            className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={cn(
+              'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
               activeTab === 'approved'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
-                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
+                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+            )}
           >
             Active Hosts ({counts.approved})
           </button>
@@ -332,11 +335,12 @@ export function HostApplicationsTable() {
               setActiveTab('suspended');
               setPage(1);
             }}
-            className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={cn(
+              'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
               activeTab === 'suspended'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
-                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
+                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+            )}
           >
             Suspended ({counts.suspended})
           </button>
@@ -346,11 +350,12 @@ export function HostApplicationsTable() {
               setActiveTab('rejected');
               setPage(1);
             }}
-            className={`tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            className={cn(
+              'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
               activeTab === 'rejected'
                 ? 'bg-[var(--color-brand)] text-white shadow-sm'
-                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
+                : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
+            )}
           >
             Rejected ({counts.rejected})
           </button>
@@ -374,7 +379,7 @@ export function HostApplicationsTable() {
       <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+            <thead className="bg-neutral-50 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)]">
               <tr>
                 <th className="px-6 py-3.5">Host Name</th>
                 <th className="px-6 py-3.5">Contact Email</th>
@@ -384,7 +389,7 @@ export function HostApplicationsTable() {
                 <th className="px-6 py-3.5 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--color-border-light)] dark:divide-[var(--color-border-dark)]">
+            <tbody className="divide-y divide-[var(--color-border-light)]">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-neutral-400">
@@ -398,7 +403,7 @@ export function HostApplicationsTable() {
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="max-w-sm mx-auto space-y-2">
-                      <div className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center mx-auto text-neutral-400">
+                      <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-400">
                         <UserCheck className="w-5 h-5" />
                       </div>
                       <p className="font-medium text-[var(--color-text-on-light)]">No hosts found</p>
@@ -416,11 +421,11 @@ export function HostApplicationsTable() {
                   return (
                     <tr
                       key={host.id}
-                      className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors"
+                      className="hover:bg-neutral-50/70 transition-colors"
                     >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center font-bold text-xs text-neutral-700 dark:text-neutral-200 shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-neutral-200 flex items-center justify-center font-bold text-xs text-neutral-700 shrink-0">
                             {host.displayName.slice(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -558,7 +563,7 @@ export function HostApplicationsTable() {
           >
             <div className="space-y-6">
               {/* Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-light)]">
                 <div>
                   <h3 className="text-xl font-bold text-[var(--color-text-on-light)]">
                     {selectedHost.displayName}
@@ -571,7 +576,7 @@ export function HostApplicationsTable() {
                   type="button"
                   onClick={() => setSelectedHost(null)}
                   aria-label="Close host details"
-                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -579,7 +584,7 @@ export function HostApplicationsTable() {
 
               {/* Information Cards */}
               <div className="space-y-4 text-sm">
-                <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 space-y-2.5">
+                <div className="p-4 rounded-xl bg-neutral-50 space-y-2.5">
                   <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
                     Contact & Portfolio
                   </div>
@@ -616,18 +621,18 @@ export function HostApplicationsTable() {
                 </div>
 
                 {/* Bio / Proposal */}
-                <div className="p-4 rounded-xl bg-neutral-50 dark:bg-neutral-800/50 space-y-2">
+                <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
                     Company Bio & Remote Pitch
                   </div>
-                  <p className="text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-neutral-700 leading-relaxed whitespace-pre-wrap">
                     {selectedHost.bio || 'No company bio provided.'}
                   </p>
                 </div>
 
                 {/* Rejection notice if rejected */}
                 {selectedHost.rejectionReason && (
-                  <div className="p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 space-y-1 text-red-800 dark:text-red-300">
+                  <div className="p-4 rounded-xl bg-red-50 border border-red-200 space-y-1 text-red-800">
                     <div className="flex items-center gap-1.5 font-semibold text-xs uppercase">
                       <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
                       Rejection Reason

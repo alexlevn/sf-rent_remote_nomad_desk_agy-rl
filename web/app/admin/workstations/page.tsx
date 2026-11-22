@@ -35,6 +35,7 @@ import {
   ArrowDown,
   ExternalLink,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const MAX_FEATURE_LENGTH = 80;
 const MAX_FEATURES_COUNT = 12;
@@ -661,11 +662,12 @@ export default function AdminWorkstationsPage() {
           type="button"
           onClick={() => setActiveTab('packages')}
           data-testid="tab-packages"
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+          className={cn(
+            'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer',
             activeTab === 'packages'
               ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-              : 'border-transparent text-neutral-500 hover:text-neutral-900'
-          }`}
+              : 'border-transparent text-neutral-500 hover:text-neutral-900',
+          )}
         >
           <Package className="w-4 h-4" />
           <span>Packages ({data?.packages?.length ?? 0})</span>
@@ -674,11 +676,12 @@ export default function AdminWorkstationsPage() {
           type="button"
           onClick={() => setActiveTab('components')}
           data-testid="tab-components"
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+          className={cn(
+            'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer',
             activeTab === 'components'
               ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-              : 'border-transparent text-neutral-500 hover:text-neutral-900'
-          }`}
+              : 'border-transparent text-neutral-500 hover:text-neutral-900',
+          )}
         >
           <Monitor className="w-4 h-4" />
           <span>Monitors &amp; Desks</span>
@@ -687,11 +690,12 @@ export default function AdminWorkstationsPage() {
           type="button"
           onClick={() => setActiveTab('addons')}
           data-testid="tab-addons"
-          className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+          className={cn(
+            'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors cursor-pointer',
             activeTab === 'addons'
               ? 'border-[var(--color-brand)] text-[var(--color-brand)]'
-              : 'border-transparent text-neutral-500 hover:text-neutral-900'
-          }`}
+              : 'border-transparent text-neutral-500 hover:text-neutral-900',
+          )}
         >
           <Sliders className="w-4 h-4" />
           <span>Peripherals &amp; Add-ons ({data?.addons?.length ?? 0})</span>
@@ -733,9 +737,10 @@ export default function AdminWorkstationsPage() {
                     <tr
                       key={pkg.id}
                       data-testid={`package-row-${pkg.id}`}
-                      className={`hover:bg-neutral-50/50 transition-colors ${
-                        isHidden ? 'opacity-60 bg-neutral-50/30' : ''
-                      }`}
+                      className={cn(
+                        'hover:bg-neutral-50/50 transition-colors',
+                        isHidden ? 'opacity-60 bg-neutral-50/30' : '',
+                      )}
                     >
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-1">
@@ -838,11 +843,12 @@ export default function AdminWorkstationsPage() {
                 key={cat}
                 type="button"
                 onClick={() => setComponentCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                className={cn(
+                  'px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                   componentCategory === cat
                     ? 'bg-neutral-900 text-white'
-                    : 'bg-white border border-[var(--color-border-light)] text-neutral-600 hover:bg-neutral-50'
-                }`}
+                    : 'bg-white border border-[var(--color-border-light)] text-neutral-600 hover:bg-neutral-50',
+                )}
               >
                 {cat === 'all'
                   ? 'All Components'
@@ -885,9 +891,10 @@ export default function AdminWorkstationsPage() {
                       <tr
                         key={item.id}
                         data-testid={`component-row-${item.id}`}
-                        className={`hover:bg-neutral-50/50 transition-colors ${
-                          isHidden ? 'opacity-60 bg-neutral-50/30' : ''
-                        }`}
+                        className={cn(
+                          'hover:bg-neutral-50/50 transition-colors',
+                          isHidden ? 'opacity-60 bg-neutral-50/30' : '',
+                        )}
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-1">
@@ -1016,9 +1023,10 @@ export default function AdminWorkstationsPage() {
                     <tr
                       key={addon.id}
                       data-testid={`addon-row-${addon.id}`}
-                      className={`hover:bg-neutral-50/50 transition-colors ${
-                        isHidden ? 'opacity-60 bg-neutral-50/30' : ''
-                      }`}
+                      className={cn(
+                        'hover:bg-neutral-50/50 transition-colors',
+                        isHidden ? 'opacity-60 bg-neutral-50/30' : '',
+                      )}
                     >
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-1">

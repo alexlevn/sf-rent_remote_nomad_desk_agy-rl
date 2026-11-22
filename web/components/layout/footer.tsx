@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { SITE_CONFIG } from '@/content/site';
 import { useCurrency } from '@/context/currency-context';
+import { cn } from '@/lib/utils';
 
 export const Footer: React.FC = () => {
   const { currency, setCurrency, currencies } = useCurrency();
@@ -42,11 +43,12 @@ export const Footer: React.FC = () => {
                       key={curr.code}
                       type="button"
                       onClick={() => setCurrency(curr.code)}
-                      className={`px-3 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
+                      className={cn(
+                        'px-3 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer',
                         isActive
                           ? 'bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-dark)] border-neutral-500 shadow-sm ring-1 ring-white/20'
-                          : 'bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-dark-muted)] border-[var(--color-border-dark)] hover:text-white hover:border-neutral-600'
-                      }`}
+                          : 'bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-dark-muted)] border-[var(--color-border-dark)] hover:text-white hover:border-neutral-600',
+                      )}
                     >
                       {curr.label}
                     </button>
@@ -78,7 +80,7 @@ export const Footer: React.FC = () => {
                     <li key={link.label}>
                       <Link
                         href={link.href}
-                        className={`text-sm transition-colors ${linkColorClass}`}
+                        className={cn('text-sm transition-colors', linkColorClass)}
                       >
                         {link.label}
                       </Link>

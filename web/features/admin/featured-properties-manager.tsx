@@ -17,6 +17,7 @@ import {
   Building,
   MapPin,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function FeaturedPropertiesManager() {
   const [allProperties, setAllProperties] = useState<Property[]>([]);
@@ -235,12 +236,12 @@ export function FeaturedPropertiesManager() {
       {/* Featured Properties List */}
       <div className="space-y-3">
         {loading ? (
-          <div className="p-12 text-center text-neutral-400 bg-white dark:bg-[var(--color-bg-dark-surface)] rounded-xl border border-[var(--color-border-light)]">
+          <div className="p-12 text-center text-neutral-400 bg-white rounded-xl border border-[var(--color-border-light)]">
             <div className="w-5 h-5 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
             <span>Loading featured order...</span>
           </div>
         ) : featuredProperties.length === 0 ? (
-          <div className="p-12 text-center bg-white dark:bg-[var(--color-bg-dark-surface)] rounded-xl border border-[var(--color-border-light)]">
+          <div className="p-12 text-center bg-white rounded-xl border border-[var(--color-border-light)]">
             <Building className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
             <p className="font-semibold text-[var(--color-text-on-light)]">No properties currently featured</p>
             <p className="text-xs text-[var(--color-text-on-light-muted)] mt-1">
@@ -258,21 +259,23 @@ export function FeaturedPropertiesManager() {
               <div
                 key={property.id}
                 data-testid={`featured-row-${property.id}`}
-                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border transition-all ${
+                className={cn(
+                  'flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border transition-all',
                   isFirst
-                    ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800 shadow-sm'
-                    : 'bg-white dark:bg-[var(--color-bg-dark-surface)] border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]'
-                }`}
+                    ? 'bg-amber-50/50 border-amber-300 shadow-sm'
+                    : 'bg-white border-[var(--color-border-light)]',
+                )}
               >
                 {/* Left: Rank & Info */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     data-testid="featured-rank"
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                    className={cn(
+                      'w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0',
                       isFirst
                         ? 'bg-[var(--color-brand)] text-white shadow-sm'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-[var(--color-text-on-light)]'
-                    }`}
+                        : 'bg-neutral-100 text-[var(--color-text-on-light)]',
+                    )}
                   >
                     #{index + 1}
                   </div>

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { normalizeImageSrc } from '@/lib/format';
 import type { BlogPost } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const BLOG_PAGE_SIZE = 9;
 
@@ -71,11 +72,12 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
             role="tab"
             aria-selected={selectedCategory === 'All Posts'}
             onClick={() => handleCategoryChange('All Posts')}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
+            className={cn(
+              'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none',
               selectedCategory === 'All Posts'
                 ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[var(--color-brand)] shadow-sm'
-                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]'
-            }`}
+                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]',
+            )}
           >
             All Posts ({posts.length})
           </button>
@@ -91,11 +93,12 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
                 role="tab"
                 aria-selected={isSelected}
                 onClick={() => handleCategoryChange(cat)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none',
                   isSelected
                     ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[var(--color-brand)] shadow-sm'
-                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]'
-                }`}
+                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]',
+                )}
               >
                 {cat} {count > 0 ? `(${count})` : ''}
               </button>

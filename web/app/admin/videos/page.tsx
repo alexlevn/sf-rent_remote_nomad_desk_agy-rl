@@ -23,6 +23,7 @@ import {
   ExternalLink,
   X,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 function isSafeHttpUrl(url: string): boolean {
   try {
@@ -322,9 +323,10 @@ export default function AdminVideosPage() {
                     <tr
                       key={v.id}
                       data-testid={`reel-row-${v.id}`}
-                      className={`hover:bg-neutral-50/50 transition-colors ${
-                        isHidden ? 'opacity-60 bg-neutral-50/30' : ''
-                      }`}
+                      className={cn(
+                        'hover:bg-neutral-50/50 transition-colors',
+                        isHidden ? 'opacity-60 bg-neutral-50/30' : '',
+                      )}
                     >
                       <td className="py-3.5 px-4 font-bold text-[var(--color-text-on-light)]">
                         <div className="flex items-center gap-2">
@@ -423,9 +425,10 @@ export default function AdminVideosPage() {
       {/* Modal: Add / Edit Reel */}
       {isModalOpen && editingVideo && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in ${
-            isMediaPickerOpen ? 'hidden' : ''
-          }`}
+          className={cn(
+            'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in',
+            isMediaPickerOpen ? 'hidden' : '',
+          )}
           onClick={(e) => {
             if (e.target === e.currentTarget && !isSubmitting) {
               setIsModalOpen(false);

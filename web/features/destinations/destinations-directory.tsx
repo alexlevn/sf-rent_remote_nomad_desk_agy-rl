@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import type { Location } from '@/lib/types';
 import { CountryGroup, type CitySummary } from './country-group';
+import { cn } from '@/lib/utils';
 
 interface DestinationsDirectoryProps {
   locations: Location[];
@@ -117,11 +118,12 @@ export function DestinationsDirectory({ locations }: DestinationsDirectoryProps)
                 key={cont}
                 type="button"
                 onClick={() => setSelectedContinent(cont)}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
+                className={cn(
+                  'px-3 py-1.5 rounded-lg transition-all',
                   selectedContinent === cont
                     ? 'bg-white text-[var(--color-brand)] shadow-xs font-semibold'
-                    : 'text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)]'
-                }`}
+                    : 'text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)]',
+                )}
               >
                 {cont}
               </button>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { FAQ_PAGE_CONTENT, type FAQPageItem } from '@/content/pages/faq';
+import { cn } from '@/lib/utils';
 
 export function FAQAccordion() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -35,11 +36,12 @@ export function FAQAccordion() {
             key={category}
             type="button"
             onClick={() => setSelectedCategory(category)}
-            className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+            className={cn(
+              'px-4 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all',
               selectedCategory === category
                 ? 'bg-[var(--color-brand)] text-white shadow-xs'
-                : 'bg-white border border-[var(--color-border-light)] text-[var(--color-text-on-light-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]'
-            }`}
+                : 'bg-white border border-[var(--color-border-light)] text-[var(--color-text-on-light-muted)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]',
+            )}
           >
             {category}
           </button>
@@ -71,9 +73,10 @@ export function FAQAccordion() {
                   </span>
                 </div>
                 <span
-                  className={`text-lg text-[var(--color-brand)] font-bold transition-transform duration-200 shrink-0 ${
-                    isOpen ? 'rotate-180' : ''
-                  }`}
+                  className={cn(
+                    'text-lg text-[var(--color-brand)] font-bold transition-transform duration-200 shrink-0',
+                    isOpen ? 'rotate-180' : '',
+                  )}
                   aria-hidden="true"
                 >
                   ▾

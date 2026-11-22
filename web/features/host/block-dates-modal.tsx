@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Calendar, AlertCircle, Ban } from 'lucide-react';
 import type { BlockedDate } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 export interface BlockDatesModalProps {
   isOpen: boolean;
@@ -145,7 +146,10 @@ export const BlockDatesModal: React.FC<BlockDatesModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-light)]">
           <div className="flex items-center gap-2.5">
-            <div className={`p-2 rounded-xl ${isUnblockMode ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-800'}`}>
+            <div className={cn(
+              'p-2 rounded-xl',
+              isUnblockMode ? 'bg-amber-100 text-amber-800' : 'bg-neutral-100 text-neutral-800',
+            )}>
               {isUnblockMode ? <Ban className="w-5 h-5" /> : <Calendar className="w-5 h-5 text-[var(--color-brand)]" />}
             </div>
             <div>

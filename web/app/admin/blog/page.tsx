@@ -29,6 +29,7 @@ import {
   Save,
   Loader2,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const BLOG_CATEGORIES = [
   'Remote Setup',
@@ -799,7 +800,7 @@ export default function AdminBlogPage() {
             <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
               <span
                 aria-hidden="true"
-                className={`h-2 w-2 rounded-full ${isDirty ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                className={cn('h-2 w-2 rounded-full', isDirty ? 'bg-amber-500' : 'bg-emerald-500')}
               />
               <span
                 data-testid="post-dirty-status"

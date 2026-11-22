@@ -21,6 +21,7 @@ import {
   ListingStatusBadge,
   BookingModeBadge,
 } from '@/features/host/listing-status-badge';
+import { cn } from '@/lib/utils';
 
 interface HostListingsTableProps {
   initialProperties: Property[];
@@ -173,11 +174,12 @@ export function HostListingsTable({
             role="tab"
             aria-selected={activeTab === tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+            className={cn(
+              'px-3 py-2 rounded-lg transition-colors whitespace-nowrap cursor-pointer',
               activeTab === tab.key
                 ? 'bg-neutral-900 text-white shadow-xs'
-                : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-            }`}
+                : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100',
+            )}
           >
             {tab.label}
           </button>

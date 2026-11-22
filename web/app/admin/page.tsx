@@ -30,6 +30,7 @@ import {
   Calendar,
   ShieldAlert,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const PERIOD_OPTIONS: Array<{ value: AdminDashboardPeriod; label: string }> = [
   { value: 'today', label: 'Today' },
@@ -260,11 +261,12 @@ export default function AdminDashboardPage() {
               type="button"
               data-testid={`dashboard-period-${opt.value}`}
               onClick={() => setPeriod(opt.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                 period === opt.value
                   ? 'bg-[var(--color-brand)] text-white shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
+                  : 'text-neutral-600 hover:text-neutral-900',
+              )}
             >
               {opt.label}
             </button>

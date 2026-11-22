@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { getTravelGuideHref, normalizeImageSrc } from '@/lib/format';
 import type { TravelGuide } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface TravelGuideDirectoryProps {
   guides: TravelGuide[];
@@ -49,11 +50,12 @@ export function TravelGuideDirectory({ guides }: TravelGuideDirectoryProps) {
             role="tab"
             aria-selected={selectedCity === 'All'}
             onClick={() => setSelectedCity('All')}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
+            className={cn(
+              'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none',
               selectedCity === 'All'
                 ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[var(--color-brand)] shadow-sm'
-                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]'
-            }`}
+                : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]',
+            )}
           >
             All ({guides.length})
           </button>
@@ -67,11 +69,12 @@ export function TravelGuideDirectory({ guides }: TravelGuideDirectoryProps) {
                 role="tab"
                 aria-selected={isSelected}
                 onClick={() => setSelectedCity(city)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none',
                   isSelected
                     ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[var(--color-brand)] shadow-sm'
-                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]'
-                }`}
+                    : 'bg-[var(--color-surface-muted)] text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] border border-[var(--color-border-light)]',
+                )}
               >
                 {city} ({count})
               </button>

@@ -24,6 +24,7 @@ import {
   CheckCircle,
   LogOut,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export interface AdminShellUser {
   id: number;
@@ -150,9 +151,10 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
         role={isMobileOpen ? 'dialog' : undefined}
         aria-modal={isMobileOpen ? true : undefined}
         aria-label="Admin Portal navigation"
-        className={`fixed inset-y-0 left-0 z-[80] w-[var(--sidebar-admin-w)] bg-[var(--color-bg-dark)] text-[var(--color-text-on-dark)] flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0 ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={cn(
+          'fixed inset-y-0 left-0 z-[80] w-[var(--sidebar-admin-w)] bg-[var(--color-bg-dark)] text-[var(--color-text-on-dark)] flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0',
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
       >
         {/* Sidebar Header */}
         <div className="p-5 border-b border-[var(--color-border-dark)] flex items-center justify-between">
@@ -180,13 +182,14 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
                   isActive
                     ? 'bg-neutral-800 text-white font-semibold'
-                    : 'text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-neutral-800/60'
-                }`}
+                    : 'text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-neutral-800/60',
+                )}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-[var(--color-brand)]' : ''}`} />
+                <Icon className={cn('w-4 h-4', isActive ? 'text-[var(--color-brand)]' : '')} />
                 <span>{item.label}</span>
               </Link>
             );
@@ -204,13 +207,14 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
                   isActive
                     ? 'bg-neutral-800 text-white font-semibold'
-                    : 'text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-neutral-800/60'
-                }`}
+                    : 'text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-neutral-800/60',
+                )}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-[var(--color-brand)]' : ''}`} />
+                <Icon className={cn('w-4 h-4', isActive ? 'text-[var(--color-brand)]' : '')} />
                 <span>{item.label}</span>
               </Link>
             );
@@ -228,13 +232,14 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors',
                   isActive
                     ? 'bg-neutral-800 text-white font-semibold'
-                    : 'text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-neutral-800/60'
-                }`}
+                    : 'text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-neutral-800/60',
+                )}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-[var(--color-brand)]' : ''}`} />
+                <Icon className={cn('w-4 h-4', isActive ? 'text-[var(--color-brand)]' : '')} />
                 <span>{item.label}</span>
               </Link>
             );

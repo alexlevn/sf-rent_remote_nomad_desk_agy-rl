@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { PropertyModerationTable } from '@/features/admin/property-moderation-table';
 import { FeaturedPropertiesManager } from '@/features/admin/featured-properties-manager';
 import { Building, Plus, Sparkles } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function AdminPropertiesPage() {
   const [viewMode, setViewMode] = useState<'moderation' | 'featured'>('moderation');
@@ -42,11 +43,12 @@ export default function AdminPropertiesPage() {
             <button
               type="button"
               onClick={() => setViewMode('moderation')}
-              className={`flex min-h-10 sm:min-h-8 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={cn(
+                'flex min-h-10 sm:min-h-8 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
                 viewMode === 'moderation'
                   ? 'bg-white text-[var(--color-text-on-light)] shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
+                  : 'text-neutral-600 hover:text-neutral-900',
+              )}
             >
               <Building className="w-4 h-4" />
               Inventory & Moderation
@@ -55,11 +57,12 @@ export default function AdminPropertiesPage() {
               type="button"
               onClick={() => setViewMode('featured')}
               data-testid="featured-tab-btn"
-              className={`flex min-h-10 sm:min-h-8 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={cn(
+                'flex min-h-10 sm:min-h-8 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer',
                 viewMode === 'featured'
                   ? 'bg-white text-[var(--color-text-on-light)] shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
-              }`}
+                  : 'text-neutral-600 hover:text-neutral-900',
+              )}
             >
               <Sparkles className="w-4 h-4 text-amber-500" />
               Featured on Homepage

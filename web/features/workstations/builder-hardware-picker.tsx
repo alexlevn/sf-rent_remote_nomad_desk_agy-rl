@@ -7,6 +7,7 @@ import type {
   WorkstationAddon,
   WorkstationComponentOption,
 } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface BuilderHardwarePickerProps {
   components: WorkstationComponents;
@@ -85,11 +86,12 @@ export function BuilderHardwarePicker({
               <label
                 key={opt.id}
                 data-testid={`option-${opt.id}`}
-                className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                className={cn(
+                  'flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer',
                   isSelected
                     ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] ring-1 ring-[var(--color-brand)]'
-                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300'
-                }`}
+                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300',
+                )}
               >
                 <div className="flex items-center gap-3 pr-2">
                   <input
@@ -140,11 +142,12 @@ export function BuilderHardwarePicker({
               <label
                 key={opt.id}
                 data-testid={`option-${opt.id}`}
-                className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                className={cn(
+                  'flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer',
                   isSelected
                     ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] ring-1 ring-[var(--color-brand)]'
-                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300'
-                }`}
+                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300',
+                )}
               >
                 <div className="flex items-center gap-3 pr-2">
                   <input
@@ -195,11 +198,12 @@ export function BuilderHardwarePicker({
               <label
                 key={opt.id}
                 data-testid={`option-${opt.id}`}
-                className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                className={cn(
+                  'flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer',
                   isSelected
                     ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] ring-1 ring-[var(--color-brand)]'
-                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300'
-                }`}
+                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300',
+                )}
               >
                 <div className="flex items-center gap-3 pr-2">
                   <input
@@ -250,11 +254,12 @@ export function BuilderHardwarePicker({
               <label
                 key={opt.id}
                 data-testid={`option-${opt.id}`}
-                className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer ${
+                className={cn(
+                  'flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer',
                   isSelected
                     ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] ring-1 ring-[var(--color-brand)]'
-                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300'
-                }`}
+                    : 'border-[var(--color-border-light)] bg-white hover:border-neutral-300',
+                )}
               >
                 <div className="flex items-center gap-3 pr-2">
                   <input

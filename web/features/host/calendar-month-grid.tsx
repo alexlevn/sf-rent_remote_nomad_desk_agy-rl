@@ -13,6 +13,7 @@ import {
 import type { Property, Reservation, BlockedDate } from '@/lib/types';
 import { MS_PER_DAY, parseUtcDate, toUtcDateString } from '@/lib/format';
 import { BlockDatesModal } from './block-dates-modal';
+import { cn } from '@/lib/utils';
 
 export interface CalendarMonthGridProps {
   properties: Property[];
@@ -278,11 +279,12 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
       {/* Feedback Banner */}
       {feedback && (
         <div
-          className={`p-3.5 rounded-xl border text-xs font-medium flex items-center justify-between ${
+          className={cn(
+            'p-3.5 rounded-xl border text-xs font-medium flex items-center justify-between',
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
+              : 'bg-red-50 border-red-200 text-red-800',
+          )}
         >
           <div className="flex items-center gap-2">
             {feedback.type === 'success' ? (
@@ -419,9 +421,12 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                     ? `${reservation.status} booking ${reservation.code}`
                     : 'Available'
                 }`}
-                className={`min-h-[64px] sm:min-h-[82px] w-full text-left p-1.5 sm:p-2 border rounded-xl flex flex-col justify-between transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${dayStyle} ${
-                  !item.isCurrentMonth ? 'opacity-35' : ''
-                } ${isReadOnly ? 'cursor-default' : ''}`}
+                className={cn(
+                  'min-h-[64px] sm:min-h-[82px] w-full text-left p-1.5 sm:p-2 border rounded-xl flex flex-col justify-between transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)]',
+                  dayStyle,
+                  !item.isCurrentMonth ? 'opacity-35' : '',
+                  isReadOnly ? 'cursor-default' : '',
+                )}
                 title={
                   blocked
                     ? `Blocked: ${blocked.reason || 'Owner Block'} (Click to unblock)`

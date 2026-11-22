@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { HOME_CONTENT } from '@/content/home';
 import { FAQS } from '@/content/faqs';
 import { SITE_CONFIG } from '@/content/site';
+import { cn } from '@/lib/utils';
 
 export function HomeFAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
@@ -47,9 +48,10 @@ export function HomeFAQ() {
                 >
                   <span>{faq.question}</span>
                   <span
-                    className={`ml-4 text-lg transform transition-transform duration-200 text-neutral-400 ${
-                      isOpen ? 'rotate-180 text-[var(--color-brand)]' : ''
-                    }`}
+                    className={cn(
+                      'ml-4 text-lg transform transition-transform duration-200 text-neutral-400',
+                      isOpen ? 'rotate-180 text-[var(--color-brand)]' : '',
+                    )}
                   >
                     ▾
                   </span>

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface PaginationBarProps {
   page: number;
@@ -55,7 +56,7 @@ export function PaginationBar({
   return (
     <div
       data-testid="pagination-bar"
-      className="px-4 py-3 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50/60 dark:bg-neutral-900/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
+      className="px-4 py-3 border-t border-[var(--color-border-light)] bg-neutral-50/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs"
     >
       <div data-testid="pagination-summary" className="text-[var(--color-text-on-light-muted)]">
         {total === 0 ? (
@@ -102,11 +103,12 @@ export function PaginationBar({
                 disabled={disabled || entry === safePage}
                 aria-label={`Page ${entry}`}
                 aria-current={entry === safePage ? 'page' : undefined}
-                className={`min-h-10 sm:min-h-8 min-w-10 sm:min-w-8 px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                className={cn(
+                  'min-h-10 sm:min-h-8 min-w-10 sm:min-w-8 px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer',
                   entry === safePage
                     ? 'bg-[var(--color-brand)] text-white shadow-xs'
-                    : 'border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-40'
-                }`}
+                    : 'border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-40',
+                )}
               >
                 {entry}
               </button>

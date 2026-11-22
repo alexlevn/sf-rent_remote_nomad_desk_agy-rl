@@ -29,6 +29,7 @@ import {
   ArrowUp,
   ArrowDown,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const CONTINENTS = [
   'All',
@@ -458,9 +459,10 @@ export default function AdminLocationsPage() {
                     <tr
                       key={loc.id}
                       data-testid={`location-row-${loc.id}`}
-                      className={`hover:bg-neutral-50/50 transition-colors ${
-                        isHidden ? 'opacity-60 bg-neutral-50/30' : ''
-                      }`}
+                      className={cn(
+                        'hover:bg-neutral-50/50 transition-colors',
+                        isHidden ? 'opacity-60 bg-neutral-50/30' : '',
+                      )}
                     >
                       <td className="py-3.5 px-4 font-semibold text-[var(--color-text-on-light)]">
                         <div className="flex items-center gap-2">
@@ -581,9 +583,10 @@ export default function AdminLocationsPage() {
       {/* Modal: Add / Edit Destination */}
       {isModalOpen && editingLocation && (
         <div
-          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in ${
-            isMediaPickerOpen ? 'hidden' : ''
-          }`}
+          className={cn(
+            'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in',
+            isMediaPickerOpen ? 'hidden' : '',
+          )}
           onClick={(e) => {
             if (e.target === e.currentTarget && !isSubmitting) {
               setIsModalOpen(false);

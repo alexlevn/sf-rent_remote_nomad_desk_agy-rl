@@ -18,6 +18,7 @@ import type { Reservation, Property } from '@/lib/types';
 import { useCurrency } from '@/context/currency-context';
 import { BOOKING_RULES } from '@/content/booking-rules';
 import { MS_PER_HOUR, formatUtcDateRange, getSmartLockPasscode } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export interface HostReservationsTableProps {
   initialReservations: Reservation[];
@@ -145,7 +146,10 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
       return (
         <div className={compact ? '' : 'space-y-1'}>
           <span
-            className={`inline-flex items-center gap-1 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-200 ${sizeCls}`}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-200',
+              sizeCls,
+            )}
           >
             <Clock className="w-3 h-3" />
             <span>
@@ -168,7 +172,10 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
     if (res.status === 'confirmed') {
       return (
         <span
-          className={`inline-flex items-center gap-1 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 ${sizeCls}`}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-200',
+            sizeCls,
+          )}
         >
           <CheckCircle2 className="w-3 h-3" />
           Confirmed
@@ -179,7 +186,10 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
     if (res.status === 'completed') {
       return (
         <span
-          className={`inline-flex items-center gap-1 rounded-full font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 ${sizeCls}`}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full font-bold bg-neutral-100 text-neutral-700 border border-neutral-200',
+            sizeCls,
+          )}
         >
           Completed
         </span>
@@ -189,7 +199,10 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
     if (res.status === 'rejected') {
       return (
         <span
-          className={`inline-flex items-center gap-1 rounded-full font-bold bg-red-100 text-red-800 border border-red-200 ${sizeCls}`}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full font-bold bg-red-100 text-red-800 border border-red-200',
+            sizeCls,
+          )}
         >
           <XCircle className="w-3 h-3" />
           Rejected
@@ -200,7 +213,10 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
     if (res.status === 'expired') {
       return (
         <span
-          className={`inline-flex items-center gap-1 rounded-full font-bold bg-orange-100 text-orange-800 border border-orange-200 ${sizeCls}`}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full font-bold bg-orange-100 text-orange-800 border border-orange-200',
+            sizeCls,
+          )}
         >
           <Clock className="w-3 h-3" />
           Expired
@@ -210,7 +226,10 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
 
     return (
       <span
-        className={`inline-flex items-center gap-1 rounded-full font-bold bg-neutral-100 text-neutral-600 border border-neutral-200 ${sizeCls}`}
+        className={cn(
+          'inline-flex items-center gap-1 rounded-full font-bold bg-neutral-100 text-neutral-600 border border-neutral-200',
+          sizeCls,
+        )}
       >
         Cancelled
       </span>
@@ -333,11 +352,12 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
       {feedback && (
         <div
           role="alert"
-          className={`p-4 rounded-xl border text-xs sm:text-sm font-medium flex items-center justify-between shadow-xs ${
+          className={cn(
+            'p-4 rounded-xl border text-xs sm:text-sm font-medium flex items-center justify-between shadow-xs',
             feedback.type === 'success'
               ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}
+              : 'bg-red-50 border-red-200 text-red-800',
+          )}
         >
           <div className="flex items-center gap-2.5">
             {feedback.type === 'success' ? (
@@ -371,19 +391,21 @@ export const HostReservationsTable: React.FC<HostReservationsTableProps> = ({
             role="tab"
             aria-selected={activeTab === tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+            className={cn(
+              'px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer',
               activeTab === tab.key
                 ? 'bg-[var(--color-brand)] text-white shadow-xs'
-                : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
-            }`}
+                : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
+            )}
           >
             <span>{tab.label}</span>
             <span
-              className={`px-1.5 py-0.5 text-[10px] rounded-full font-bold ${
+              className={cn(
+                'px-1.5 py-0.5 text-[10px] rounded-full font-bold',
                 activeTab === tab.key
                   ? 'bg-white/20 text-white'
-                  : 'bg-neutral-200 text-neutral-700'
-              }`}
+                  : 'bg-neutral-200 text-neutral-700',
+              )}
             >
               {tab.count}
             </span>

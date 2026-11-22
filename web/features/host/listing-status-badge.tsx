@@ -1,5 +1,6 @@
 import React from 'react';
 import type { PropertyStatus } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface ListingStatusBadgeProps {
   status: PropertyStatus;
@@ -11,7 +12,10 @@ export function ListingStatusBadge({ status, className = '' }: ListingStatusBadg
     case 'published':
       return (
         <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 ${className}`}
+          className={cn(
+            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200',
+            className,
+          )}
         >
           Published
         </span>
@@ -19,7 +23,10 @@ export function ListingStatusBadge({ status, className = '' }: ListingStatusBadg
     case 'pending_review':
       return (
         <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 ${className}`}
+          className={cn(
+            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200',
+            className,
+          )}
         >
           Pending review
         </span>
@@ -27,7 +34,10 @@ export function ListingStatusBadge({ status, className = '' }: ListingStatusBadg
     case 'draft':
       return (
         <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200 ${className}`}
+          className={cn(
+            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200',
+            className,
+          )}
         >
           Draft
         </span>
@@ -35,7 +45,10 @@ export function ListingStatusBadge({ status, className = '' }: ListingStatusBadg
     case 'rejected':
       return (
         <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 ${className}`}
+          className={cn(
+            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200',
+            className,
+          )}
         >
           Rejected
         </span>
@@ -43,7 +56,10 @@ export function ListingStatusBadge({ status, className = '' }: ListingStatusBadg
     case 'hidden':
       return (
         <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200 ${className}`}
+          className={cn(
+            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 border border-zinc-200',
+            className,
+          )}
         >
           Hidden
         </span>
@@ -51,7 +67,10 @@ export function ListingStatusBadge({ status, className = '' }: ListingStatusBadg
     default:
       return (
         <span
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-600 border border-neutral-200 ${className}`}
+          className={cn(
+            'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-600 border border-neutral-200',
+            className,
+          )}
         >
           {status}
         </span>
@@ -68,7 +87,10 @@ export function BookingModeBadge({ isDirectBooking, className = '' }: BookingMod
   if (isDirectBooking) {
     return (
       <span
-        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 ${className}`}
+        className={cn(
+          'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200',
+          className,
+        )}
       >
         Instant
       </span>
@@ -76,7 +98,10 @@ export function BookingModeBadge({ isDirectBooking, className = '' }: BookingMod
   }
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200 ${className}`}
+      className={cn(
+        'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200',
+        className,
+      )}
     >
       Request
     </span>

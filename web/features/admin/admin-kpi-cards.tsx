@@ -9,6 +9,7 @@ import {
   DollarSign,
   CalendarCheck,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export interface AdminKpiStats {
   publishedProperties: number;
@@ -90,22 +91,24 @@ export function AdminKpiCards({ stats }: AdminKpiCardsProps) {
         return (
           <div
             key={idx}
-            className={`p-4 md:p-5 rounded-2xl bg-white border ${
+            className={cn(
+              'p-4 md:p-5 rounded-2xl bg-white border',
               card.highlight
                 ? 'border-[var(--color-brand)]/40 shadow-sm'
-                : 'border-[var(--color-border-light)]'
-            } flex flex-col justify-between`}
+                : 'border-[var(--color-border-light)]',
+              'flex flex-col justify-between',
+            )}
           >
             <div className="flex items-center justify-between gap-2 mb-3">
               <span className="text-xs font-medium text-[var(--color-text-on-light-muted)] line-clamp-1">
                 {card.title}
               </span>
-              <div className={`p-2 rounded-xl ${card.bgColor} ${card.iconColor} shrink-0`}>
+              <div className={cn('p-2 rounded-xl', card.bgColor, card.iconColor, 'shrink-0')}>
                 <Icon className="w-4 h-4" />
               </div>
             </div>
             <div>
-              <div className={`text-2xl md:text-3xl font-bold tracking-tight ${card.valueColor}`}>
+              <div className={cn('text-2xl md:text-3xl font-bold tracking-tight', card.valueColor)}>
                 {card.value}
               </div>
               <div className="text-[11px] text-[var(--color-text-on-light-muted)] mt-1 truncate">

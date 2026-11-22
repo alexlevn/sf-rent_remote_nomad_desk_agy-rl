@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { HOME_CONTENT } from '@/content/home';
 import type { Property } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface Showcase3DProps {
   property?: Property;
@@ -28,16 +29,18 @@ export function Showcase3D({ property }: Showcase3DProps = {}) {
           {HOME_CONTENT.showcase.steps.map((item) => (
             <div
               key={item.step}
-              className={`rounded-2xl p-6 sm:p-7 border transition-all ${
+              className={cn(
+                'rounded-2xl p-6 sm:p-7 border transition-all',
                 item.highlight
                   ? 'bg-neutral-800/90 border-[var(--color-brand)]/60 shadow-xl'
-                  : 'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700'
-              }`}
+                  : 'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700',
+              )}
             >
               <div
-                className={`text-2xl sm:text-3xl font-extrabold mb-3 ${
-                  item.highlight ? 'text-[var(--color-brand)]' : 'text-neutral-500'
-                }`}
+                className={cn(
+                  'text-2xl sm:text-3xl font-extrabold mb-3',
+                  item.highlight ? 'text-[var(--color-brand)]' : 'text-neutral-500',
+                )}
               >
                 {item.step}
               </div>

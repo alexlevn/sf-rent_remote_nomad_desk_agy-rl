@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SITE_CONFIG } from '@/content/site';
 import type { WorkstationPackage } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface PackageComparisonProps {
   packages?: WorkstationPackage[];
@@ -42,9 +43,10 @@ export function PackageComparison({ packages = [] }: PackageComparisonProps) {
           </div>
         ) : (
           <div
-            className={`grid grid-cols-1 gap-8 items-stretch ${
-              activePackages.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2'
-            }`}
+            className={cn(
+              'grid grid-cols-1 gap-8 items-stretch',
+              activePackages.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2',
+            )}
           >
             {activePackages.map((pkg) => {
               const isHighlighted = !pkg.isIncluded && pkg.pricePerMonth > 0;
@@ -82,9 +84,10 @@ export function PackageComparison({ packages = [] }: PackageComparisonProps) {
                     </p>
 
                     <div
-                      className={`text-3xl sm:text-4xl font-bold mb-6 flex items-baseline gap-1 ${
-                        isHighlighted ? 'text-[var(--color-brand)]' : 'text-white'
-                      }`}
+                      className={cn(
+                        'text-3xl sm:text-4xl font-bold mb-6 flex items-baseline gap-1',
+                        isHighlighted ? 'text-[var(--color-brand)]' : 'text-white',
+                      )}
                     >
                       <span>{formatEurWhole(pkg.pricePerMonth)}</span>
                       <span className="text-sm font-normal text-[var(--color-text-on-dark-muted)]">
@@ -96,9 +99,10 @@ export function PackageComparison({ packages = [] }: PackageComparisonProps) {
                       {pkg.features.map((feature, idx) => (
                         <li key={idx} className="flex items-start gap-3">
                           <Check
-                            className={`w-4 h-4 shrink-0 mt-0.5 ${
-                              isHighlighted ? 'text-[var(--color-brand)]' : 'text-emerald-400'
-                            }`}
+                            className={cn(
+                              'w-4 h-4 shrink-0 mt-0.5',
+                              isHighlighted ? 'text-[var(--color-brand)]' : 'text-emerald-400',
+                            )}
                           />
                           <span>{feature}</span>
                         </li>

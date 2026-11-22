@@ -19,6 +19,7 @@ import {
 import type { HostProfile, User } from '@/lib/types';
 import { SITE_CONFIG } from '@/content/site';
 import { signOutAction } from '@/app/actions/auth-actions';
+import { cn } from '@/lib/utils';
 
 interface HostShellProps {
   children: React.ReactNode;
@@ -118,9 +119,10 @@ export function HostShell({ children, user, host }: HostShellProps) {
         role={isMobileOpen ? 'dialog' : undefined}
         aria-modal={isMobileOpen ? true : undefined}
         aria-label="Host portal navigation"
-        className={`fixed inset-y-0 left-0 z-[80] w-[var(--sidebar-admin-w)] bg-[var(--color-bg-dark)] text-[var(--color-text-on-dark)] flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0 shrink-0 ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={cn(
+          'fixed inset-y-0 left-0 z-[80] w-[var(--sidebar-admin-w)] bg-[var(--color-bg-dark)] text-[var(--color-text-on-dark)] flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0 shrink-0',
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
       >
         {/* Sidebar Header */}
         <div className="p-5 border-b border-[var(--color-border-dark)] flex items-center justify-between">
@@ -131,9 +133,10 @@ export function HostShell({ children, user, host }: HostShellProps) {
             <span>{SITE_CONFIG.name}</span>
           </Link>
           <span
-            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full text-white ${
-              isSuspended ? 'bg-amber-600' : 'bg-[var(--color-brand)]'
-            }`}
+            className={cn(
+              'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full text-white',
+              isSuspended ? 'bg-amber-600' : 'bg-[var(--color-brand)]',
+            )}
           >
             {isSuspended ? 'Suspended' : 'Host Partner'}
           </span>
@@ -154,16 +157,18 @@ export function HostShell({ children, user, host }: HostShellProps) {
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsMobileOpen(false)}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={cn(
+                  'flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-[var(--color-bg-dark-surface)] text-white font-semibold shadow-sm'
-                    : 'text-[var(--color-text-on-dark-muted)] hover:bg-[var(--color-bg-dark-surface)] hover:text-white'
-                }`}
+                    : 'text-[var(--color-text-on-dark-muted)] hover:bg-[var(--color-bg-dark-surface)] hover:text-white',
+                )}
               >
                 <Icon
-                  className={`w-4 h-4 shrink-0 ${
-                    isActive ? 'text-[var(--color-brand)]' : 'text-neutral-400'
-                  }`}
+                  className={cn(
+                    'w-4 h-4 shrink-0',
+                    isActive ? 'text-[var(--color-brand)]' : 'text-neutral-400',
+                  )}
                 />
                 <span>{item.label}</span>
               </Link>

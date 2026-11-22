@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react';
 import { normalizeImageSrc } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 interface ImageGalleryProps {
   images: string[];
@@ -232,11 +233,12 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                 type="button"
                 aria-label={`View photo ${idx + 1}`}
                 onClick={() => setModalIndex(idx)}
-                className={`relative w-14 h-10 sm:w-16 sm:h-12 rounded-md overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                className={cn(
+                  'relative w-14 h-10 sm:w-16 sm:h-12 rounded-md overflow-hidden shrink-0 border-2 transition-all cursor-pointer',
                   idx === modalIndex
                     ? 'border-white scale-105'
-                    : 'border-transparent opacity-50 hover:opacity-100'
-                }`}
+                    : 'border-transparent opacity-50 hover:opacity-100',
+                )}
               >
                 <Image
                   src={normalizeImageSrc(thumb)}
