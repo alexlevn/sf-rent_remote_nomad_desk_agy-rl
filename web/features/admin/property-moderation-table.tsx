@@ -11,7 +11,8 @@ import {
   deletePropertyAction,
 } from '@/app/admin/admin-actions';
 import { PaginationBar } from '@/features/admin/pagination-bar';
-import { CheckCircle, Building, X, AlertTriangle } from 'lucide-react';
+import { Building } from 'lucide-react';
+import { DarkToast, ErrorBanner } from '@/features/admin/admin-feedback';
 import {
   ModerationFilters,
   ModerationTabs,
@@ -255,45 +256,13 @@ export function PropertyModerationTable() {
 
   return (
     <div className="space-y-6">
-      {toastMessage && (
-        <div
-          role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[var(--color-bg-dark)] text-white px-5 py-3.5 rounded-xl shadow-2xl border border-[var(--color-border-dark)] animate-in fade-in slide-in-from-bottom-4 duration-300"
-        >
-          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="text-neutral-400 hover:text-white ml-2"
-            aria-label="Dismiss"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {errorMessage && (
-        <div
-          ref={errorBannerRef}
-          role="alert"
-          data-testid="property-action-error"
-          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
-        >
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"
-            aria-label="Dismiss error"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <DarkToast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+      <ErrorBanner
+        message={errorMessage}
+        onDismiss={() => setErrorMessage(null)}
+        testId="property-action-error"
+        bannerRef={errorBannerRef}
+      />
 
       <ModerationTabs activeTab={activeTab} counts={counts} onChange={resetToFirstPage(setActiveTab)} />
 

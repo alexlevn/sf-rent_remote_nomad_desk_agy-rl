@@ -2,30 +2,24 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import type { Reservation, ReservationStatus, Property, HostProfile } from '@/lib/types';
-import type {
-  AdminReservationsStatusCounts,
-  AdminReservationsSummary,
-} from '@/lib/api/reservations';
+import type { AdminReservationsStatusCounts, AdminReservationsSummary } from '@/lib/api/reservations';
 import {
   fetchAdminPropertiesAction,
   fetchAdminReservationsPaginatedAction,
   cancelReservationAdminAction,
 } from '@/app/admin/admin-actions';
-import { BOOKING_RULES } from '@/content/booking-rules';
 import { formatUtcDate } from '@/lib/format';
 import { PaginationBar } from '@/features/admin/pagination-bar';
-import {
-  Search,
-  CheckCircle,
-  AlertTriangle,
-  BookmarkCheck,
-  Calendar,
-  ShieldAlert,
-  X,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Search, BookmarkCheck } from 'lucide-react';
+import { DarkToast, ErrorBanner } from '@/features/admin/admin-feedback';
+import { PaymentStatusPill, ReservationStatusPill } from '@/features/admin/reservations/reservation-badges';
+import { ReservationAuditModal, commissionCentsOf } from '@/features/admin/reservations/reservation-audit-modal';
+import { AdminVoidModal } from '@/features/admin/reservations/admin-void-modal';
+import { ReservationSummaryCards } from '@/features/admin/reservations/reservation-summary-cards';
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 250;
+const TOAST_DURATION_MS = 3500;
 
 const EMPTY_COUNTS: AdminReservationsStatusCounts = {
   all: 0,
@@ -60,7 +54,6 @@ export function AllReservationsTable() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
-  // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [hostFilter, setHostFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,10 +61,8 @@ export function AllReservationsTable() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Intervention modal & detail modal
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [voidingReservation, setVoidingReservation] = useState<Reservation | null>(null);
-  const [cancellationReason, setCancellationReason] = useState('Cancelled by Platform Administrator due to compliance review');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isActionRunningRef = useRef(false);
@@ -96,20 +87,18 @@ export function AllReservationsTable() {
     loadMetadata();
     return () => {
       active = false;
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
 
-  // Debounce keyword search (250ms) and reset page to 1 only when the trimmed query changes
+  // Debounce keyword search and reset page to 1 only when the trimmed query changes
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (trimmed === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(trimmed);
       setPage(1);
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [searchQuery, debouncedSearch]);
 
@@ -117,11 +106,8 @@ export function AllReservationsTable() {
     if (!selectedReservation && !voidingReservation) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isActionRunningRef.current) {
-        if (voidingReservation) {
-          setVoidingReservation(null);
-        } else {
-          setSelectedReservation(null);
-        }
+        if (voidingReservation) setVoidingReservation(null);
+        else setSelectedReservation(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -167,46 +153,29 @@ export function AllReservationsTable() {
   const showToast = (msg: string) => {
     setErrorMessage(null);
     setToastMessage(msg);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
   };
 
-  // Property & Host lookup helpers
-  const propertyById = useMemo(() => {
-    const map = new Map<number, Property>();
-    for (const p of properties) {
-      map.set(p.id, p);
-    }
-    return map;
-  }, [properties]);
+  const propertyById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
+  const hostById = useMemo(() => new Map(hosts.map((h) => [h.id, h])), [hosts]);
 
-  const hostById = useMemo(() => {
-    const map = new Map<number, HostProfile>();
-    for (const h of hosts) {
-      map.set(h.id, h);
-    }
-    return map;
-  }, [hosts]);
+  const getProperty = (propertyId: number) => propertyById.get(propertyId);
+  const getHostName = (propertyId: number) => {
+    const prop = propertyById.get(propertyId);
+    if (!prop) return 'Unknown Host';
+    const host = hostById.get(prop.hostId);
+    return host ? host.displayName : `Host #${prop.hostId}`;
+  };
 
-  const getProperty = useCallback(
-    (propertyId: number) => propertyById.get(propertyId),
-    [propertyById]
-  );
-
-  const getHostName = useCallback(
-    (propertyId: number) => {
-      const prop = propertyById.get(propertyId);
-      if (!prop) return 'Unknown Host';
-      const host = hostById.get(prop.hostId);
-      return host ? host.displayName : `Host #${prop.hostId}`;
-    },
-    [propertyById, hostById]
-  );
+  // One dialog at a time: the void confirmation replaces the audit modal
+  const startVoid = (res: Reservation) => {
+    setSelectedReservation(null);
+    setVoidingReservation(res);
+  };
 
   // Admin Intervention Cancel / Void action (AC-ADMIN-4)
-  const handleConfirmAdminCancel = async () => {
+  const handleConfirmAdminCancel = async (cancellationReason: string) => {
     if (!voidingReservation || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
@@ -214,10 +183,7 @@ export function AllReservationsTable() {
 
     try {
       // AC-ADMIN-4: Admin cancels confirmed booking -> cancelledBy = 'admin', paymentStatus = 'refunded'
-      await cancelReservationAdminAction(
-        voidingReservation.id,
-        cancellationReason
-      );
+      await cancelReservationAdminAction(voidingReservation.id, cancellationReason);
       showToast(`Reservation #${voidingReservation.code} cancelled by Admin. Refund processed.`);
       const resId = voidingReservation.id;
       setVoidingReservation(null);
@@ -229,13 +195,7 @@ export function AllReservationsTable() {
       if (selectedReservation?.id === resId) {
         setSelectedReservation((prev) =>
           prev
-            ? {
-                ...prev,
-                status: 'cancelled',
-                paymentStatus: 'refunded',
-                cancelledBy: 'admin',
-                rejectionReason: cancellationReason,
-              }
+            ? { ...prev, status: 'cancelled', paymentStatus: 'refunded', cancelledBy: 'admin', rejectionReason: cancellationReason }
             : null
         );
       }
@@ -247,136 +207,12 @@ export function AllReservationsTable() {
     }
   };
 
-  const renderStatusBadge = (status: ReservationStatus) => {
-    const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
-    switch (status) {
-      case 'confirmed':
-        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Confirmed</span>;
-      case 'pending':
-        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending</span>;
-      case 'completed':
-        return <span className={cn(base, 'bg-blue-100 text-blue-800 border-blue-200')}>Completed</span>;
-      case 'cancelled':
-        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Cancelled</span>;
-      case 'rejected':
-        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
-      case 'expired':
-        return <span className={cn(base, 'bg-neutral-100 text-neutral-600 border-neutral-300')}>Expired</span>;
-      default:
-        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
-    }
-  };
-
-  const renderPaymentBadge = (paymentStatus?: string) => {
-    switch (paymentStatus) {
-      case 'captured':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">Captured</span>;
-      case 'authorized':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 border border-amber-200">Hold</span>;
-      case 'refunded':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700 border border-purple-200">Refunded</span>;
-      case 'voided':
-        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-neutral-100 text-neutral-600 border border-neutral-300">Voided</span>;
-      default:
-        return <span className="text-xs text-neutral-400">{paymentStatus || 'Pending'}</span>;
-    }
-  };
-
-  const gmvUSD = summary.gmvCents / 100;
-  const commissionUSD = summary.commissionCents / 100;
-
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          role="status"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[var(--color-bg-dark)] text-white px-5 py-3.5 rounded-xl shadow-2xl border border-[var(--color-border-dark)] animate-in fade-in slide-in-from-bottom-4 duration-300"
-        >
-          <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="text-neutral-400 hover:text-white ml-2"
-            aria-label="Dismiss"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <DarkToast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+      <ErrorBanner message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
-      {/* Inline Error Banner */}
-      {errorMessage && (
-        <div
-          role="alert"
-          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
-        >
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-red-500 hover:text-red-700 p-0.5"
-            aria-label="Dismiss error"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* KPI Audit Summary Cards (SQL-aggregated across all reservations) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
-          <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
-            Total Bookings
-          </div>
-          <div className="text-2xl font-bold text-[var(--color-text-on-light)] mt-1">
-            {summary.totalCount}
-          </div>
-          <div className="text-xs text-neutral-400 mt-1">
-            {summary.confirmedCount} confirmed · {summary.pendingCount} pending
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
-          <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
-            Active Stay Pipeline
-          </div>
-          <div className="text-2xl font-bold text-emerald-600 mt-1">
-            {summary.confirmedCount} Stays
-          </div>
-          <div className="text-xs text-neutral-400 mt-1">
-            {summary.cancelledCount} cancellations
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
-          <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
-            Confirmed GMV
-          </div>
-          <div className="text-2xl font-bold text-[var(--color-text-on-light)] mt-1">
-            ${Math.round(gmvUSD).toLocaleString('en-US')}
-          </div>
-          <div className="text-xs text-neutral-400 mt-1">
-            Platform gross rental volume
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl bg-white border border-[var(--color-border-light)] shadow-sm">
-          <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
-            Platform Commission (10%)
-          </div>
-          <div className="text-2xl font-bold text-[var(--color-brand)] mt-1">
-            ${Math.round(commissionUSD).toLocaleString('en-US')}
-          </div>
-          <div className="text-xs text-neutral-400 mt-1">
-            Net NomadDesk platform revenue
-          </div>
-        </div>
-      </div>
+      <ReservationSummaryCards summary={summary} />
 
       {/* Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 bg-neutral-50 rounded-xl border border-[var(--color-border-light)]">
@@ -484,10 +320,7 @@ export function AllReservationsTable() {
                   const prop = getProperty(res.propertyId);
                   const hostName = getHostName(res.propertyId);
                   const totalUSD = Math.round((res.totalAmount || 0) / 100);
-                  const commissionCents =
-                    res.commissionAmount ??
-                    Math.round((res.rentAmount || 0) * BOOKING_RULES.commissionRate);
-                  const commissionItemUSD = Math.round(commissionCents / 100);
+                  const commissionItemUSD = Math.round(commissionCentsOf(res) / 100);
 
                   return (
                     <tr
@@ -548,8 +381,8 @@ export function AllReservationsTable() {
                       {/* Status */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-1">
-                          <div>{renderStatusBadge(res.status)}</div>
-                          <div>{renderPaymentBadge(res.paymentStatus)}</div>
+                          <div><ReservationStatusPill status={res.status} /></div>
+                          <div><PaymentStatusPill paymentStatus={res.paymentStatus} /></div>
                         </div>
                       </td>
 
@@ -568,11 +401,7 @@ export function AllReservationsTable() {
                           {res.status === 'confirmed' && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setSelectedReservation(null);
-                                setVoidingReservation(res);
-                                setCancellationReason('Cancelled by Platform Administrator due to compliance review');
-                              }}
+                              onClick={() => startVoid(res)}
                               disabled={isSubmitting}
                               className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                               title="Admin Intervention Void & Refund"
@@ -606,238 +435,24 @@ export function AllReservationsTable() {
         />
       </div>
 
-      {/* Modal: Reservation Details Drawer */}
       {selectedReservation && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) {
-              setSelectedReservation(null);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Reservation audit details for #${selectedReservation.code}`}
-            className="w-full max-w-xl bg-white max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] space-y-6"
-          >
-            <div className="flex items-start justify-between pb-4 border-b border-[var(--color-border-light)]">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-sm font-bold text-[var(--color-brand)]">
-                    #{selectedReservation.code}
-                  </span>
-                  {renderStatusBadge(selectedReservation.status)}
-                  {renderPaymentBadge(selectedReservation.paymentStatus)}
-                </div>
-                <h3 className="text-lg font-bold text-[var(--color-text-on-light)]">
-                  Reservation Audit Details
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedReservation(null)}
-                aria-label="Close reservation details"
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Info Grid */}
-            <div className="space-y-4 text-sm">
-              {/* Stay Period & Property */}
-              <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
-                  Stay & Property
-                </div>
-                <div className="font-semibold text-base text-[var(--color-text-on-light)]">
-                  {getProperty(selectedReservation.propertyId)?.title || `Property #${selectedReservation.propertyId}`}
-                </div>
-                <div className="text-xs text-[var(--color-text-on-light-muted)]">
-                  City: {getProperty(selectedReservation.propertyId)?.city} · Host: {getHostName(selectedReservation.propertyId)}
-                </div>
-                <div className="flex items-center gap-2 text-xs text-[var(--color-text-on-light)] pt-1">
-                  <Calendar className="w-4 h-4 text-neutral-400" />
-                  <span>
-                    <strong>{selectedReservation.moveInDate}</strong> → <strong>{selectedReservation.moveOutDate}</strong> ({selectedReservation.nights} nights)
-                  </span>
-                </div>
-              </div>
-
-              {/* Guest & Payment Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
-                    Guest Information
-                  </div>
-                  <div className="text-sm font-semibold text-[var(--color-text-on-light)]">
-                    {selectedReservation.guestName}
-                  </div>
-                  <div className="text-xs text-neutral-500">
-                    {selectedReservation.guestEmail}
-                  </div>
-                  {selectedReservation.guestPhone && (
-                    <div className="text-xs text-neutral-500">
-                      Phone: {selectedReservation.guestPhone}
-                    </div>
-                  )}
-                </div>
-
-                <div className="p-4 rounded-xl bg-neutral-50 space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
-                    Financial Audit
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Total Charged:</span>
-                    <strong className="text-[var(--color-text-on-light)]">
-                      ${Math.round((selectedReservation.totalAmount || 0) / 100).toLocaleString()}
-                    </strong>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">NomadDesk 10% Cut:</span>
-                    <strong className="text-emerald-600">
-                      ${Math.round((selectedReservation.commissionAmount ?? Math.round((selectedReservation.rentAmount || 0) * BOOKING_RULES.commissionRate)) / 100).toLocaleString()}
-                    </strong>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-neutral-500">Host Net Payout:</span>
-                    <strong className="text-[var(--color-text-on-light)]">
-                      ${Math.round((selectedReservation.hostPayout ?? Math.round((selectedReservation.rentAmount || 0) * (1 - BOOKING_RULES.commissionRate))) / 100).toLocaleString()}
-                    </strong>
-                  </div>
-                  {selectedReservation.paymentRef && (
-                    <div className="text-[11px] text-neutral-400 truncate pt-1">
-                      Ref: {selectedReservation.paymentRef}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Cancellation Audit Notice if cancelled */}
-              {selectedReservation.status === 'cancelled' && (
-                <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 space-y-1 text-xs">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4" />
-                    Cancellation Event Audit
-                  </div>
-                  <p>
-                    Cancelled by: <strong className="uppercase">{selectedReservation.cancelledBy || 'system'}</strong>
-                  </p>
-                  {selectedReservation.rejectionReason && (
-                    <p>Reason: {selectedReservation.rejectionReason}</p>
-                  )}
-                  <p className="text-neutral-500 pt-0.5">
-                    Payment marked as: <strong>{selectedReservation.paymentStatus}</strong>
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Actions */}
-            <div className="pt-4 border-t border-[var(--color-border-light)] flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedReservation(null)}
-                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
-              >
-                Close
-              </button>
-
-              {/* Admin Void action from details */}
-              {selectedReservation.status === 'confirmed' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const target = selectedReservation;
-                    setSelectedReservation(null);
-                    setVoidingReservation(target);
-                    setCancellationReason('Cancelled by Platform Administrator due to compliance review');
-                  }}
-                  className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white cursor-pointer"
-                >
-                  Admin Void & Refund
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <ReservationAuditModal
+          reservation={selectedReservation}
+          property={getProperty(selectedReservation.propertyId)}
+          hostName={getHostName(selectedReservation.propertyId)}
+          isSubmitting={isSubmitting}
+          onClose={() => setSelectedReservation(null)}
+          onStartVoid={startVoid}
+        />
       )}
 
-      {/* Modal: Admin Intervention Void Confirmation */}
       {voidingReservation && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) {
-              setVoidingReservation(null);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Cancel booking #${voidingReservation.code}`}
-            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-lg text-[var(--color-text-on-light)]">
-                  Admin Intervention: Cancel Booking
-                </h4>
-                <p className="text-xs text-[var(--color-text-on-light-muted)]">
-                  Booking #{voidingReservation.code} ({voidingReservation.guestName})
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 space-y-1">
-              <p className="font-semibold">Platform Intervention Warning:</p>
-              <p>
-                This action will immediately cancel this confirmed booking, release the property dates on the calendar, and mark the transaction payment status as <strong>Refunded</strong>.
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor="admin-void-reason"
-                className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1"
-              >
-                Reason for Admin Intervention:
-              </label>
-              <textarea
-                id="admin-void-reason"
-                value={cancellationReason}
-                onChange={(e) => setCancellationReason(e.target.value)}
-                rows={3}
-                className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-                placeholder="Reason for intervention..."
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setVoidingReservation(null)}
-                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmAdminCancel}
-                disabled={isSubmitting || !cancellationReason.trim()}
-                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
-              >
-                Execute Admin Void
-              </button>
-            </div>
-          </div>
-        </div>
+        <AdminVoidModal
+          reservation={voidingReservation}
+          isSubmitting={isSubmitting}
+          onCancel={() => setVoidingReservation(null)}
+          onConfirm={handleConfirmAdminCancel}
+        />
       )}
     </div>
   );
