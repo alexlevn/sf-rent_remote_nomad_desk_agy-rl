@@ -1,11 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
 import type { Property, PropertyStatus, HostProfile } from '@/lib/types';
 import type { AdminPropertiesStatusCounts } from '@/lib/api/properties';
-import { stripHtmlTags } from '@/lib/validations/content';
 import {
   fetchAdminPropertiesAction,
   fetchAdminPropertiesPaginatedAction,
@@ -14,24 +11,20 @@ import {
   deletePropertyAction,
 } from '@/app/admin/admin-actions';
 import { PaginationBar } from '@/features/admin/pagination-bar';
+import { CheckCircle, Building, X, AlertTriangle } from 'lucide-react';
 import {
-  Search,
-  CheckCircle,
-  Edit,
-  Trash2,
-  ExternalLink,
-  Building,
-  Wifi,
-  MapPin,
-  X,
-  AlertTriangle,
-  Monitor,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-type ModerationTab = 'pending_review' | 'published' | 'hidden' | 'draft' | 'rejected' | 'all';
+  ModerationFilters,
+  ModerationTabs,
+  type ModerationTab,
+} from '@/features/admin/property-moderation/moderation-filters';
+import { PropertyRow } from '@/features/admin/property-moderation/property-row';
+import { PropertyInspectModal } from '@/features/admin/property-moderation/property-inspect-modal';
+import { PropertyRejectModal } from '@/features/admin/property-moderation/property-reject-modal';
+import type { ModerationActions } from '@/features/admin/property-moderation/moderation-actions';
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 250;
+const TOAST_DURATION_MS = 4000;
 
 const EMPTY_COUNTS: AdminPropertiesStatusCounts = {
   all: 0,
@@ -63,10 +56,8 @@ export function PropertyModerationTable() {
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
   const requestIdRef = useRef(0);
 
-  // Modal states
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [rejectingProperty, setRejectingProperty] = useState<Property | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('Listing requires higher quality workstation photos');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isActionRunningRef = useRef(false);
 
@@ -91,20 +82,18 @@ export function PropertyModerationTable() {
     loadMetadata();
     return () => {
       active = false;
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
 
-  // Debounce keyword search (250ms) and reset page to 1 only when the trimmed query changes
+  // Debounce keyword search and reset page to 1 only when the trimmed query changes
   useEffect(() => {
     const trimmed = searchQuery.trim();
     if (trimmed === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(trimmed);
       setPage(1);
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [searchQuery, debouncedSearch]);
 
@@ -154,11 +143,8 @@ export function PropertyModerationTable() {
     if (!selectedProperty && !rejectingProperty) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isActionRunningRef.current) {
-        if (rejectingProperty) {
-          setRejectingProperty(null);
-        } else {
-          setSelectedProperty(null);
-        }
+        if (rejectingProperty) setRejectingProperty(null);
+        else setSelectedProperty(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -168,170 +154,107 @@ export function PropertyModerationTable() {
   const showToast = (msg: string) => {
     setErrorMessage(null);
     setToastMessage(msg);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 4000);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
   };
 
-  const hostNameById = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const h of hosts) {
-      map.set(h.id, h.displayName);
-    }
-    return map;
-  }, [hosts]);
-
-  const getHostName = useCallback(
-    (hostId: number) => hostNameById.get(hostId) ?? `Host #${hostId}`,
-    [hostNameById]
-  );
+  const hostNameById = useMemo(() => new Map(hosts.map((h) => [h.id, h.displayName])), [hosts]);
+  const getHostName = (hostId: number) => hostNameById.get(hostId) ?? `Host #${hostId}`;
 
   const reloadAfterMutation = async () => {
     const nextPage = properties.length <= 1 && page > 1 ? page - 1 : page;
-    if (nextPage !== page) {
-      setPage(nextPage);
-    } else {
-      await fetchPage(page);
-    }
+    if (nextPage !== page) setPage(nextPage);
+    else await fetchPage(page);
   };
 
-  // Approve action (AC-ADMIN-2)
-  const handleApprove = async (property: Property) => {
+  // Runs one moderation action at a time, then refreshes the page and the open inspect modal
+  const runMutation = async (
+    property: Property,
+    action: () => Promise<unknown>,
+    successMessage: string,
+    fallbackError: string,
+    patchSelected: Partial<Property> | 'close'
+  ) => {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
-      await approvePropertyAction(property.id);
-      showToast(`Listing "${property.title}" approved and published to ${property.city}!`);
+      await action();
+      showToast(successMessage);
+      if (patchSelected === 'close' && selectedProperty?.id === property.id) setSelectedProperty(null);
       await reloadAfterMutation();
-      if (selectedProperty?.id === property.id) {
-        setSelectedProperty((prev) => (prev ? { ...prev, status: 'published' } : null));
+      if (patchSelected !== 'close' && selectedProperty?.id === property.id) {
+        setSelectedProperty((prev) => (prev ? { ...prev, ...patchSelected } : null));
       }
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to approve property');
+      setErrorMessage(err instanceof Error ? err.message : fallbackError);
     } finally {
       setIsSubmitting(false);
       isActionRunningRef.current = false;
     }
   };
 
-  // Reject action
-  const handleConfirmReject = async () => {
-    if (!rejectingProperty || isActionRunningRef.current) return;
-    isActionRunningRef.current = true;
-    setIsSubmitting(true);
-    setErrorMessage(null);
+  const publish = (property: Property, message: string, fallbackError: string) =>
+    runMutation(property, () => approvePropertyAction(property.id), message, fallbackError, {
+      status: 'published' as PropertyStatus,
+    });
 
-    try {
-      await updatePropertyStatusAction(rejectingProperty.id, 'rejected', rejectionReason);
-      showToast(`Listing "${rejectingProperty.title}" rejected.`);
-      const propId = rejectingProperty.id;
-      setRejectingProperty(null);
-      await reloadAfterMutation();
-      if (selectedProperty?.id === propId) {
-        setSelectedProperty((prev) => (prev ? { ...prev, status: 'rejected', rejectionReason } : null));
-      }
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to reject property');
-    } finally {
-      setIsSubmitting(false);
-      isActionRunningRef.current = false;
-    }
+  const actions: ModerationActions = {
+    isSubmitting,
+    onInspect: setSelectedProperty,
+    // AC-ADMIN-2
+    onApprove: (property) =>
+      publish(property, `Listing "${property.title}" approved and published to ${property.city}!`, 'Failed to approve property'),
+    onStartReject: (property) => {
+      setSelectedProperty(null);
+      setRejectingProperty(property);
+    },
+    onHide: (property) =>
+      runMutation(
+        property,
+        () => updatePropertyStatusAction(property.id, 'hidden'),
+        `Listing "${property.title}" hidden from public view.`,
+        'Failed to hide property',
+        { status: 'hidden' }
+      ),
+    onPublish: (property) =>
+      publish(property, `Listing "${property.title}" is now published.`, 'Failed to publish property'),
+    onDelete: (property) => {
+      if (!confirm(`Are you sure you want to permanently delete "${property.title}"?`)) return;
+      void runMutation(
+        property,
+        () => deletePropertyAction(property.id),
+        `Listing "${property.title}" deleted.`,
+        'Failed to delete property',
+        'close'
+      );
+    },
   };
 
-  // Hide property action
-  const handleHide = async (property: Property) => {
-    if (isActionRunningRef.current) return;
-    isActionRunningRef.current = true;
-    setIsSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      await updatePropertyStatusAction(property.id, 'hidden');
-      showToast(`Listing "${property.title}" hidden from public view.`);
-      await reloadAfterMutation();
-      if (selectedProperty?.id === property.id) {
-        setSelectedProperty((prev) => (prev ? { ...prev, status: 'hidden' } : null));
-      }
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to hide property');
-    } finally {
-      setIsSubmitting(false);
-      isActionRunningRef.current = false;
-    }
+  const handleConfirmReject = (reason: string) => {
+    const property = rejectingProperty;
+    if (!property) return;
+    void runMutation(
+      property,
+      async () => {
+        await updatePropertyStatusAction(property.id, 'rejected', reason);
+        setRejectingProperty(null);
+      },
+      `Listing "${property.title}" rejected.`,
+      'Failed to reject property',
+      { status: 'rejected', rejectionReason: reason }
+    );
   };
 
-  // Unhide / republish
-  const handlePublish = async (property: Property) => {
-    if (isActionRunningRef.current) return;
-    isActionRunningRef.current = true;
-    setIsSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      await approvePropertyAction(property.id);
-      showToast(`Listing "${property.title}" is now published.`);
-      await reloadAfterMutation();
-      if (selectedProperty?.id === property.id) {
-        setSelectedProperty((prev) => (prev ? { ...prev, status: 'published' } : null));
-      }
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to publish property');
-    } finally {
-      setIsSubmitting(false);
-      isActionRunningRef.current = false;
-    }
-  };
-
-  // Delete property action
-  const handleDelete = async (property: Property) => {
-    if (!confirm(`Are you sure you want to permanently delete "${property.title}"?`)) {
-      return;
-    }
-    if (isActionRunningRef.current) return;
-    isActionRunningRef.current = true;
-    setIsSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      await deletePropertyAction(property.id);
-      showToast(`Listing "${property.title}" deleted.`);
-      if (selectedProperty?.id === property.id) {
-        setSelectedProperty(null);
-      }
-      await reloadAfterMutation();
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete property');
-    } finally {
-      setIsSubmitting(false);
-      isActionRunningRef.current = false;
-    }
-  };
-
-  const renderStatusBadge = (status: PropertyStatus) => {
-    const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
-    switch (status) {
-      case 'published':
-        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Published</span>;
-      case 'pending_review':
-        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending Review</span>;
-      case 'hidden':
-        return <span className={cn(base, 'bg-neutral-200 text-neutral-800 border-neutral-300')}>Hidden</span>;
-      case 'draft':
-        return <span className={cn(base, 'bg-neutral-100 text-neutral-600 border-neutral-300')}>Draft</span>;
-      case 'rejected':
-        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
-      default:
-        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
-    }
+  const resetToFirstPage = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    setPage(1);
   };
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
       {toastMessage && (
         <div
           role="status"
@@ -350,7 +273,6 @@ export function PropertyModerationTable() {
         </div>
       )}
 
-      {/* Inline Error Banner */}
       {errorMessage && (
         <div
           ref={errorBannerRef}
@@ -373,169 +295,19 @@ export function PropertyModerationTable() {
         </div>
       )}
 
-      {/* Tabs Bar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border-light)] pb-4">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('pending_review');
-            setPage(1);
-          }}
-          className={cn(
-            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'pending_review'
-              ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
-          )}
-        >
-          Pending Review ({counts.pending_review})
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('published');
-            setPage(1);
-          }}
-          className={cn(
-            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'published'
-              ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
-          )}
-        >
-          Published ({counts.published})
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('hidden');
-            setPage(1);
-          }}
-          className={cn(
-            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'hidden'
-              ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
-          )}
-        >
-          Hidden ({counts.hidden})
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('draft');
-            setPage(1);
-          }}
-          className={cn(
-            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'draft'
-              ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
-          )}
-        >
-          Draft ({counts.draft})
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('rejected');
-            setPage(1);
-          }}
-          className={cn(
-            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'rejected'
-              ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
-          )}
-        >
-          Rejected ({counts.rejected})
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('all');
-            setPage(1);
-          }}
-          className={cn(
-            'tab-btn px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-            activeTab === 'all'
-              ? 'bg-[var(--color-brand)] text-white shadow-sm'
-              : 'text-[var(--color-text-on-light-muted)] hover:bg-neutral-100',
-          )}
-        >
-          All Listings ({counts.all})
-        </button>
-      </div>
+      <ModerationTabs activeTab={activeTab} counts={counts} onChange={resetToFirstPage(setActiveTab)} />
 
-      {/* Filter Controls (City, Host, Search) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-neutral-50 p-3.5 rounded-xl border border-[var(--color-border-light)]">
-        {/* City Filter */}
-        <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1">
-            Filter by City
-          </label>
-          <select
-            value={cityFilter}
-            onChange={(e) => {
-              setCityFilter(e.target.value);
-              setPage(1);
-            }}
-            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
-          >
-            <option value="all">All Cities ({uniqueCities.length})</option>
-            {uniqueCities.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
+      <ModerationFilters
+        cities={uniqueCities}
+        hosts={hosts}
+        cityFilter={cityFilter}
+        hostFilter={hostFilter}
+        searchQuery={searchQuery}
+        onCityChange={resetToFirstPage(setCityFilter)}
+        onHostChange={resetToFirstPage(setHostFilter)}
+        onSearchChange={setSearchQuery}
+      />
 
-        {/* Host Filter */}
-        <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1">
-            Filter by Host
-          </label>
-          <select
-            value={hostFilter}
-            onChange={(e) => {
-              setHostFilter(e.target.value);
-              setPage(1);
-            }}
-            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
-          >
-            <option value="all">All Hosts ({hosts.length})</option>
-            {hosts.map((h) => (
-              <option key={h.id} value={String(h.id)}>
-                {h.displayName}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Keyword Search */}
-        <div>
-          <label
-            htmlFor="admin-properties-search"
-            className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1"
-          >
-            Search Listings
-          </label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-            <input
-              id="admin-properties-search"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Title, ND-PROP, neighborhood..."
-              className="w-full text-sm py-2 pl-9 pr-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Main Table Container */}
       <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -576,187 +348,14 @@ export function PropertyModerationTable() {
                   </td>
                 </tr>
               ) : (
-                properties.map((property) => {
-                  const monthlyUSD = Math.round(property.pricePerMonth / 100);
-                  const firstImage = property.images?.[0] || '/seed/property/prop-madrid-1.webp';
-
-                  return (
-                    <tr
-                      key={property.id}
-                      className="hover:bg-neutral-50/70 transition-colors"
-                    >
-                      {/* Title & Preview */}
-                      <td className="px-6 py-4 max-w-md">
-                        <div className="flex items-start gap-3">
-                          <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-neutral-200 shrink-0">
-                            <Image
-                              src={firstImage}
-                              alt={property.title}
-                              fill
-                              unoptimized
-                              className="object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedProperty(property)}
-                              className="font-semibold text-[var(--color-text-on-light)] hover:text-[var(--color-brand)] text-left line-clamp-1"
-                            >
-                              {property.title}
-                            </button>
-                            <div className="flex items-center gap-2 text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
-                              <span>{property.reference}</span>
-                              <span>·</span>
-                              <span>{property.bedrooms} BR</span>
-                              <span>·</span>
-                              <span>{property.totalSurface} m²</span>
-                              {Boolean(property.workstation?.wifiSpeed) && (
-                                <>
-                                  <span>·</span>
-                                  <span className="inline-flex items-center gap-0.5 text-emerald-600 font-medium">
-                                    <Wifi className="w-3 h-3" />
-                                    {property.workstation?.wifiSpeed} Mbps
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Host */}
-                      <td className="px-6 py-4 text-[var(--color-text-on-light-muted)] whitespace-nowrap">
-                        <div className="font-medium text-[var(--color-text-on-light)]">
-                          {getHostName(property.hostId)}
-                        </div>
-                        <div className="text-xs text-neutral-400">Host #{property.hostId}</div>
-                      </td>
-
-                      {/* City */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-1 text-[var(--color-text-on-light)]">
-                          <MapPin className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                          <span>{property.city}</span>
-                        </div>
-                        {property.neighborhood && (
-                          <div className="text-xs text-[var(--color-text-on-light-muted)] pl-4">
-                            {property.neighborhood}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Price */}
-                      <td className="px-6 py-4 font-bold text-[var(--color-text-on-light)] whitespace-nowrap">
-                        ${monthlyUSD.toLocaleString()}
-                        <span className="text-xs font-normal text-neutral-400">/mo</span>
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {renderStatusBadge(property.status)}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-6 py-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* Quick Inspect */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedProperty(property)}
-                            className="inline-flex items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-neutral-700 hover:bg-neutral-50 text-xs font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
-                            title="Inspect listing details"
-                          >
-                            Inspect
-                          </button>
-
-                          {/* Moderation Actions */}
-                          {property.status === 'pending_review' && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleApprove(property)}
-                                disabled={isSubmitting}
-                                className="inline-flex items-center justify-center rounded-lg text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedProperty(null);
-                                  setRejectingProperty(property);
-                                  setRejectionReason('Listing requires higher quality workstation photos');
-                                }}
-                                disabled={isSubmitting}
-                                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
-
-                          {property.status === 'published' && (
-                            <>
-                              <Link
-                                href={`/l/apartments/${property.slug}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`View ${property.title} on public site`}
-                                className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-md hover:bg-neutral-100"
-                                title="View public page"
-                              >
-                                <ExternalLink className="w-4 h-4" />
-                              </Link>
-                              <button
-                                type="button"
-                                onClick={() => handleHide(property)}
-                                disabled={isSubmitting}
-                                className="inline-flex items-center justify-center rounded-lg border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
-                                title="Hide listing from public search"
-                              >
-                                Hide
-                              </button>
-                            </>
-                          )}
-
-                          {property.status === 'hidden' && (
-                            <button
-                              type="button"
-                              onClick={() => handlePublish(property)}
-                              disabled={isSubmitting}
-                              className="inline-flex items-center justify-center rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
-                              title="Publish listing"
-                            >
-                              Publish
-                            </button>
-                          )}
-
-                          {/* Edit / Delete */}
-                          <Link
-                            href={`/admin/properties/${property.id}/edit`}
-                            aria-label={`Edit ${property.title}`}
-                            className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-md hover:bg-neutral-100"
-                            title="Edit listing details"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Link>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(property)}
-                            disabled={isSubmitting}
-                            aria-label={`Delete ${property.title}`}
-                            className="p-1.5 text-neutral-500 hover:text-red-600 rounded-md hover:bg-red-50 cursor-pointer disabled:opacity-50"
-                            title="Delete listing"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                properties.map((property) => (
+                  <PropertyRow
+                    key={property.id}
+                    property={property}
+                    hostName={getHostName(property.hostId)}
+                    actions={actions}
+                  />
+                ))
               )}
             </tbody>
           </table>
@@ -772,279 +371,22 @@ export function PropertyModerationTable() {
         />
       </div>
 
-      {/* Modal: Property Detail Inspection */}
       {selectedProperty && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) {
-              setSelectedProperty(null);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Inspect ${selectedProperty.title}`}
-            className="w-full max-w-2xl bg-white max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] space-y-6"
-          >
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--color-border-light)]">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  {renderStatusBadge(selectedProperty.status)}
-                  <span className="text-xs text-neutral-400">{selectedProperty.reference}</span>
-                </div>
-                <h3 className="text-xl font-bold text-[var(--color-text-on-light)]">
-                  {selectedProperty.title}
-                </h3>
-                <div className="text-sm text-[var(--color-text-on-light-muted)]">
-                  {selectedProperty.neighborhood}, {selectedProperty.city}, {selectedProperty.country} · Host: {getHostName(selectedProperty.hostId)}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedProperty(null)}
-                aria-label="Close inspection modal"
-                className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Photos Strip */}
-            {selectedProperty.images && selectedProperty.images.length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
-                {selectedProperty.images.slice(0, 3).map((img, idx) => (
-                  <div key={idx} className="relative h-28 rounded-lg overflow-hidden bg-neutral-100">
-                    <Image
-                      src={img}
-                      alt={`Photo ${idx + 1}`}
-                      fill
-                      unoptimized
-                      className="object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Workstation Specification Highlight */}
-            <div className="p-4 rounded-xl bg-neutral-50 border border-[var(--color-border-light)] space-y-3">
-              <div className="flex items-center gap-2 font-semibold text-sm text-[var(--color-text-on-light)]">
-                <Monitor className="w-4 h-4 text-[var(--color-brand)]" />
-                <span>Verified Remote Workstation Specs</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <span className="text-neutral-400 block">Desk:</span>
-                  <strong className="text-[var(--color-text-on-light)]">{selectedProperty.workstation?.desk || 'Standard'}</strong>
-                </div>
-                <div>
-                  <span className="text-neutral-400 block">Chair:</span>
-                  <strong className="text-[var(--color-text-on-light)]">{selectedProperty.workstation?.chair || 'Standard'}</strong>
-                </div>
-                <div>
-                  <span className="text-neutral-400 block">Monitor:</span>
-                  <strong className="text-[var(--color-text-on-light)]">{selectedProperty.workstation?.monitors || 'Single Screen'}</strong>
-                </div>
-                <div>
-                  <span className="text-neutral-500 block">Verified Wi-Fi:</span>
-                  <strong className="text-emerald-600">
-                    {selectedProperty.workstation?.wifiSpeed
-                      ? `${selectedProperty.workstation.wifiSpeed} Mbps`
-                      : 'Not verified'}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Property Overview */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-neutral-50 rounded-xl text-center text-xs">
-              <div>
-                <span className="text-neutral-400 block">Monthly Rent</span>
-                <span className="font-bold text-sm text-[var(--color-text-on-light)]">
-                  ${Math.round(selectedProperty.pricePerMonth / 100).toLocaleString()}
-                </span>
-              </div>
-              <div>
-                <span className="text-neutral-400 block">Bedrooms / Baths</span>
-                <span className="font-bold text-sm text-[var(--color-text-on-light)]">
-                  {selectedProperty.bedrooms} BR / {selectedProperty.bathrooms} BA
-                </span>
-              </div>
-              <div>
-                <span className="text-neutral-400 block">Total Surface</span>
-                <span className="font-bold text-sm text-[var(--color-text-on-light)]">
-                  {selectedProperty.totalSurface} m²
-                </span>
-              </div>
-              <div>
-                <span className="text-neutral-400 block">Booking Type</span>
-                <span className="font-bold text-sm text-[var(--color-brand)]">
-                  {selectedProperty.isDirectBooking ? 'Instant Book' : 'Request to Book'}
-                </span>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="text-sm space-y-1">
-              <span className="font-semibold text-xs uppercase tracking-wider text-[var(--color-text-on-light-muted)]">
-                Description
-              </span>
-              <p className="text-neutral-700 leading-relaxed text-xs">
-                {selectedProperty.description
-                  ? stripHtmlTags(selectedProperty.description)
-                  : 'No detailed description provided.'}
-              </p>
-            </div>
-
-            {/* Rejection Notice if any */}
-            {selectedProperty.rejectionReason && (
-              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs space-y-1">
-                <div className="font-semibold flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 text-red-600" />
-                  Rejection Reason:
-                </div>
-                <p>{selectedProperty.rejectionReason}</p>
-              </div>
-            )}
-
-            {/* Action Bar */}
-            <div className="pt-4 border-t border-[var(--color-border-light)] flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <Link
-                  href={`/admin/properties/${selectedProperty.id}/edit`}
-                  className="inline-flex min-h-10 sm:min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border-light)] bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                  Edit Full Form
-                </Link>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedProperty(null)}
-                  className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-
-                {selectedProperty.status === 'pending_review' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const prop = selectedProperty;
-                        setSelectedProperty(null);
-                        setRejectingProperty(prop);
-                        setRejectionReason('Listing requires higher quality workstation photos');
-                      }}
-                      disabled={isSubmitting}
-                      className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors cursor-pointer"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleApprove(selectedProperty)}
-                      disabled={isSubmitting}
-                      className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors cursor-pointer"
-                    >
-                      Approve & Publish
-                    </button>
-                  </>
-                )}
-
-                {selectedProperty.status === 'published' && (
-                  <button
-                    type="button"
-                    onClick={() => handleHide(selectedProperty)}
-                    disabled={isSubmitting}
-                    className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    Hide Listing
-                  </button>
-                )}
-
-                {selectedProperty.status === 'hidden' && (
-                  <button
-                    type="button"
-                    onClick={() => handlePublish(selectedProperty)}
-                    disabled={isSubmitting}
-                    className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    Republish
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        <PropertyInspectModal
+          property={selectedProperty}
+          hostName={getHostName(selectedProperty.hostId)}
+          actions={actions}
+          onClose={() => setSelectedProperty(null)}
+        />
       )}
 
-      {/* Modal: Rejection Reason */}
       {rejectingProperty && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) {
-              setRejectingProperty(null);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Reject ${rejectingProperty.title}`}
-            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-lg text-[var(--color-text-on-light)]">
-                  Reject Property Listing
-                </h4>
-                <p className="text-xs text-[var(--color-text-on-light-muted)] line-clamp-1">
-                  {rejectingProperty.title}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-sm text-neutral-600">
-              Please state why this listing is being rejected so the Host can correct the listing details.
-            </p>
-
-            <textarea
-              aria-label="Rejection reason"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              rows={3}
-              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              placeholder="Enter rejection reason..."
-            />
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setRejectingProperty(null)}
-                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReject}
-                disabled={isSubmitting || !rejectionReason.trim()}
-                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
-              >
-                Confirm Rejection
-              </button>
-            </div>
-          </div>
-        </div>
+        <PropertyRejectModal
+          property={rejectingProperty}
+          isSubmitting={isSubmitting}
+          onCancel={() => setRejectingProperty(null)}
+          onConfirm={handleConfirmReject}
+        />
       )}
     </div>
   );
