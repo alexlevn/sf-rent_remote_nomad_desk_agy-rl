@@ -8,6 +8,15 @@ export const metadata: Metadata = {
   title: 'Insights for Remote Workers and Digital Nomads | NomadDesk Blog',
   description:
     'Deep dives into monthly rentals, workstation ergonomics, tax residency, and the global nomad lifestyle.',
+  alternates: {
+    canonical: '/blog',
+  },
+  openGraph: {
+    title: 'Insights for Remote Workers and Digital Nomads | NomadDesk Blog',
+    description:
+      'Deep dives into monthly rentals, workstation ergonomics, tax residency, and the global nomad lifestyle.',
+    type: 'website',
+  },
 };
 
 export default async function BlogHubPage() {
@@ -25,7 +34,7 @@ export default async function BlogHubPage() {
             <h1 className="text-2xl sm:text-4xl lg:text-[40px] lg:leading-[44px] font-bold tracking-tight text-white mb-4 leading-tight">
               Insights for Remote Workers &amp; Digital Nomads
             </h1>
-            <p className="text-sm sm:text-base text-[#d1c8be] leading-relaxed">
+            <p className="text-sm sm:text-base text-[var(--color-text-on-dark-subtle)] leading-relaxed">
               Deep dives into monthly rentals, workstation ergonomics, tax residency, and the global nomad lifestyle.
             </p>
           </div>
@@ -35,46 +44,6 @@ export default async function BlogHubPage() {
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <BlogDirectory posts={posts} />
-
-        {/* UI States & Verification Blocks */}
-        <section className="mt-12 mb-16 pt-8 border-t border-[var(--color-border-light)]">
-          <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 sm:p-8">
-            <div className="text-base sm:text-lg font-bold text-[var(--color-text-on-light)] mb-1">
-              📋 UI States & Verification Blocks — Blog Hub (/blog)
-            </div>
-            <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] mb-6">
-              These verification blocks showcase alternative UI conditions (Empty states, Skeleton loading, Error alerts, Validation states) required for thorough stage review.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-[var(--color-bg-light)] border border-[var(--color-border-light)] rounded-xl p-5">
-                <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)] mb-3">
-                  Blog Category Filter
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)]">
-                    All Posts
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)]">
-                    Workation Tips
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)]">
-                    Cost Guides
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-[var(--color-bg-light)] border border-[var(--color-border-light)] rounded-xl p-5">
-                <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--color-info-bg)] text-[var(--color-info)] border border-[var(--color-info-border)] mb-3">
-                  Publication Frequency
-                </span>
-                <p className="text-xs text-[var(--color-text-on-light-muted)] leading-relaxed">
-                  Articles published bi-weekly focusing on equipment benchmarks, tax frameworks, and lease negotiations.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
       </main>
     </div>
   );

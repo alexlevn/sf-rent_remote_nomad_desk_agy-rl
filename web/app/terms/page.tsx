@@ -1,10 +1,18 @@
 import type { Metadata } from 'next';
+import { BOOKING_RULES } from '@/content/booking-rules';
 import { TERMS_CONTENT } from '@/content/pages/terms';
 
 export const metadata: Metadata = {
   title: 'Terms of Service | NomadDesk',
-  description:
-    'Official platform terms of service regarding 30-night minimum stays, 14-day cancellation policies, host commissions, and acceptable use.',
+  description: `Official platform terms of service regarding ${BOOKING_RULES.minimumStayNights}-night minimum stays, ${BOOKING_RULES.freeCancelDays}-day cancellation policies, host commissions, and acceptable use.`,
+  alternates: {
+    canonical: '/terms',
+  },
+  openGraph: {
+    title: 'Terms of Service | NomadDesk',
+    description: `Official platform terms of service regarding ${BOOKING_RULES.minimumStayNights}-night minimum stays, ${BOOKING_RULES.freeCancelDays}-day cancellation policies, host commissions, and acceptable use.`,
+    type: 'website',
+  },
 };
 
 export default function TermsPage() {

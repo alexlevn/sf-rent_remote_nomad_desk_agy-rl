@@ -56,19 +56,27 @@ export function WorkstationSpecs({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div>
             <span className="font-semibold text-white">Monitors: </span>
-            <span className="text-[#d1c8be]">{workstation.monitors || 'Dual 27" 4K UHD Monitors'}</span>
+            <span className="text-[var(--color-text-on-dark-subtle)]">
+              {workstation.monitors || 'Dual 27" 4K UHD Monitors'}
+            </span>
           </div>
           <div>
             <span className="font-semibold text-white">Desk: </span>
-            <span className="text-[#d1c8be]">{workstation.desk || 'Motorized Standing Desk (160x80cm)'}</span>
+            <span className="text-[var(--color-text-on-dark-subtle)]">
+              {workstation.desk || 'Motorized Standing Desk (160x80cm)'}
+            </span>
           </div>
           <div>
             <span className="font-semibold text-white">Chair: </span>
-            <span className="text-[#d1c8be]">{workstation.chair || 'Ergonomic Executive Seating'}</span>
+            <span className="text-[var(--color-text-on-dark-subtle)]">
+              {workstation.chair || 'Ergonomic Executive Seating'}
+            </span>
           </div>
           <div>
             <span className="font-semibold text-white">Peripherals: </span>
-            <span className="text-[#d1c8be]">{workstation.keyboard || 'Precision Mechanical Keyboard & Wireless Mouse'}</span>
+            <span className="text-[var(--color-text-on-dark-subtle)]">
+              {workstation.keyboard || 'Precision Mechanical Keyboard & Wireless Mouse'}
+            </span>
           </div>
           <div className="sm:col-span-2">
             <span className="font-semibold text-white">Internet Speed: </span>

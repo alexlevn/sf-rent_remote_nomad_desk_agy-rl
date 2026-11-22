@@ -3,115 +3,118 @@
 import React, { useState, useMemo } from 'react';
 import { BuilderHardwarePicker } from './builder-hardware-picker';
 import { BuilderSummaryCard, type SummaryBreakdownItem } from './builder-summary-card';
-import type { WorkstationData } from '@/lib/types';
+import type { WorkstationComponentOption, WorkstationData } from '@/lib/types';
+
+const FALLBACK_PRO_PRICE_EUR = 150;
 
 interface WorkstationBuilderContainerProps {
   workstationData: WorkstationData;
 }
 
+function getDefaultOptionId(options: WorkstationComponentOption[]): string {
+  const included = options.find((opt) => opt.isIncluded || opt.pricePerMonth === 0);
+  return included?.id ?? options[0]?.id ?? '';
+}
+
+function getUpgradeOptionId(options: WorkstationComponentOption[]): string {
+  const paid = options.find((opt) => opt.pricePerMonth > 0);
+  return paid?.id ?? options[options.length - 1]?.id ?? '';
+}
+
 export function WorkstationBuilderContainer({ workstationData }: WorkstationBuilderContainerProps) {
   const { components, addons } = workstationData;
   const proPkg = workstationData.packages.find((p) => p.slug === 'pro-upgrade' || p.id === 'pro');
-  const proPriceEUR = proPkg ? Math.round(proPkg.pricePerMonth / 100) : 150;
+  const proPriceEUR = proPkg ? Math.round(proPkg.pricePerMonth / 100) : FALLBACK_PRO_PRICE_EUR;
 
-  // Initial baseline selection (Comfort Base defaults)
-  const [selectedMonitor, setSelectedMonitor] = useState<string>('mon-ultrawide');
-  const [selectedChair, setSelectedChair] = useState<string>('chair-ergo');
-  const [selectedDesk, setSelectedDesk] = useState<string>('desk-std');
-  const [selectedKeyboardMouse, setSelectedKeyboardMouse] = useState<string>('km-none');
+  const defaultMonitor = getDefaultOptionId(components.monitor);
+  const defaultChair = getDefaultOptionId(components.chair);
+  const defaultDesk = getDefaultOptionId(components.desk);
+  const defaultKm = getDefaultOptionId(components.keyboardMouse);
+
+  const proMonitor = getUpgradeOptionId(components.monitor);
+  const proChair = getUpgradeOptionId(components.chair);
+  const proDesk = getUpgradeOptionId(components.desk);
+  const proKm = getUpgradeOptionId(components.keyboardMouse);
+
+  const [selectedMonitor, setSelectedMonitor] = useState<string>(defaultMonitor);
+  const [selectedChair, setSelectedChair] = useState<string>(defaultChair);
+  const [selectedDesk, setSelectedDesk] = useState<string>(defaultDesk);
+  const [selectedKeyboardMouse, setSelectedKeyboardMouse] = useState<string>(defaultKm);
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
 
-  // Toggle accessory add-on
   const handleToggleAddon = (addonId: string) => {
     setSelectedAddons((prev) =>
       prev.includes(addonId) ? prev.filter((id) => id !== addonId) : [...prev, addonId]
     );
   };
 
-  // Reset all to Comfort Base (zero extra cost)
   const handleReset = () => {
-    setSelectedMonitor('mon-ultrawide');
-    setSelectedChair('chair-ergo');
-    setSelectedDesk('desk-std');
-    setSelectedKeyboardMouse('km-none');
+    setSelectedMonitor(defaultMonitor);
+    setSelectedChair(defaultChair);
+    setSelectedDesk(defaultDesk);
+    setSelectedKeyboardMouse(defaultKm);
     setSelectedAddons([]);
   };
 
-  // Apply full Pro Upgrade preset (Standing Desk + Aeron + 4K Ultrawide + MX Master = €150/mo)
   const handleApplyProPreset = () => {
-    setSelectedMonitor('mon-4k-ultrawide');
-    setSelectedChair('chair-aeron');
-    setSelectedDesk('desk-standing');
-    setSelectedKeyboardMouse('km-mx');
+    setSelectedMonitor(proMonitor);
+    setSelectedChair(proChair);
+    setSelectedDesk(proDesk);
+    setSelectedKeyboardMouse(proKm);
     setSelectedAddons([]);
   };
 
-  // Compute breakdown line items and total additional EUR cost realtime
-  const { breakdownItems, totalUpgradeEUR } = useMemo(() => {
+  const { breakdownItems, totalUpgradeEUR, isProPreset } = useMemo(() => {
     const items: SummaryBreakdownItem[] = [];
 
-    // Check Monitor
     const mon = components.monitor.find((m) => m.id === selectedMonitor);
     if (mon && mon.pricePerMonth > 0) {
-      items.push({
-        name: mon.id === 'mon-4k-ultrawide' ? '4K UHD Ultrawide Monitor' : mon.name,
-        priceEUR: Math.round(mon.pricePerMonth / 100),
-      });
+      items.push({ name: mon.name, priceEUR: mon.pricePerMonth / 100 });
     }
 
-    // Check Chair
     const chair = components.chair.find((c) => c.id === selectedChair);
     if (chair && chair.pricePerMonth > 0) {
-      items.push({
-        name: chair.id === 'chair-aeron' ? 'Herman Miller Aeron' : chair.name,
-        priceEUR: Math.round(chair.pricePerMonth / 100),
-      });
+      items.push({ name: chair.name, priceEUR: chair.pricePerMonth / 100 });
     }
 
-    // Check Desk
     const desk = components.desk.find((d) => d.id === selectedDesk);
     if (desk && desk.pricePerMonth > 0) {
-      items.push({
-        name: desk.id === 'desk-standing' ? 'Standing Desk (Motorized)' : desk.name,
-        priceEUR: Math.round(desk.pricePerMonth / 100),
-      });
+      items.push({ name: desk.name, priceEUR: desk.pricePerMonth / 100 });
     }
 
-    // Check Keyboard & Mouse
     const km = components.keyboardMouse.find((k) => k.id === selectedKeyboardMouse);
     if (km && km.pricePerMonth > 0) {
-      items.push({
-        name: km.id === 'km-mx' ? 'Logitech MX Master 3S Bundle' : km.name,
-        priceEUR: Math.round(km.pricePerMonth / 100),
-      });
+      items.push({ name: km.name, priceEUR: km.pricePerMonth / 100 });
     }
 
-    // Check Addons
     for (const addonId of selectedAddons) {
       const add = addons.find((a) => a.id === addonId);
       if (add) {
-        items.push({
-          name: add.name,
-          priceEUR: Math.round(add.pricePerMonth / 100),
-        });
+        items.push({ name: add.name, priceEUR: add.pricePerMonth / 100 });
       }
     }
 
-    const isProPreset =
-      selectedMonitor === 'mon-4k-ultrawide' &&
-      selectedChair === 'chair-aeron' &&
-      selectedDesk === 'desk-standing' &&
-      selectedKeyboardMouse === 'km-mx' &&
+    const matchesProPreset =
+      selectedMonitor === proMonitor &&
+      selectedChair === proChair &&
+      selectedDesk === proDesk &&
+      selectedKeyboardMouse === proKm &&
       selectedAddons.length === 0;
 
     let total = items.reduce((acc, curr) => acc + curr.priceEUR, 0);
-    if (isProPreset && total !== proPriceEUR) {
+    if (matchesProPreset && total !== proPriceEUR) {
+      const adjustment = proPriceEUR - total;
+      items.push({
+        name: `${proPkg?.name || 'Pro Upgrade'} bundle adjustment`,
+        priceEUR: adjustment,
+      });
       total = proPriceEUR;
     }
 
     return {
       breakdownItems: items,
-      totalUpgradeEUR: total,
+      totalUpgradeEUR: Math.round(total * 100) / 100,
+      isProPreset: matchesProPreset,
     };
   }, [
     components,
@@ -121,30 +124,34 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
     selectedDesk,
     selectedKeyboardMouse,
     selectedAddons,
+    proMonitor,
+    proChair,
+    proDesk,
+    proKm,
     proPriceEUR,
+    proPkg?.name,
   ]);
 
-  // Construct query string for AC-BUILD-2 CTA redirect
   const destinationUrl = useMemo(() => {
     const params = new URLSearchParams();
     params.set('workstation', totalUpgradeEUR > 0 ? 'custom' : 'comfort');
-    if (selectedMonitor && selectedMonitor !== 'mon-ultrawide') {
+    if (selectedMonitor && selectedMonitor !== defaultMonitor) {
       params.set('monitor', selectedMonitor);
     }
-    if (selectedChair && selectedChair !== 'chair-ergo') {
+    if (selectedChair && selectedChair !== defaultChair) {
       params.set('chair', selectedChair);
     }
-    if (selectedDesk && selectedDesk !== 'desk-std') {
+    if (selectedDesk && selectedDesk !== defaultDesk) {
       params.set('desk', selectedDesk);
     }
-    if (selectedKeyboardMouse && selectedKeyboardMouse !== 'km-none') {
+    if (selectedKeyboardMouse && selectedKeyboardMouse !== defaultKm) {
       params.set('km', selectedKeyboardMouse);
     }
     if (selectedAddons.length > 0) {
       params.set('addons', selectedAddons.join(','));
     }
     if (totalUpgradeEUR > 0) {
-      params.set('upgradeMonthlyEUR', totalUpgradeEUR.toString());
+      params.set('upgradeMonthlyEUR', String(totalUpgradeEUR));
     }
     return `/c/furnished-apartments-madrid?${params.toString()}`;
   }, [
@@ -153,12 +160,15 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
     selectedDesk,
     selectedKeyboardMouse,
     selectedAddons,
+    defaultMonitor,
+    defaultChair,
+    defaultDesk,
+    defaultKm,
     totalUpgradeEUR,
   ]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-10 items-start">
-      {/* Left Column: Interactive Hardware Options */}
       <div className="flex-1 w-full min-w-0">
         <BuilderHardwarePicker
           components={components}
@@ -176,7 +186,6 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
         />
       </div>
 
-      {/* Right Column: Sticky Summary Card */}
       <div className="w-full lg:w-[360px] shrink-0">
         <BuilderSummaryCard
           totalUpgradeEUR={totalUpgradeEUR}
@@ -185,6 +194,7 @@ export function WorkstationBuilderContainer({ workstationData }: WorkstationBuil
           onReset={handleReset}
           onApplyProPreset={handleApplyProPreset}
           proPriceEUR={proPriceEUR}
+          isProPreset={isProPreset}
         />
       </div>
     </div>

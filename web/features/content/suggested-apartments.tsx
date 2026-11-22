@@ -3,6 +3,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { FormattedPrice } from '@/features/booking/formatted-price';
+import { normalizeImageSrc, slugifySegment } from '@/lib/format';
 import type { Property } from '@/lib/types';
 
 interface SuggestedApartmentsProps {
@@ -10,21 +12,8 @@ interface SuggestedApartmentsProps {
   properties?: Property[];
 }
 
-function normalizeSrc(src: string): string {
-  if (!src) return '/seed/property/prop-madrid-1.webp';
-  return src.startsWith('/') ? src : `/${src}`;
-}
-
-function toCitySlug(cityName: string): string {
-  return cityName
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-');
-}
-
 export function SuggestedApartments({ city, properties = [] }: SuggestedApartmentsProps) {
-  const citySlug = toCitySlug(city || 'madrid');
+  const citySlug = slugifySegment(city || 'madrid');
   const countLabel = properties.length > 0 ? `${properties.length} Stays` : 'All Stays';
   const displayProperties = properties.slice(0, 2);
 
@@ -50,17 +39,16 @@ export function SuggestedApartments({ city, properties = [] }: SuggestedApartmen
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-6 border-t border-[var(--color-border-dark)]">
           {displayProperties.map((prop) => {
             const primaryImage = prop.images?.[0] || '/seed/property/prop-madrid-1.webp';
-            const priceMonthly = (prop.pricePerMonth / 100).toLocaleString('en-US');
 
             return (
               <Link
                 key={prop.id}
                 href={`/l/apartments/${prop.slug}`}
-                className="group flex gap-4 bg-[var(--color-bg-dark-surface)] hover:bg-[#333333] border border-[var(--color-border-dark)] rounded-xl p-3 transition-colors"
+                className="group flex gap-4 bg-[var(--color-bg-dark-surface)] hover:bg-[var(--color-bg-dark-elevated)] border border-[var(--color-border-dark)] rounded-xl p-3 transition-colors"
               >
                 <div className="relative w-24 h-24 rounded-lg overflow-hidden shrink-0 bg-neutral-800">
                   <Image
-                    src={normalizeSrc(primaryImage)}
+                    src={normalizeImageSrc(primaryImage, '/seed/property/prop-madrid-1.webp')}
                     alt={prop.title}
                     fill
                     sizes="96px"
@@ -84,7 +72,9 @@ export function SuggestedApartments({ city, properties = [] }: SuggestedApartmen
                     </h4>
                   </div>
                   <div className="text-xs font-medium text-white/90">
-                    <span className="font-bold text-white">${priceMonthly}</span>
+                    <span className="font-bold text-white">
+                      <FormattedPrice amountUSDCents={prop.pricePerMonth} />
+                    </span>
                     <span className="text-[var(--color-text-on-dark-muted)]"> / month</span>
                   </div>
                 </div>

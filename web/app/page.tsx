@@ -3,6 +3,8 @@ import { listLocations } from '@/lib/api/locations';
 import { listProperties } from '@/lib/api/properties';
 import { listVideos } from '@/lib/api/videos';
 import { listTravelGuides } from '@/lib/api/guides';
+import { getUtcOffsetDateString } from '@/lib/format';
+import { BOOKING_RULES } from '@/content/booking-rules';
 import { HeroSearch } from '@/features/home/hero-search';
 import { FeaturedApartments } from '@/features/home/featured-apartments';
 import { TopCities } from '@/features/home/top-cities';
@@ -11,34 +13,60 @@ import { WorkstationStrip } from '@/features/home/workstation-strip';
 import { CommunityReels } from '@/features/home/community-reels';
 import { GuideHighlights } from '@/features/home/guide-highlights';
 import { HomeFAQ } from '@/features/home/home-faq';
-import { UIStateShowcase } from '@/features/home/ui-state-showcase';
+
+const DEFAULT_HERO_MOVE_IN_OFFSET_DAYS = 14;
 
 export const metadata: Metadata = {
   title: 'NomadDesk — Furnished Apartments with Ergonomic Workstations for Monthly Rent',
   description:
     'Curated monthly furnished apartments equipped with dual 4K monitors, ergonomic executive seating, and verified high-speed fiber internet for digital nomads.',
+  alternates: { canonical: '/' },
+  openGraph: {
+    title: 'NomadDesk — Furnished Apartments with Ergonomic Workstations for Monthly Rent',
+    description:
+      'Curated monthly furnished apartments equipped with dual 4K monitors, ergonomic executive seating, and verified high-speed fiber internet for digital nomads.',
+    url: '/',
+    type: 'website',
+  },
 };
 
 export default async function HomePage() {
-  const [locations, properties, videos, featuredGuides, allGuides] = await Promise.all([
-    listLocations(),
-    listProperties({ featured: true }),
-    listVideos(),
-    listTravelGuides({ featured: true }),
-    listTravelGuides(),
-  ]);
+  const [locations, featuredProperties, allProperties, videos, featuredGuides, allGuides] =
+    await Promise.all([
+      listLocations(),
+      listProperties({ featured: true }),
+      listProperties(),
+      listVideos(),
+      listTravelGuides({ featured: true }),
+      listTravelGuides(),
+    ]);
 
-  // Fallback to general list if featured query returned fewer than 3
+  // Preserve Admin featuredPosition ordering at index 0 (AC-CMS-4); append non-featured only to fill grid
+  const featuredIds = new Set(featuredProperties.map((p) => p.id));
   const displayProperties =
-    properties.length >= 3 ? properties : await listProperties();
+    featuredProperties.length >= 3
+      ? featuredProperties
+      : [
+          ...featuredProperties,
+          ...allProperties.filter((p) => !featuredIds.has(p.id)),
+        ];
 
   const displayGuides =
     featuredGuides.length > 0 ? featuredGuides : allGuides.slice(0, 3);
 
+  const defaultMoveIn = getUtcOffsetDateString(DEFAULT_HERO_MOVE_IN_OFFSET_DAYS);
+  const defaultMoveOut = getUtcOffsetDateString(
+    DEFAULT_HERO_MOVE_IN_OFFSET_DAYS + BOOKING_RULES.minimumStayNights
+  );
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* 1. Hero Search Box */}
-      <HeroSearch locations={locations} />
+      <HeroSearch
+        locations={locations}
+        defaultMoveIn={defaultMoveIn}
+        defaultMoveOut={defaultMoveOut}
+      />
 
       {/* 2. Featured Apartments Grid */}
       <FeaturedApartments properties={displayProperties} />
@@ -60,9 +88,6 @@ export default async function HomePage() {
 
       {/* 8. FAQs Accordion */}
       <HomeFAQ />
-
-      {/* 9. UI States & Verification Showcase */}
-      <UIStateShowcase />
     </div>
   );
 }

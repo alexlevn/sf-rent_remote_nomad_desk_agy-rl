@@ -103,8 +103,10 @@ export function DestinationsDirectory({ locations }: DestinationsDirectoryProps)
       {/* Controls & Quick Search bar */}
       <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="text-sm text-[var(--color-text-on-light-muted)]">
-          Showing <strong className="text-[var(--color-text-on-light)] font-semibold">{totalFilteredCities} destinations</strong>{' '}
-          {selectedContinent === 'All' ? 'across 18 countries worldwide' : `in ${selectedContinent}`}
+          Showing <strong className="text-[var(--color-text-on-light)] font-semibold">{totalFilteredCities} {totalFilteredCities === 1 ? 'destination' : 'destinations'}</strong>{' '}
+          {selectedContinent === 'All'
+            ? `across ${allCountries.length} ${allCountries.length === 1 ? 'country' : 'countries'} worldwide`
+            : `in ${selectedContinent}`}
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
@@ -173,8 +175,9 @@ export function DestinationsDirectory({ locations }: DestinationsDirectoryProps)
             No destinations found
           </h3>
           <p className="text-sm text-[var(--color-text-on-light-muted)] max-w-md mx-auto mb-6">
-            We couldn&apos;t find any remote work destinations matching &ldquo;{searchQuery}&rdquo;.
-            Try checking the spelling or browse all countries.
+            {searchQuery.trim()
+              ? `We couldn't find any remote work destinations matching "${searchQuery.trim()}". Try checking the spelling or browse all countries.`
+              : `No remote work destinations are currently available in ${selectedContinent}.`}
           </p>
           <button
             type="button"

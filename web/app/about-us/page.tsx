@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   title: 'About Us | NomadDesk',
   description:
     'Learn how NomadDesk eliminates wobbly tables and spotty WiFi for remote professionals with certified monthly stays.',
+  alternates: {
+    canonical: '/about-us',
+  },
+  openGraph: {
+    title: 'About Us | NomadDesk',
+    description:
+      'Learn how NomadDesk eliminates wobbly tables and spotty WiFi for remote professionals with certified monthly stays.',
+    type: 'website',
+  },
 };
 
 export default function AboutUsPage() {

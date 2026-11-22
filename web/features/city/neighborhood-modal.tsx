@@ -20,15 +20,16 @@ export function NeighborhoodModal({
   onSelectNeighborhood,
 }: NeighborhoodModalProps) {
   useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = originalOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen, onClose]);
@@ -61,7 +62,7 @@ export function NeighborhoodModal({
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+            className="min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
           >
             ✕
           </button>
@@ -88,7 +89,9 @@ export function NeighborhoodModal({
 
           {/* Neighborhood List */}
           {neighborhoods.map((n) => {
-            const isSelected = selectedNeighborhood === n.name;
+            const isSelected =
+              selectedNeighborhood !== null &&
+              selectedNeighborhood.toLowerCase() === n.name.toLowerCase();
             return (
               <button
                 key={n.name}
@@ -133,7 +136,7 @@ export function NeighborhoodModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-full bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-dark)] transition-colors shadow-sm cursor-pointer"
+            className="px-5 py-2 rounded-full bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-sm cursor-pointer"
           >
             Done
           </button>

@@ -5,23 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { getTravelGuideHref, normalizeImageSrc } from '@/lib/format';
 import type { TravelGuide } from '@/lib/types';
 
 interface TravelGuideDirectoryProps {
   guides: TravelGuide[];
-}
-
-function normalizeSrc(src: string): string {
-  if (!src || src.includes('placeholder')) return '/seed/guide/362.webp';
-  return src.startsWith('/') ? src : `/${src}`;
-}
-
-export function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-');
 }
 
 export function TravelGuideDirectory({ guides }: TravelGuideDirectoryProps) {
@@ -108,7 +96,7 @@ export function TravelGuideDirectory({ guides }: TravelGuideDirectoryProps) {
       {filteredGuides.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
           {filteredGuides.map((guide) => {
-            const detailHref = `/travel-guide/${slugify(guide.city)}/${slugify(guide.category)}/${guide.slug}`;
+            const detailHref = getTravelGuideHref(guide);
 
             return (
               <article
@@ -118,7 +106,7 @@ export function TravelGuideDirectory({ guides }: TravelGuideDirectoryProps) {
                 <div className="relative h-[180px] w-full overflow-hidden bg-neutral-100">
                   <Link href={detailHref} tabIndex={-1} aria-hidden="true" className="block w-full h-full relative">
                     <Image
-                      src={normalizeSrc(guide.image)}
+                      src={normalizeImageSrc(guide.image, '/seed/guide/362.webp')}
                       alt={guide.title}
                       fill
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"

@@ -5,20 +5,19 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { normalizeImageSrc } from '@/lib/format';
 import type { BlogPost } from '@/lib/types';
+
+const BLOG_PAGE_SIZE = 9;
 
 interface BlogDirectoryProps {
   posts: BlogPost[];
 }
 
-function normalizeSrc(src: string): string {
-  if (!src) return '/seed/blog/blog-1.webp';
-  return src.startsWith('/') ? src : `/${src}`;
-}
-
 export function BlogDirectory({ posts }: BlogDirectoryProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('All Posts');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Extract unique categories, ensuring standard categories exist
   const categories = useMemo(() => {
@@ -45,6 +44,23 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
     });
   }, [posts, selectedCategory, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredPosts.length / BLOG_PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedPosts = useMemo(() => {
+    const start = (safePage - 1) * BLOG_PAGE_SIZE;
+    return filteredPosts.slice(start, start + BLOG_PAGE_SIZE);
+  }, [filteredPosts, safePage]);
+
+  const handleCategoryChange = (cat: string) => {
+    setSelectedCategory(cat);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="w-full">
       {/* Category Filter Pills & Search Bar */}
@@ -54,7 +70,7 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
             type="button"
             role="tab"
             aria-selected={selectedCategory === 'All Posts'}
-            onClick={() => setSelectedCategory('All Posts')}
+            onClick={() => handleCategoryChange('All Posts')}
             className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
               selectedCategory === 'All Posts'
                 ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[var(--color-brand)] shadow-sm'
@@ -74,7 +90,7 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
                 type="button"
                 role="tab"
                 aria-selected={isSelected}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => handleCategoryChange(cat)}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer select-none ${
                   isSelected
                     ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[var(--color-brand)] shadow-sm'
@@ -92,7 +108,7 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Search articles..."
             aria-label="Search blog posts"
             className="w-full px-3 py-1.5 text-xs bg-white border border-[var(--color-border-light)] rounded-lg text-[var(--color-text-on-light)] placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
@@ -101,56 +117,89 @@ export function BlogDirectory({ posts }: BlogDirectoryProps) {
       </div>
 
       {/* Blog Cards Grid */}
-      {filteredPosts.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-          {filteredPosts.map((post) => {
-            const detailHref = `/blog/${post.slug}`;
+      {paginatedPosts.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+            {paginatedPosts.map((post) => {
+              const detailHref = `/blog/${post.slug}`;
 
-            return (
-              <article
-                key={post.id}
-                className="group flex flex-col bg-white border border-[var(--color-border-light)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="relative h-[180px] w-full overflow-hidden bg-neutral-100">
-                  <Link href={detailHref} tabIndex={-1} aria-hidden="true" className="block w-full h-full relative">
-                    <Image
-                      src={normalizeSrc(post.image)}
-                      alt={post.title}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </Link>
-                </div>
+              return (
+                <article
+                  key={post.id}
+                  className="group flex flex-col bg-white border border-[var(--color-border-light)] rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="relative h-[180px] w-full overflow-hidden bg-neutral-100">
+                    <Link href={detailHref} tabIndex={-1} aria-hidden="true" className="block w-full h-full relative">
+                      <Image
+                        src={normalizeImageSrc(post.image, '/seed/blog/blog-1.webp')}
+                        alt={post.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </Link>
+                  </div>
 
-                <div className="p-5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="mb-2">
-                      <Badge variant="neutral" className="text-[11px]">
-                        {post.category}
-                      </Badge>
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="mb-2">
+                        <Badge variant="neutral" className="text-[11px]">
+                          {post.category}
+                        </Badge>
+                      </div>
+
+                      <h3 className="text-base font-bold text-[var(--color-text-on-light)] line-clamp-2 leading-snug mb-2 group-hover:text-[var(--color-brand)] transition-colors">
+                        <Link href={detailHref}>{post.title}</Link>
+                      </h3>
+
+                      <p className="text-xs text-[var(--color-text-on-light-muted)] line-clamp-2 leading-relaxed mb-4">
+                        {post.excerpt}
+                      </p>
                     </div>
 
-                    <h3 className="text-base font-bold text-[var(--color-text-on-light)] line-clamp-2 leading-snug mb-2 group-hover:text-[var(--color-brand)] transition-colors">
-                      <Link href={detailHref}>{post.title}</Link>
-                    </h3>
-
-                    <p className="text-xs text-[var(--color-text-on-light-muted)] line-clamp-2 leading-relaxed mb-4">
-                      {post.excerpt}
-                    </p>
+                    <div className="pt-3 border-t border-[var(--color-border-light)] flex items-center justify-between text-xs text-[var(--color-text-on-light-muted)]">
+                      <span className="font-medium text-[var(--color-text-on-light)] truncate max-w-[140px]">
+                        By {post.author}
+                      </span>
+                      <span>{post.readTime}</span>
+                    </div>
                   </div>
+                </article>
+              );
+            })}
+          </div>
 
-                  <div className="pt-3 border-t border-[var(--color-border-light)] flex items-center justify-between text-xs text-[var(--color-text-on-light-muted)]">
-                    <span className="font-medium text-[var(--color-text-on-light)] truncate max-w-[140px]">
-                      By {post.author}
-                    </span>
-                    <span>{post.readTime}</span>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+          {totalPages > 1 && (
+            <nav
+              aria-label="Blog pagination"
+              className="flex items-center justify-center gap-2 mb-16"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                pill
+                disabled={safePage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-xs font-medium text-[var(--color-text-on-light-muted)] px-3">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                pill
+                disabled={safePage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </nav>
+          )}
+        </>
       ) : (
         /* Empty State */
         <div className="text-center py-16 bg-white border border-dashed border-[var(--color-border-light)] rounded-2xl p-8 mb-16">

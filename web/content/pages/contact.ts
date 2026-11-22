@@ -5,6 +5,4 @@ export const CONTACT_PAGE_CONTENT = {
   formHeading: 'Contact Support',
   formDescription:
     'Need assistance with a reservation or custom enterprise relocation? Drop us a note.',
-  mailpitNotice:
-    'In development mode, outgoing inquiries are captured by local Mailpit at http://localhost:18188.',
 };

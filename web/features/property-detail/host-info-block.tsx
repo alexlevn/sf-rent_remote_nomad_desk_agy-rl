@@ -9,15 +9,13 @@ interface HostInfoBlockProps {
 }
 
 export function HostInfoBlock({ host, property }: HostInfoBlockProps) {
-  const displayName = host?.displayName?.trim() || 'Casa Urbana Stays';
+  const displayName = host?.displayName?.trim() || 'Verified NomadDesk Partner';
   const cities = host?.cities || property.city;
-  const portfolioSize = host?.portfolioSize || 12;
-  const memberSince = host?.createdAt
-    ? new Date(host.createdAt).getFullYear()
-    : 2024;
+  const portfolioSize = host?.portfolioSize ?? null;
+  const memberSince = host?.createdAt ? new Date(host.createdAt).getFullYear() : 2024;
   const bio =
     host?.bio ||
-    'Design-led furnished apartments in central Madrid and Barcelona, set up for long stays and focused work.';
+    `Verified furnished apartment partner operating in ${property.city}, equipped for monthly stays and focused remote work.`;
 
   const rawAvatar = typeof host?.avatar === 'string' ? host.avatar.trim() : '';
   const avatarSrc =
@@ -69,7 +67,9 @@ export function HostInfoBlock({ host, property }: HostInfoBlockProps) {
             </span>
           </div>
           <div className="text-xs text-[var(--color-text-on-light-muted)] mt-1">
-            Operating in {cities} · {portfolioSize} curated properties · Member since {memberSince}
+            Operating in {cities}
+            {portfolioSize ? ` · ${portfolioSize} curated properties` : ''} · Member since{' '}
+            {memberSince}
           </div>
         </div>
       </div>

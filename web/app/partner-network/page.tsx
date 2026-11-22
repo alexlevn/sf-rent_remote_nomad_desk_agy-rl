@@ -9,6 +9,14 @@ import { PARTNER_NETWORK_CONTENT } from '@/content/pages/partner-network';
 export const metadata: Metadata = {
   title: PARTNER_NETWORK_CONTENT.metadata.title,
   description: PARTNER_NETWORK_CONTENT.metadata.description,
+  alternates: {
+    canonical: '/partner-network',
+  },
+  openGraph: {
+    title: PARTNER_NETWORK_CONTENT.metadata.title,
+    description: PARTNER_NETWORK_CONTENT.metadata.description,
+    type: 'website',
+  },
 };
 
 export default function PartnerNetworkPage() {
@@ -19,7 +27,6 @@ export default function PartnerNetworkPage() {
     steps,
     faqsSection,
     faqs,
-    reviewSlaText,
   } = PARTNER_NETWORK_CONTENT;
 
   return (
@@ -149,35 +156,6 @@ export default function PartnerNetworkPage() {
                 </div>
               </details>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 5. UI States & Verification Block */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 mt-16">
-        <div className="bg-neutral-900/90 rounded-2xl border border-[var(--color-border-dark)] p-5 text-xs text-neutral-300">
-          <div className="font-bold text-white uppercase tracking-wider mb-1 flex items-center justify-between">
-            <span>📋 UI States &amp; Partner Verification Standard</span>
-            <Badge variant="accent" pill>
-              Screen #19 / #20
-            </Badge>
-          </div>
-          <p className="text-[var(--color-text-on-dark-muted)] mb-3">
-            The partner network directly connects to the Host Application intake flow (<Link href="/host/apply" className="text-[var(--color-brand)] hover:underline">/host/apply</Link>).
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
-            <div className="p-3 bg-neutral-800/60 rounded-xl border border-neutral-700">
-              <span className="font-semibold text-white block mb-0.5">AC-HOST-1</span>
-              <span>Submitting application transitions account to &quot;Application under review&quot; pending state.</span>
-            </div>
-            <div className="p-3 bg-neutral-800/60 rounded-xl border border-neutral-700">
-              <span className="font-semibold text-white block mb-0.5">AC-HOST-2</span>
-              <span>Unapproved guest accounts accessing host management routes are redirected to application status.</span>
-            </div>
-            <div className="p-3 bg-neutral-800/60 rounded-xl border border-neutral-700">
-              <span className="font-semibold text-white block mb-0.5">Review SLA</span>
-              <span>{reviewSlaText}</span>
-            </div>
           </div>
         </div>
       </section>

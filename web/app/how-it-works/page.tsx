@@ -1,26 +1,36 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { ChevronDown } from 'lucide-react';
 import { HOW_IT_WORKS_CONTENT } from '@/content/pages/how-it-works';
 
 export const metadata: Metadata = {
   title: 'How NomadDesk Works | Monthly Furnished Rentals',
   description:
     'Discover how NomadDesk delivers turnkey monthly stays with dual 4K workstations and verified fiber internet for remote workers.',
+  alternates: {
+    canonical: '/how-it-works',
+  },
+  openGraph: {
+    title: 'How NomadDesk Works | Monthly Furnished Rentals',
+    description:
+      'Discover how NomadDesk delivers turnkey monthly stays with dual 4K workstations and verified fiber internet for remote workers.',
+    type: 'website',
+  },
 };
 
 export default function HowItWorksPage() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Dark Header Banner */}
-      <section className="bg-[#1a1510] text-white py-16 sm:py-20 text-center">
+      <section className="bg-[var(--color-bg-dark-hero)] text-white py-16 sm:py-20 text-center">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[rgba(217,72,41,0.3)] mb-3">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[color-mix(in_srgb,var(--color-brand)_30%,transparent)] mb-3">
             {HOW_IT_WORKS_CONTENT.badge}
           </span>
           <h1 className="text-3xl sm:text-4xl lg:text-[40px] lg:leading-[44px] font-bold tracking-tight text-white mb-4">
             {HOW_IT_WORKS_CONTENT.title}
           </h1>
-          <p className="text-base sm:text-lg text-[#d1c8be] leading-relaxed">
+          <p className="text-base sm:text-lg text-[var(--color-text-on-dark-subtle)] leading-relaxed">
             {HOW_IT_WORKS_CONTENT.subtitle}
           </p>
         </div>
@@ -73,6 +83,34 @@ export default function HowItWorksPage() {
             ))}
           </div>
         </div>
+
+        {/* FAQ Accordion */}
+        <section className="max-w-4xl mx-auto mb-16">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-on-light)] mb-2">
+              Common Questions
+            </h2>
+            <p className="text-sm text-[var(--color-text-on-light-muted)]">
+              Everything you need to know before reserving your remote-ready home.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {HOW_IT_WORKS_CONTENT.faqs.map((faq) => (
+              <details
+                key={faq.q}
+                className="group bg-white border border-[var(--color-border-light)] rounded-xl p-5 open:border-[var(--color-brand)] transition-colors"
+              >
+                <summary className="flex items-center justify-between cursor-pointer list-none font-semibold text-sm text-[var(--color-text-on-light)]">
+                  <span>{faq.q}</span>
+                  <ChevronDown className="w-4 h-4 text-[var(--color-text-on-light-muted)] group-open:rotate-180 transition-transform shrink-0 ml-4" />
+                </summary>
+                <p className="mt-3 pt-3 border-t border-[var(--color-border-light)] text-sm text-[var(--color-text-on-light-muted)] leading-relaxed">
+                  {faq.a}
+                </p>
+              </details>
+            ))}
+          </div>
+        </section>
 
         {/* CTA Banner */}
         <div className="text-center bg-gradient-to-r from-neutral-900 to-neutral-800 text-white rounded-3xl p-8 sm:p-12 shadow-lg">

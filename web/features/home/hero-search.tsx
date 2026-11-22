@@ -1,39 +1,53 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HOME_CONTENT } from '@/content/home';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { diffUtcNights, slugifySegment } from '@/lib/format';
 import type { Location } from '@/lib/types';
-
-const MIN_STAY_DAYS = 30;
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
 
 interface HeroSearchProps {
   locations: Location[];
+  defaultMoveIn?: string;
+  defaultMoveOut?: string;
 }
 
-export function HeroSearch({ locations }: HeroSearchProps) {
+export function HeroSearch({
+  locations,
+  defaultMoveIn = '2026-12-01',
+  defaultMoveOut = '2026-12-31',
+}: HeroSearchProps) {
   const router = useRouter();
-  const [city, setCity] = useState('madrid');
-  const [moveIn, setMoveIn] = useState('2026-12-01');
-  const [moveOut, setMoveOut] = useState('2026-12-31');
+  const pathname = usePathname();
+  const initialCitySlug =
+    locations.find((loc) => loc.slug === 'madrid')?.slug ?? locations[0]?.slug ?? 'madrid';
+
+  const [city, setCity] = useState(initialCitySlug);
+  const [moveIn, setMoveIn] = useState(defaultMoveIn);
+  const [moveOut, setMoveOut] = useState(defaultMoveOut);
   const [warning, setWarning] = useState<string | null>(null);
   const isNavigatingRef = useRef(false);
 
+  // Reset navigation guard on route change or BFCache restore
+  useEffect(() => {
+    isNavigatingRef.current = false;
+    const handlePageShow = () => {
+      isNavigatingRef.current = false;
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, [pathname]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (isNavigatingRef.current) return;
 
     if (moveIn && moveOut) {
-      const start = new Date(moveIn);
-      const end = new Date(moveOut);
-      const diffTime = end.getTime() - start.getTime();
-      const diffDays = Math.ceil(diffTime / MILLISECONDS_PER_DAY);
-
-      if (diffDays < MIN_STAY_DAYS) {
+      const diffDays = diffUtcNights(moveIn, moveOut);
+      if (diffDays < BOOKING_RULES.minimumStayNights) {
         setWarning(HOME_CONTENT.hero.dateWarning);
         return;
       }
@@ -46,7 +60,7 @@ export function HeroSearch({ locations }: HeroSearchProps) {
     if (moveIn) query.set('move_in', moveIn);
     if (moveOut) query.set('move_out', moveOut);
 
-    const targetCity = city.trim() ? city.toLowerCase().replace(/\s+/g, '-') : 'madrid';
+    const targetCity = slugifySegment(city) || 'madrid';
     const qs = query.toString();
     const destinationUrl = `/c/furnished-apartments-${targetCity}${qs ? `?${qs}` : ''}`;
 
@@ -71,10 +85,16 @@ export function HeroSearch({ locations }: HeroSearchProps) {
 
         {/* Hero Search Box Widget */}
         <div className="max-w-4xl mx-auto bg-neutral-900/90 border border-neutral-700/80 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl backdrop-blur-md">
-          <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-stretch md:items-end">
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col md:flex-row gap-4 items-stretch md:items-end"
+          >
             {/* Destination select */}
             <div className="flex-1 min-w-[200px]">
-              <label htmlFor="hero-destination" className="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider">
+              <label
+                htmlFor="hero-destination"
+                className="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider"
+              >
                 {HOME_CONTENT.hero.destinationLabel}
               </label>
               <select
@@ -95,19 +115,17 @@ export function HeroSearch({ locations }: HeroSearchProps) {
                     </option>
                   ))
                 ) : (
-                  <>
-                    <option value="madrid">Madrid, Spain (8 stays)</option>
-                    <option value="barcelona">Barcelona, Spain (94 stays)</option>
-                    <option value="buenos-aires">Buenos Aires, Argentina (12 stays)</option>
-                    <option value="lima">Lima, Peru (15 stays)</option>
-                  </>
+                  <option value="madrid">Madrid, Spain</option>
                 )}
               </select>
             </div>
 
             {/* Move-in date */}
             <div className="flex-1 min-w-[150px]">
-              <label htmlFor="hero-move-in" className="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider">
+              <label
+                htmlFor="hero-move-in"
+                className="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider"
+              >
                 {HOME_CONTENT.hero.moveInLabel}
               </label>
               <input
@@ -125,7 +143,10 @@ export function HeroSearch({ locations }: HeroSearchProps) {
 
             {/* Move-out date */}
             <div className="flex-1 min-w-[150px]">
-              <label htmlFor="hero-move-out" className="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider">
+              <label
+                htmlFor="hero-move-out"
+                className="block text-xs font-semibold text-neutral-400 mb-1.5 uppercase tracking-wider"
+              >
                 {HOME_CONTENT.hero.moveOutLabel}
               </label>
               <input
@@ -160,10 +181,10 @@ export function HeroSearch({ locations }: HeroSearchProps) {
               role="alert"
               className="mt-4 bg-red-950/60 border border-red-800/80 rounded-xl p-3 text-xs sm:text-sm text-red-200 flex items-start gap-2"
             >
-              <span className="font-bold text-red-400">⚠️</span>
-              <div>
-                <strong>Minimum 30 Nights Required:</strong> NomadDesk caters to monthly stays. Please select at least 30 consecutive nights.
-              </div>
+              <span className="font-bold text-red-400" aria-hidden="true">
+                ⚠️
+              </span>
+              <div>{warning}</div>
             </div>
           )}
         </div>

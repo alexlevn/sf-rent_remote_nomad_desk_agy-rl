@@ -41,4 +41,18 @@ export const HOW_IT_WORKS_CONTENT = {
       description: `Extend your stay directly in your guest portal up to ${BOOKING_RULES.freeCancelDays} days before checkout.`,
     },
   ],
+  faqs: [
+    {
+      q: 'What is included in every monthly rental?',
+      a: `Every apartment includes utilities, verified high-speed fiber WiFi, and a Comfort Base ergonomic workstation ready on day one for stays of ${BOOKING_RULES.minimumStayNights}+ nights.`,
+    },
+    {
+      q: 'How does host confirmation work?',
+      a: `Instant Book properties confirm immediately. Request-to-Book hosts have ${BOOKING_RULES.respondHours} hours to review and confirm your stay, and your card authorization is only captured once approved.`,
+    },
+    {
+      q: 'Can I cancel or adjust my reservation?',
+      a: `You can cancel for a full refund at least ${BOOKING_RULES.freeCancelDays} days before check-in directly from your Guest Portal.`,
+    },
+  ],
 };

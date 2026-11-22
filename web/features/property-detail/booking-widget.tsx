@@ -1,23 +1,25 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { Calendar as CalendarIcon, AlertCircle } from 'lucide-react';
 import { useCurrency } from '@/context/currency-context';
 import { calculateBookingTotal } from '@/lib/pricing';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { diffUtcNights } from '@/lib/format';
 import { CalendarPicker } from './calendar-picker';
 import type { BlockedDate, Property, Reservation } from '@/lib/types';
 
 const PRO_UPGRADE_MONTHLY_EUR_CENTS = 15000;
-const DEFAULT_MOVE_IN_OFFSET_DAYS = 90;
-const DEFAULT_MOVE_OUT_OFFSET_DAYS = 120;
-const DEFAULT_MIN_STAY_NIGHTS = 30;
 
 interface BookingWidgetProps {
   property: Property;
   blockedDates?: BlockedDate[];
   reservations?: Reservation[];
   proUpgradePriceEUR?: number;
+  defaultMoveIn: string;
+  defaultMoveOut: string;
+  initialWorkstation?: 'comfort' | 'pro';
 }
 
 export function BookingWidget({
@@ -25,78 +27,66 @@ export function BookingWidget({
   blockedDates = [],
   reservations = [],
   proUpgradePriceEUR,
+  defaultMoveIn,
+  defaultMoveOut,
+  initialWorkstation = 'comfort',
 }: BookingWidgetProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { formatPrice, rates } = useCurrency();
   const isSubmittingRef = useRef(false);
 
-  // Default initial dates: 90 days out to 120 days out (30 nights)
-  const defaultDates = useMemo(() => {
-    const dIn = new Date();
-    dIn.setDate(dIn.getDate() + DEFAULT_MOVE_IN_OFFSET_DAYS);
-    const dOut = new Date();
-    dOut.setDate(dOut.getDate() + DEFAULT_MOVE_OUT_OFFSET_DAYS);
-    return {
-      moveIn: dIn.toISOString().slice(0, 10),
-      moveOut: dOut.toISOString().slice(0, 10),
-    };
-  }, []);
-
-  const [moveIn, setMoveIn] = useState<string>(defaultDates.moveIn);
-  const [moveOut, setMoveOut] = useState<string>(defaultDates.moveOut);
-  const [workstationSetup, setWorkstationSetup] = useState<'comfort' | 'pro'>('comfort');
+  const [moveIn, setMoveIn] = useState<string>(defaultMoveIn);
+  const [moveOut, setMoveOut] = useState<string>(defaultMoveOut);
+  const [workstationSetup, setWorkstationSetup] = useState<'comfort' | 'pro'>(initialWorkstation);
   const [showCalendar, setShowCalendar] = useState(false);
 
-  const minNights = property.minimumStayNights || DEFAULT_MIN_STAY_NIGHTS;
+  // Reset navigation lock when returning to this page via Back/BFCache
+  useEffect(() => {
+    isSubmittingRef.current = false;
+    const handlePageShow = () => {
+      isSubmittingRef.current = false;
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, [pathname]);
 
-  // Calculate nights
+  const minNights = Math.max(
+    property.minimumStayNights || BOOKING_RULES.minimumStayNights,
+    BOOKING_RULES.minimumStayNights
+  );
+
   const nights = useMemo(() => {
     if (!moveIn || !moveOut) return 0;
-    const inDate = new Date(moveIn);
-    const outDate = new Date(moveOut);
-    const diffMs = outDate.getTime() - inDate.getTime();
-    const n = Math.round(diffMs / (1000 * 3600 * 24));
-    return n > 0 ? n : 0;
+    const diff = diffUtcNights(moveIn, moveOut);
+    return diff > 0 ? diff : 0;
   }, [moveIn, moveOut]);
 
-  // Check if dates conflict with blocked dates or active reservations
+  // Lexicographical YYYY-MM-DD comparison avoids local timezone off-by-one bugs
   const isConflict = useMemo(() => {
-    if (!moveIn || !moveOut) return false;
+    if (!moveIn || !moveOut || moveOut <= moveIn) return false;
 
-    // Check blocked dates
-    const hasBlocked = blockedDates.some(
-      (b) => new Date(moveIn) < new Date(b.endDate) && new Date(moveOut) > new Date(b.startDate)
-    );
+    const hasBlocked = blockedDates.some((b) => moveIn < b.endDate && moveOut > b.startDate);
     if (hasBlocked) return true;
 
-    // Check active reservations
-    const hasReservation = reservations.some(
+    return reservations.some(
       (r) =>
         (r.status === 'confirmed' || r.status === 'pending') &&
-        new Date(moveIn) < new Date(r.moveOutDate) &&
-        new Date(moveOut) > new Date(r.moveInDate)
+        moveIn < r.moveOutDate &&
+        moveOut > r.moveInDate
     );
-    return hasReservation;
   }, [moveIn, moveOut, blockedDates, reservations]);
 
   const isInvalidNights = nights < minNights;
   const isDateUnavailable = isConflict || isInvalidNights;
 
-  // Workstation add-on EUR cents
   const proMonthlyCents = proUpgradePriceEUR ?? PRO_UPGRADE_MONTHLY_EUR_CENTS;
-  const workstationEURCents =
-    workstationSetup === 'pro' ? proMonthlyCents : 0;
+  const workstationEURCents = workstationSetup === 'pro' ? proMonthlyCents : 0;
 
-  // Calculate pricing breakdown in real-time (AC-DETAIL-2)
   const pricing = useMemo(() => {
+    if (nights < minNights) return null;
     try {
-      const validNights = nights > 0 ? nights : minNights;
-      return calculateBookingTotal(
-        property.pricePerMonth,
-        validNights,
-        workstationEURCents,
-        rates
-      );
+      return calculateBookingTotal(property.pricePerMonth, nights, workstationEURCents, rates);
     } catch {
       return null;
     }
@@ -119,7 +109,6 @@ export function BookingWidget({
     router.push(checkoutUrl);
   };
 
-  // CTA button label per AC-DETAIL-5
   const ctaButtonLabel = property.isDirectBooking ? 'Book now' : 'Request to book';
 
   return (
@@ -135,7 +124,7 @@ export function BookingWidget({
           </span>
           <span className="text-xs text-[var(--color-text-on-light-muted)]"> / month</span>
         </div>
-        <span className="badge badge-neutral text-xs px-2.5 py-0.5 rounded-full font-medium bg-neutral-100 text-neutral-700">
+        <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-neutral-100 text-neutral-700">
           {minNights}-Night Min
         </span>
       </div>
@@ -143,12 +132,16 @@ export function BookingWidget({
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Date Selector Row */}
         <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5">
-            Check-in / Check-out
-          </label>
           <div className="grid grid-cols-2 gap-2">
             <div>
+              <label
+                htmlFor="booking-move-in"
+                className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
+              >
+                Check-in
+              </label>
               <input
+                id="booking-move-in"
                 type="date"
                 value={moveIn}
                 onChange={(e) => setMoveIn(e.target.value)}
@@ -158,7 +151,14 @@ export function BookingWidget({
               />
             </div>
             <div>
+              <label
+                htmlFor="booking-move-out"
+                className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
+              >
+                Check-out
+              </label>
               <input
+                id="booking-move-out"
                 type="date"
                 value={moveOut}
                 onChange={(e) => setMoveOut(e.target.value)}
@@ -171,7 +171,7 @@ export function BookingWidget({
 
           <div className="flex justify-between items-center mt-1.5">
             <span className="text-[11px] text-[var(--color-text-on-light-muted)]">
-              {nights > 0 ? `${nights} nights selected` : 'Please select dates'}
+              {nights > 0 ? `${nights} nights selected` : 'Select valid check-in & check-out dates'}
             </span>
             <button
               type="button"
@@ -198,13 +198,14 @@ export function BookingWidget({
           </div>
         )}
 
-        {/* Validation Warning Alert */}
+        {/* Validation Warning Alerts */}
         {isConflict && (
           <div
             data-testid="date-conflict-alert"
-            className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2"
+            role="alert"
+            className="p-3 bg-[var(--color-error-bg)] border border-[var(--color-error-border)] rounded-lg text-xs text-[var(--color-error-text)] flex items-start gap-2"
           >
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+            <AlertCircle className="w-4 h-4 shrink-0 text-[var(--color-error)] mt-0.5" />
             <div>
               <strong>Dates Already Booked</strong>
               <p className="mt-0.5 text-[11px]">
@@ -214,9 +215,12 @@ export function BookingWidget({
           </div>
         )}
 
-        {nights > 0 && nights < minNights && !isConflict && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+        {isInvalidNights && !isConflict && (
+          <div
+            role="alert"
+            className="p-3 bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] rounded-lg text-xs text-[var(--color-warning-text)] flex items-start gap-2"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 text-[var(--color-warning)] mt-0.5" />
             <div>
               <strong>Minimum Stay Required</strong>
               <p className="mt-0.5 text-[11px]">
@@ -228,16 +232,20 @@ export function BookingWidget({
 
         {/* Workstation Setup Dropdown */}
         <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5">
+          <label
+            htmlFor="booking-workstation-select"
+            className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
+          >
             Workstation Setup
           </label>
           <select
+            id="booking-workstation-select"
             value={workstationSetup}
             onChange={(e) => setWorkstationSetup(e.target.value as 'comfort' | 'pro')}
             className="w-full text-xs p-2.5 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)] cursor-pointer"
             data-testid="workstation-select"
           >
-            <option value="comfort">Comfort Base (Included - $0)</option>
+            <option value="comfort">Comfort Base (Included - {formatPrice(0)})</option>
             <option value="pro">
               Pro Upgrade (+€{Math.round(proMonthlyCents / 100)}/mo: Herman Miller + 4K Ultrawide)
             </option>
@@ -245,7 +253,7 @@ export function BookingWidget({
         </div>
 
         {/* Real-time Price Breakdown Calculation (AC-DETAIL-2) */}
-        {pricing && (
+        {pricing ? (
           <div
             data-testid="price-breakdown"
             className="border-t border-b border-[var(--color-border-light)] py-3 my-3 space-y-2 text-xs"
@@ -256,15 +264,19 @@ export function BookingWidget({
             </div>
             <div className="flex justify-between text-[var(--color-text-on-light)]">
               <span>Workstation Setup</span>
-              <span className={workstationSetup === 'pro' ? 'text-[var(--color-brand)] font-medium' : ''}>
+              <span
+                className={
+                  workstationSetup === 'pro' ? 'text-[var(--color-brand)] font-medium' : ''
+                }
+              >
                 {pricing.workstationFeeUSD > 0
                   ? formatPrice(pricing.workstationFeeUSD, { showCents: true })
-                  : '$0.00'}
+                  : formatPrice(0, { showCents: true })}
               </span>
             </div>
             <div className="flex justify-between text-[var(--color-text-on-light-muted)]">
-              <span>Platform Service Fee (10%)</span>
-              <span className="font-medium text-emerald-600">Included</span>
+              <span>Platform Service Fee ({BOOKING_RULES.commissionPercent}%)</span>
+              <span className="font-medium text-[var(--color-success)]">Included</span>
             </div>
             <div className="flex justify-between font-bold text-sm text-[var(--color-text-on-light)] pt-2 border-t border-neutral-100">
               <span>Total Due</span>
@@ -275,6 +287,10 @@ export function BookingWidget({
                 {formatPrice(pricing.totalAmountUSD, { showCents: true })}
               </span>
             </div>
+          </div>
+        ) : (
+          <div className="border-t border-b border-[var(--color-border-light)] py-3 my-3 text-xs text-[var(--color-text-on-light-muted)] text-center">
+            Select at least {minNights} consecutive nights to see total due.
           </div>
         )}
 
@@ -288,11 +304,10 @@ export function BookingWidget({
           {ctaButtonLabel} →
         </button>
 
-        {/* Subtext info */}
         <p className="text-[11px] text-[var(--color-text-on-light-muted)] text-center leading-normal">
           {property.isDirectBooking
             ? 'Instant confirmation. Your card is authorized now and charged when the stay is confirmed.'
-            : "You won't be charged until the host accepts your request within 48 hours."}
+            : `You won't be charged until the host accepts your request within ${BOOKING_RULES.respondHours} hours.`}
         </p>
       </form>
     </div>

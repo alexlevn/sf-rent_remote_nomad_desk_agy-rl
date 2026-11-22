@@ -21,9 +21,13 @@ interface AmenitiesListProps {
 }
 
 export function AmenitiesList({ property }: AmenitiesListProps) {
+  const wifiSpeed = property.workstation?.wifiSpeed;
   const allAmenities = [
     {
-      label: `High-Speed Fiber WiFi (${property.workstation?.wifiSpeed || 600} Mbps)`,
+      label:
+        wifiSpeed && wifiSpeed > 0
+          ? `High-Speed Fiber WiFi (${wifiSpeed} Mbps)`
+          : 'High-Speed Fiber WiFi',
       icon: Wifi,
       available: true,
     },

@@ -1,11 +1,19 @@
 import type { Metadata } from 'next';
+import { BOOKING_RULES } from '@/content/booking-rules';
 import { FAQ_PAGE_CONTENT } from '@/content/pages/faq';
 import { FAQAccordion } from '@/features/faq/faq-accordion';
 
 export const metadata: Metadata = {
   title: 'Frequently Asked Questions | NomadDesk',
-  description:
-    'Answers regarding 30-night minimum stays, ergonomic workstation tiers, payment authorization, and flexible 14-day cancellation policies.',
+  description: `Answers regarding ${BOOKING_RULES.minimumStayNights}-night minimum stays, ergonomic workstation tiers, payment authorization, and flexible ${BOOKING_RULES.freeCancelDays}-day cancellation policies.`,
+  alternates: {
+    canonical: '/faq',
+  },
+  openGraph: {
+    title: 'Frequently Asked Questions | NomadDesk',
+    description: `Answers regarding ${BOOKING_RULES.minimumStayNights}-night minimum stays, ergonomic workstation tiers, payment authorization, and flexible ${BOOKING_RULES.freeCancelDays}-day cancellation policies.`,
+    type: 'website',
+  },
 };
 
 export default function FAQPage() {

@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react';
+import { normalizeImageSrc } from '@/lib/format';
 
 interface ImageGalleryProps {
   images: string[];
@@ -13,18 +14,16 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
   const [modalIndex, setModalIndex] = useState<number | null>(null);
   const [mobileIndex, setMobileIndex] = useState(0);
 
-  // Normalize image URLs
-  const normalizeSrc = (src: string) => (src.startsWith('/') ? src : `/${src}`);
-  
-  // Ensure we have at least 5 images for the grid
-  const rawList = images.length > 0 ? images : ['/seed/property/prop-madrid-1.webp'];
-  const galleryImages = [...rawList];
-  while (galleryImages.length < 5) {
-    galleryImages.push(rawList[galleryImages.length % rawList.length]);
+  const uniquePhotos =
+    images && images.length > 0 ? images : ['/seed/property/prop-madrid-1.webp'];
+  // Visual desktop grid uses up to 5 slots; lightbox always shows real photos without artificial duplicates
+  const desktopGridSlots = [...uniquePhotos];
+  while (desktopGridSlots.length < 5) {
+    desktopGridSlots.push(uniquePhotos[desktopGridSlots.length % uniquePhotos.length]);
   }
 
   const openModal = (index: number) => {
-    setModalIndex(index);
+    setModalIndex(index % uniquePhotos.length);
   };
 
   const closeModal = () => {
@@ -33,53 +32,56 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
 
   const nextImage = () => {
     if (modalIndex !== null) {
-      setModalIndex((modalIndex + 1) % galleryImages.length);
+      setModalIndex((modalIndex + 1) % uniquePhotos.length);
     }
   };
 
   const prevImage = () => {
     if (modalIndex !== null) {
-      setModalIndex((modalIndex - 1 + galleryImages.length) % galleryImages.length);
+      setModalIndex((modalIndex - 1 + uniquePhotos.length) % uniquePhotos.length);
     }
   };
 
-  // Keyboard navigation for modal
-  React.useEffect(() => {
+  // Keyboard navigation and body scroll lock for lightbox modal
+  useEffect(() => {
     if (modalIndex === null) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setModalIndex(null);
       }
       if (e.key === 'ArrowRight') {
-        setModalIndex((curr) =>
-          curr !== null ? (curr + 1) % galleryImages.length : null
-        );
+        setModalIndex((curr) => (curr !== null ? (curr + 1) % uniquePhotos.length : null));
       }
       if (e.key === 'ArrowLeft') {
         setModalIndex((curr) =>
-          curr !== null
-            ? (curr - 1 + galleryImages.length) % galleryImages.length
-            : null
+          curr !== null ? (curr - 1 + uniquePhotos.length) % uniquePhotos.length : null
         );
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [modalIndex, galleryImages.length]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [modalIndex, uniquePhotos.length]);
 
   return (
     <>
-      {/* Desktop Gallery Grid (5-photo layout measured from design/l-apartments-detail.html) */}
+      {/* Desktop Gallery Grid (5-photo layout) */}
       <div className="hidden md:grid grid-cols-[2fr_1fr_1fr] grid-rows-2 gap-3 h-[380px] rounded-2xl overflow-hidden mb-8 shadow-xs">
-        {/* Main Photo (Row span 2) */}
-        <div
-          className="relative row-span-2 cursor-pointer group bg-neutral-100 overflow-hidden"
+        <button
+          type="button"
           onClick={() => openModal(0)}
+          aria-label={`View photo 1 of ${uniquePhotos.length} for ${title}`}
+          className="relative row-span-2 cursor-pointer group bg-neutral-100 overflow-hidden text-left border-0 p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-brand)]"
         >
           <Image
-            src={normalizeSrc(galleryImages[0])}
+            src={normalizeImageSrc(desktopGridSlots[0])}
             alt={`${title} - Photo 1`}
             fill
             priority
@@ -87,36 +89,34 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
             className="object-cover group-hover:scale-103 transition-transform duration-300"
           />
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-        </div>
+        </button>
 
-        {/* 4 Subsidiary Photos */}
-        {galleryImages.slice(1, 5).map((img, idx) => (
-          <div
-            key={idx}
-            className="relative cursor-pointer group bg-neutral-100 overflow-hidden"
-            onClick={() => openModal(idx + 1)}
-          >
-            <Image
-              src={normalizeSrc(img)}
-              alt={`${title} - Photo ${idx + 2}`}
-              fill
-              sizes="(max-width: 1024px) 25vw, 25vw"
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
+        {desktopGridSlots.slice(1, 5).map((img, idx) => (
+          <div key={idx} className="relative group bg-neutral-100 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => openModal(idx + 1)}
+              aria-label={`View photo ${((idx + 1) % uniquePhotos.length) + 1} of ${uniquePhotos.length} for ${title}`}
+              className="relative block w-full h-full cursor-pointer border-0 p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-brand)]"
+            >
+              <Image
+                src={normalizeImageSrc(img)}
+                alt={`${title} - Photo ${idx + 2}`}
+                fill
+                sizes="(max-width: 1024px) 25vw, 25vw"
+                className="object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/15 transition-colors" />
+            </button>
 
-            {/* "View all photos" button on last photo */}
             {idx === 3 && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openModal(4);
-                }}
-                className="absolute bottom-3 right-3 bg-neutral-900/80 hover:bg-neutral-950 text-white text-xs font-medium px-3 py-1.5 rounded-lg backdrop-blur-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                onClick={() => openModal(0)}
+                className="absolute bottom-3 right-3 z-10 bg-neutral-900/80 hover:bg-neutral-950 text-white text-xs font-medium px-3 py-1.5 rounded-lg backdrop-blur-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
-                <span>View all {galleryImages.length} photos</span>
+                <span>View all {uniquePhotos.length} photos</span>
               </button>
             )}
           </div>
@@ -125,38 +125,47 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
 
       {/* Mobile Photo Carousel */}
       <div className="md:hidden relative h-[260px] w-full rounded-2xl overflow-hidden mb-6 bg-neutral-100">
-        <Image
-          src={normalizeSrc(galleryImages[mobileIndex])}
-          alt={`${title} - Mobile Photo ${mobileIndex + 1}`}
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover cursor-pointer"
+        <button
+          type="button"
           onClick={() => openModal(mobileIndex)}
-        />
-        
-        {/* Controls & Badges */}
-        <div className="absolute top-3 right-3 bg-neutral-900/70 text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-xs font-medium">
-          {mobileIndex + 1} / {galleryImages.length}
+          aria-label={`Open full-screen photo ${mobileIndex + 1} of ${uniquePhotos.length}`}
+          className="relative block w-full h-full border-0 p-0 cursor-pointer"
+        >
+          <Image
+            src={normalizeImageSrc(uniquePhotos[mobileIndex])}
+            alt={`${title} - Photo ${mobileIndex + 1}`}
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+        </button>
+
+        <div className="absolute top-3 right-3 bg-neutral-900/70 text-white text-xs px-2.5 py-1 rounded-full backdrop-blur-xs font-medium pointer-events-none">
+          {mobileIndex + 1} / {uniquePhotos.length}
         </div>
 
-        {galleryImages.length > 1 && (
+        {uniquePhotos.length > 1 && (
           <>
             <button
               type="button"
-              onClick={() => setMobileIndex((prev) => (prev === 0 ? galleryImages.length - 1 : prev - 1))}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center text-sm backdrop-blur-xs"
+              onClick={() =>
+                setMobileIndex((prev) => (prev === 0 ? uniquePhotos.length - 1 : prev - 1))
+              }
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 min-h-10 min-w-10 rounded-full bg-black/60 text-white flex items-center justify-center text-sm backdrop-blur-xs cursor-pointer"
               aria-label="Previous photo"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
             <button
               type="button"
-              onClick={() => setMobileIndex((prev) => (prev === galleryImages.length - 1 ? 0 : prev + 1))}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center text-sm backdrop-blur-xs"
+              onClick={() =>
+                setMobileIndex((prev) => (prev === uniquePhotos.length - 1 ? 0 : prev + 1))
+              }
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-10 min-w-10 rounded-full bg-black/60 text-white flex items-center justify-center text-sm backdrop-blur-xs cursor-pointer"
               aria-label="Next photo"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-5 h-5" />
             </button>
           </>
         )}
@@ -168,26 +177,25 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
           className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 sm:p-6"
           role="dialog"
           aria-modal="true"
+          aria-label={`Photo gallery for ${title}`}
         >
-          {/* Top Bar */}
           <div className="flex justify-between items-center text-white z-10">
             <span className="text-sm font-medium text-neutral-300">
-              {modalIndex + 1} / {galleryImages.length} — {title}
+              {modalIndex + 1} / {uniquePhotos.length} — {title}
             </span>
             <button
               type="button"
               onClick={closeModal}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors text-white cursor-pointer"
+              className="inline-flex items-center justify-center min-h-10 min-w-10 p-2 rounded-full hover:bg-white/10 transition-colors text-white cursor-pointer"
               aria-label="Close gallery"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
-          {/* Centered Image Container */}
           <div className="relative flex-1 w-full max-w-5xl mx-auto my-4 flex items-center justify-center">
             <Image
-              src={normalizeSrc(galleryImages[modalIndex])}
+              src={normalizeImageSrc(uniquePhotos[modalIndex])}
               alt={`${title} - Photo ${modalIndex + 1}`}
               fill
               className="object-contain"
@@ -195,8 +203,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
               priority
             />
 
-            {/* Modal Navigation Buttons */}
-            {galleryImages.length > 1 && (
+            {uniquePhotos.length > 1 && (
               <>
                 <button
                   type="button"
@@ -218,23 +225,24 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
             )}
           </div>
 
-          {/* Bottom Thumbnails */}
           <div className="flex justify-center gap-2 overflow-x-auto py-2">
-            {galleryImages.map((thumb, idx) => (
+            {uniquePhotos.map((thumb, idx) => (
               <button
                 key={idx}
                 type="button"
+                aria-label={`View photo ${idx + 1}`}
                 onClick={() => setModalIndex(idx)}
-                className={`relative w-14 h-10 sm:w-16 sm:h-12 rounded-md overflow-hidden shrink-0 border-2 transition-all ${
+                className={`relative w-14 h-10 sm:w-16 sm:h-12 rounded-md overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
                   idx === modalIndex
                     ? 'border-white scale-105'
                     : 'border-transparent opacity-50 hover:opacity-100'
                 }`}
               >
                 <Image
-                  src={normalizeSrc(thumb)}
+                  src={normalizeImageSrc(thumb)}
                   alt={`Thumbnail ${idx + 1}`}
                   fill
+                  sizes="64px"
                   className="object-cover"
                 />
               </button>

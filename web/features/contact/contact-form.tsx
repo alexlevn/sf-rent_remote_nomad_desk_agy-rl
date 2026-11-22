@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-
-const MOCK_SUBMISSION_DELAY_MS = 400;
+import { useState, useRef } from 'react';
+import { submitContactInquiryAction } from '@/app/actions/contact-actions';
 
 interface ContactFormProps {
   id?: string;
@@ -20,37 +19,47 @@ export function ContactForm({
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isSubmittingRef = useRef(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingRef.current) return;
     if (!name.trim() || !email.trim() || !message.trim()) return;
 
     isSubmittingRef.current = true;
     setStatus('submitting');
+    setErrorMessage(null);
 
-    timerRef.current = setTimeout(() => {
-      setStatus('success');
+    try {
+      const result = await submitContactInquiryAction({
+        name: name.trim(),
+        email: email.trim(),
+        subject: subject.trim(),
+        message: message.trim(),
+      });
+      if (result.success) {
+        setStatus('success');
+      } else {
+        setErrorMessage(result.error || 'Unable to send your message right now.');
+        setStatus('idle');
+      }
+    } catch {
+      setErrorMessage('Unable to send your message right now. Please try again.');
+      setStatus('idle');
+    } finally {
       isSubmittingRef.current = false;
-    }, MOCK_SUBMISSION_DELAY_MS);
+    }
   };
 
   const handleReset = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
     isSubmittingRef.current = false;
     setName('');
     setEmail('');
     setSubject('');
     setMessage('');
+    setErrorMessage(null);
     setStatus('idle');
   };
 
@@ -79,18 +88,6 @@ export function ContactForm({
             Thank you, <strong>{name}</strong>. Our concierge team replies within one business day to{' '}
             <strong>{email}</strong>.
           </p>
-          <div className="text-xs text-[var(--color-text-on-light-muted)] bg-white/70 p-2.5 rounded-lg border border-[var(--color-success-border)]">
-            📧 In development mode: mock inquiry dispatched to local Mailpit (
-            <a
-              href="http://localhost:18188"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[var(--color-brand)] underline"
-            >
-              http://localhost:18188
-            </a>
-            ).
-          </div>
           <button
             type="button"
             onClick={handleReset}
@@ -101,6 +98,15 @@ export function ContactForm({
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {errorMessage && (
+            <div
+              role="alert"
+              className="p-3.5 rounded-xl bg-[var(--color-error-bg)] border border-[var(--color-error-border)] text-sm text-[var(--color-error-text)]"
+            >
+              {errorMessage}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="contact-name" className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5">
@@ -112,7 +118,7 @@ export function ContactForm({
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Alex Le"
+                placeholder="Your full name"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all"
               />
             </div>
@@ -126,7 +132,7 @@ export function ContactForm({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="alex@example.com"
+                placeholder="you@example.com"
                 className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all"
               />
             </div>

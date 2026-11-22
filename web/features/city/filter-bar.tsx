@@ -2,7 +2,20 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useCurrency } from '@/context/currency-context';
+import { cn } from '@/lib/utils';
 import type { CurrencyCode } from '@/lib/types';
+
+const MIN_WIFI_SPEED_MBPS = 300;
+
+const AMENITY_OPTIONS = [
+  { id: 'balcony', label: 'Balcony' },
+  { id: 'petFriendly', label: 'Pet Friendly' },
+  { id: 'pool', label: 'Swimming Pool' },
+  { id: 'gym', label: 'Fitness Gym' },
+  { id: 'kitchen', label: 'Full Kitchen' },
+  { id: 'laundry', label: 'In-unit Laundry' },
+  { id: 'terrace', label: 'Private Terrace' },
+] as const;
 
 export interface FilterState {
   bedrooms: number | null;
@@ -36,28 +49,39 @@ export function FilterBar({
 }: FilterBarProps) {
   const { currency, setCurrency } = useCurrency();
 
-  // Dropdown popover open states
   const [openDropdown, setOpenDropdown] = useState<'bedrooms' | 'price' | 'amenities' | null>(null);
-
-  // Price inputs state
   const [minPriceInput, setMinPriceInput] = useState<string>(
-    filters.minPrice ? String(Math.round(filters.minPrice / 100)) : ''
+    filters.minPrice !== null ? String(Math.round(filters.minPrice / 100)) : ''
   );
   const [maxPriceInput, setMaxPriceInput] = useState<string>(
-    filters.maxPrice ? String(Math.round(filters.maxPrice / 100)) : ''
+    filters.maxPrice !== null ? String(Math.round(filters.maxPrice / 100)) : ''
   );
 
   const filterBarRef = useRef<HTMLDivElement>(null);
 
-  // Close popovers on click outside
+  // Sync draft price inputs when URL filters are reset or changed externally
+  useEffect(() => {
+    setMinPriceInput(filters.minPrice !== null ? String(Math.round(filters.minPrice / 100)) : '');
+    setMaxPriceInput(filters.maxPrice !== null ? String(Math.round(filters.maxPrice / 100)) : '');
+  }, [filters.minPrice, filters.maxPrice]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (filterBarRef.current && !filterBarRef.current.contains(e.target as Node)) {
         setOpenDropdown(null);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenDropdown(null);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const hasActiveFilters =
@@ -72,21 +96,21 @@ export function FilterBar({
     filters.moveOut !== null;
 
   const handleBedroomsSelect = (count: number | null) => {
-    onFilterChange({
-      ...filters,
-      bedrooms: count,
-    });
+    onFilterChange({ ...filters, bedrooms: count });
     setOpenDropdown(null);
   };
 
   const handlePriceApply = () => {
-    const min = minPriceInput ? Math.max(0, parseInt(minPriceInput, 10) * 100) : null;
-    const max = maxPriceInput ? Math.max(0, parseInt(maxPriceInput, 10) * 100) : null;
-    onFilterChange({
-      ...filters,
-      minPrice: min,
-      maxPrice: max,
-    });
+    const parsedMin = minPriceInput.trim() ? Number.parseInt(minPriceInput, 10) : null;
+    const parsedMax = maxPriceInput.trim() ? Number.parseInt(maxPriceInput, 10) : null;
+    let min = parsedMin !== null && Number.isFinite(parsedMin) ? Math.max(0, parsedMin) * 100 : null;
+    let max = parsedMax !== null && Number.isFinite(parsedMax) ? Math.max(0, parsedMax) * 100 : null;
+    if (min !== null && max !== null && min > max) {
+      const swap = min;
+      min = max;
+      max = swap;
+    }
+    onFilterChange({ ...filters, minPrice: min, maxPrice: max });
     setOpenDropdown(null);
   };
 
@@ -95,58 +119,44 @@ export function FilterBar({
     const newAmenities = isChecked
       ? filters.amenities.filter((a) => a !== amenity)
       : [...filters.amenities, amenity];
-    onFilterChange({
-      ...filters,
-      amenities: newAmenities,
-    });
+    onFilterChange({ ...filters, amenities: newAmenities });
   };
 
   const handleInstantBookToggle = () => {
-    onFilterChange({
-      ...filters,
-      instantBook: !filters.instantBook,
-    });
+    onFilterChange({ ...filters, instantBook: !filters.instantBook });
   };
 
   const handleWifiToggle = () => {
-    onFilterChange({
-      ...filters,
-      minWifi: filters.minWifi ? null : 300,
-    });
+    onFilterChange({ ...filters, minWifi: filters.minWifi ? null : MIN_WIFI_SPEED_MBPS });
   };
 
-  const AMENITY_OPTIONS = [
-    { id: 'balcony', label: 'Balcony' },
-    { id: 'petFriendly', label: 'Pet Friendly' },
-    { id: 'pool', label: 'Swimming Pool' },
-    { id: 'gym', label: 'Fitness Gym' },
-    { id: 'kitchen', label: 'Full Kitchen' },
-    { id: 'laundry', label: 'In-unit Laundry' },
-    { id: 'terrace', label: 'Private Terrace' },
-  ];
+  const pillClass = (active: boolean) =>
+    cn(
+      'min-h-10 sm:min-h-8 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5',
+      active
+        ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)] font-bold'
+        : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-50'
+    );
 
   return (
     <div
       ref={filterBarRef}
-      className="bg-white border-b border-[var(--color-border-light)] py-3 px-4 sm:px-6 sticky top-0 sm:top-20 z-40 shadow-xs"
+      className="bg-white border-b border-[var(--color-border-light)] py-3 px-4 sm:px-6 sticky top-[74px] sm:top-20 z-40 shadow-xs"
     >
       <div className="max-w-[1728px] mx-auto flex items-center justify-between flex-wrap gap-3">
-        {/* Left: City Info & Currency Switcher (AC-LIST-3) */}
+        {/* Left: City Info & Currency Switcher */}
         <div className="flex items-center gap-3">
-          <span className="font-bold text-lg text-[var(--color-text-on-light)]">
-            {cityName}
-          </span>
-          <span className="badge badge-neutral px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-700">
+          <span className="font-bold text-lg text-[var(--color-text-on-light)]">{cityName}</span>
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-700">
             {filteredCount} {filteredCount === 1 ? 'Stay' : 'Stays'}
           </span>
           <div className="h-5 w-px bg-[var(--color-border-light)] mx-1 hidden sm:block" />
 
-          {/* Currency Selector (synced with CurrencyContext, updates prices immediately) */}
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
             aria-label="Currency selector"
-            className="select text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--color-border-light)] bg-white cursor-pointer hover:bg-neutral-50 text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+            className="min-h-10 sm:min-h-8 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--color-border-light)] bg-white cursor-pointer hover:bg-neutral-50 text-[var(--color-text-on-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
           >
             <option value="USD">USD ($)</option>
             <option value="EUR">EUR (€)</option>
@@ -154,27 +164,26 @@ export function FilterBar({
           </select>
         </div>
 
-        {/* Right: Filter Controls (AC-LIST-2, AC compliance) */}
+        {/* Right: Filter Controls */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Bedrooms Filter Dropdown (AC-LIST-2) */}
+          {/* Bedrooms Filter Dropdown */}
           <div className="relative">
             <button
               type="button"
+              aria-expanded={openDropdown === 'bedrooms'}
               onClick={() => setOpenDropdown(openDropdown === 'bedrooms' ? null : 'bedrooms')}
-              className={`btn btn-outline btn-sm px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                filters.bedrooms !== null
-                  ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                  : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-50'
-              }`}
+              className={pillClass(filters.bedrooms !== null)}
             >
               <span>
                 {filters.bedrooms !== null ? `Bedrooms: ${filters.bedrooms}` : 'Bedrooms (Any)'}
               </span>
-              <span className="text-[10px]">▼</span>
+              <span className="text-[10px]" aria-hidden="true">
+                ▼
+              </span>
             </button>
 
             {openDropdown === 'bedrooms' && (
-              <div className="absolute right-0 sm:left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-[var(--color-border-light)] p-2 z-50 animate-in fade-in duration-150">
+              <div className="absolute left-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-[var(--color-border-light)] p-2 z-50">
                 <div className="text-xs font-bold text-neutral-500 px-2 py-1 mb-1">
                   Filter by Bedrooms
                 </div>
@@ -190,11 +199,12 @@ export function FilterBar({
                       key={String(opt.value)}
                       type="button"
                       onClick={() => handleBedroomsSelect(opt.value)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors ${
+                      className={cn(
+                        'w-full text-left px-3 py-2 rounded-lg text-xs font-medium flex items-center justify-between transition-colors cursor-pointer',
                         isSelected
                           ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] font-bold'
                           : 'hover:bg-neutral-100 text-[var(--color-text-on-light)]'
-                      }`}
+                      )}
                     >
                       <span>{opt.label}</span>
                       {isSelected && <span>✓</span>}
@@ -209,31 +219,37 @@ export function FilterBar({
           <div className="relative">
             <button
               type="button"
+              aria-expanded={openDropdown === 'price'}
               onClick={() => setOpenDropdown(openDropdown === 'price' ? null : 'price')}
-              className={`btn btn-outline btn-sm px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                filters.minPrice !== null || filters.maxPrice !== null
-                  ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                  : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-50'
-              }`}
+              className={pillClass(filters.minPrice !== null || filters.maxPrice !== null)}
             >
               <span>
-                {filters.minPrice || filters.maxPrice
-                  ? `Price: $${filters.minPrice ? Math.round(filters.minPrice / 100) : '0'} - ${filters.maxPrice ? '$' + Math.round(filters.maxPrice / 100) : 'Any'}`
-                  : 'Price: $800 - $3,000'}
+                {filters.minPrice !== null || filters.maxPrice !== null
+                  ? `Price: $${filters.minPrice !== null ? Math.round(filters.minPrice / 100) : '0'} - ${filters.maxPrice !== null ? '$' + Math.round(filters.maxPrice / 100) : 'Any'}`
+                  : 'Price'}
               </span>
-              <span className="text-[10px]">▼</span>
+              <span className="text-[10px]" aria-hidden="true">
+                ▼
+              </span>
             </button>
 
             {openDropdown === 'price' && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-[var(--color-border-light)] p-4 z-50 animate-in fade-in duration-150">
-                <div className="text-xs font-bold text-neutral-700 mb-3">Monthly Price Range ($)</div>
+              <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-64 sm:w-72 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-xl border border-[var(--color-border-light)] p-4 z-50">
+                <div className="text-xs font-bold text-neutral-700 mb-3">
+                  Monthly Price Range ($)
+                </div>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div>
-                    <label className="text-[10px] text-neutral-500 font-semibold block mb-1">
+                    <label
+                      htmlFor="filter-min-price"
+                      className="text-[10px] text-neutral-500 font-semibold block mb-1"
+                    >
                       Min ($/mo)
                     </label>
                     <input
+                      id="filter-min-price"
                       type="number"
+                      min={0}
                       placeholder="800"
                       value={minPriceInput}
                       onChange={(e) => setMinPriceInput(e.target.value)}
@@ -241,11 +257,16 @@ export function FilterBar({
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-neutral-500 font-semibold block mb-1">
+                    <label
+                      htmlFor="filter-max-price"
+                      className="text-[10px] text-neutral-500 font-semibold block mb-1"
+                    >
                       Max ($/mo)
                     </label>
                     <input
+                      id="filter-max-price"
                       type="number"
+                      min={0}
                       placeholder="3000"
                       value={maxPriceInput}
                       onChange={(e) => setMaxPriceInput(e.target.value)}
@@ -269,7 +290,7 @@ export function FilterBar({
                   <button
                     type="button"
                     onClick={handlePriceApply}
-                    className="px-4 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-dark)] transition-colors cursor-pointer"
+                    className="px-4 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors cursor-pointer"
                   >
                     Apply
                   </button>
@@ -282,38 +303,31 @@ export function FilterBar({
           <button
             type="button"
             onClick={onOpenNeighborhoodModal}
-            className={`btn btn-outline btn-sm px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
-              filters.neighborhood !== null
-                ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-50'
-            }`}
+            className={pillClass(filters.neighborhood !== null)}
           >
-            <span>
-              {filters.neighborhood ? `📍 ${filters.neighborhood}` : 'Neighborhoods'}
-            </span>
+            <span>{filters.neighborhood ? `📍 ${filters.neighborhood}` : 'Neighborhoods'}</span>
           </button>
 
           {/* Amenities Popover Button */}
           <div className="relative">
             <button
               type="button"
+              aria-expanded={openDropdown === 'amenities'}
               onClick={() => setOpenDropdown(openDropdown === 'amenities' ? null : 'amenities')}
-              className={`btn btn-outline btn-sm px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                filters.amenities.length > 0
-                  ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                  : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-50'
-              }`}
+              className={pillClass(filters.amenities.length > 0)}
             >
               <span>
                 {filters.amenities.length > 0
                   ? `Amenities (${filters.amenities.length})`
                   : 'Amenities'}
               </span>
-              <span className="text-[10px]">▼</span>
+              <span className="text-[10px]" aria-hidden="true">
+                ▼
+              </span>
             </button>
 
             {openDropdown === 'amenities' && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-[var(--color-border-light)] p-3 z-50 animate-in fade-in duration-150">
+              <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-xl border border-[var(--color-border-light)] p-3 z-50">
                 <div className="text-xs font-bold text-neutral-700 mb-2">Amenities Filter</div>
                 <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {AMENITY_OPTIONS.map((item) => {
@@ -341,12 +355,9 @@ export function FilterBar({
           {/* Instant Book Direct Toggle */}
           <button
             type="button"
+            aria-pressed={filters.instantBook}
             onClick={handleInstantBookToggle}
-            className={`btn btn-outline btn-sm px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
-              filters.instantBook
-                ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)] font-bold'
-                : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:border-neutral-400'
-            }`}
+            className={pillClass(filters.instantBook)}
           >
             <span>⚡ Instant Book</span>
           </button>
@@ -354,14 +365,11 @@ export function FilterBar({
           {/* Wifi Speed Direct Toggle */}
           <button
             type="button"
+            aria-pressed={filters.minWifi !== null}
             onClick={handleWifiToggle}
-            className={`btn btn-outline btn-sm px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
-              filters.minWifi !== null
-                ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)] font-bold'
-                : 'border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:border-neutral-400'
-            }`}
+            className={pillClass(filters.minWifi !== null)}
           >
-            <span>📶 ≥ 300 Mbps</span>
+            <span>📶 ≥ {MIN_WIFI_SPEED_MBPS} Mbps</span>
           </button>
 
           {/* Clear All Filters Button */}
@@ -369,7 +377,7 @@ export function FilterBar({
             <button
               type="button"
               onClick={onClearFilters}
-              className="text-xs font-semibold text-[var(--color-brand)] hover:underline px-2 py-1 cursor-pointer transition-colors"
+              className="text-xs font-semibold text-[var(--color-brand)] hover:underline px-2 py-1.5 min-h-10 sm:min-h-8 cursor-pointer transition-colors"
             >
               Clear filters
             </button>

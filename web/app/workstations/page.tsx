@@ -22,6 +22,14 @@ import {
 export const metadata: Metadata = {
   title: WORKSTATIONS_PAGE_CONTENT.metadata.title,
   description: WORKSTATIONS_PAGE_CONTENT.metadata.description,
+  alternates: {
+    canonical: '/workstations',
+  },
+  openGraph: {
+    title: WORKSTATIONS_PAGE_CONTENT.metadata.title,
+    description: WORKSTATIONS_PAGE_CONTENT.metadata.description,
+    type: 'website',
+  },
 };
 
 const BENEFIT_ICONS: Record<WorkstationBenefitIcon, LucideIcon> = {
@@ -121,7 +129,7 @@ export default async function WorkstationsPage() {
       </section>
 
       {/* Workstation FAQs Section */}
-      <section className="py-16 bg-[#1f1d1a] border-t border-[var(--color-border-dark)]">
+      <section className="py-16 bg-[var(--color-bg-dark-elevated)] border-t border-[var(--color-border-dark)]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
@@ -165,50 +173,6 @@ export default async function WorkstationsPage() {
               {cta.buttonLabel}
             </Link>
           </Button>
-        </div>
-      </section>
-
-      {/* UI States & Verification Blocks (faithful to design/workstations.html) */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 pt-8">
-        <div className="rounded-2xl border border-neutral-700 bg-neutral-900/60 p-6 sm:p-8">
-          <div className="text-sm font-bold text-neutral-300 uppercase tracking-wider mb-2 flex items-center gap-2">
-            <span>📋 UI States & Verification Blocks — Tổng Quan Workstations (/workstations)</span>
-          </div>
-          <p className="text-xs text-neutral-400 mb-6">
-            These verification blocks showcase alternative UI conditions (Empty states, Skeleton loading, Error alerts, Validation states) required for thorough stage review.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl border border-neutral-700 bg-neutral-800/80">
-              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--color-brand)] text-white mb-2">
-                Hardware Upgrade Option
-              </span>
-              <div className="text-sm font-bold text-white">Herman Miller Aeron Chair</div>
-              <div className="text-xs text-neutral-400 mt-1">
-                Adds +€45/month to your apartment reservation.
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-neutral-700 bg-neutral-800/80">
-              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-800 text-emerald-200 mb-2">
-                Speed Guarantee
-              </span>
-              <div className="text-sm font-bold text-white">Low-Latency WiFi</div>
-              <div className="text-xs text-neutral-400 mt-1">
-                ≥ 300 Mbps fiber speed certified prior to each check-in.
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl border border-neutral-700 bg-neutral-800/80">
-              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-900 text-blue-200 mb-2">
-                Turnkey Setup
-              </span>
-              <div className="text-sm font-bold text-white">Pre-Arrival Verification</div>
-              <div className="text-xs text-neutral-400 mt-1">
-                Single-cable Thunderbolt dock connected and tested.
-              </div>
-            </div>
-          </div>
         </div>
       </section>
     </div>

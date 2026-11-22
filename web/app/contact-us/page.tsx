@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   title: 'Contact Us | NomadDesk',
   description:
     'Get in touch with the NomadDesk concierge team for booking assistance, custom workstation requests, or corporate relocation inquiries.',
+  alternates: {
+    canonical: '/contact-us',
+  },
+  openGraph: {
+    title: 'Contact Us | NomadDesk',
+    description:
+      'Get in touch with the NomadDesk concierge team for booking assistance, custom workstation requests, or corporate relocation inquiries.',
+    type: 'website',
+  },
 };
 
 export default function ContactUsPage() {

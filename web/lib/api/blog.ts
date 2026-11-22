@@ -18,7 +18,7 @@ function mapBlogRow(row: typeof blogPosts.$inferSelect): BlogPost {
     readTime: row.readTime || '5 min read',
     publishDate: row.createdAt.toISOString().slice(0, 10),
     author: row.author || 'NomadDesk Team',
-    image: row.coverImage || '/seed/blog/blog-nomad-gear.webp',
+    image: row.coverImage || '/seed/blog/blog-1.webp',
     excerpt: row.excerpt || '',
     content: row.content || '',
     seoTitle: row.seoTitle || undefined,

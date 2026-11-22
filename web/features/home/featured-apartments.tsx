@@ -5,9 +5,11 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { FavoriteButton } from '@/components/ui/favorite-button';
 import { useCurrency } from '@/context/currency-context';
 import { HOME_CONTENT } from '@/content/home';
 import { SITE_CONFIG } from '@/content/site';
+import { normalizeImageSrc } from '@/lib/format';
 import type { Property } from '@/lib/types';
 
 const MAX_DISPLAY_FEATURED = 6;
@@ -16,15 +18,18 @@ interface FeaturedApartmentsProps {
   properties: Property[];
 }
 
-function ApartmentCard({ property }: { property: Property }) {
+interface ApartmentCardProps {
+  property: Property;
+}
+
+function ApartmentCard({ property }: ApartmentCardProps) {
   const { formatPrice } = useCurrency();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
-  const images = property.images && property.images.length > 0
-    ? property.images
-    : ['/seed/property/placeholder.webp'];
-
-  const normalizeSrc = (src: string) => (src.startsWith('/') ? src : `/${src}`);
+  const images =
+    property.images && property.images.length > 0
+      ? property.images
+      : ['/seed/property/prop-madrid-1.webp'];
 
   const handlePrevImage = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -46,7 +51,7 @@ function ApartmentCard({ property }: { property: Property }) {
       <div className="relative h-60 w-full overflow-hidden bg-neutral-100">
         <Link href={detailUrl} className="block w-full h-full relative">
           <Image
-            src={normalizeSrc(images[activeImageIndex])}
+            src={normalizeImageSrc(images[activeImageIndex])}
             alt={property.title}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
@@ -55,7 +60,7 @@ function ApartmentCard({ property }: { property: Property }) {
         </Link>
 
         {/* Top Badges */}
-        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+        <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10 pointer-events-none">
           <span className="bg-black/80 text-white text-xs font-semibold px-2.5 py-1 rounded-full backdrop-blur-xs">
             {property.city}
           </span>
@@ -70,23 +75,32 @@ function ApartmentCard({ property }: { property: Property }) {
           )}
         </div>
 
+        {/* Favorite Heart Toggle */}
+        <div className="absolute top-3 right-3 z-20">
+          <FavoriteButton
+            propertyId={property.id}
+            propertyTitle={property.title}
+            variant="icon"
+          />
+        </div>
+
         {/* Wifi Speed Badge */}
-        {property.workstation?.wifiSpeed && (
-          <div className="absolute bottom-3 right-3 z-10">
+        {(property.workstation?.wifiSpeed ?? 0) > 0 && (
+          <div className="absolute bottom-3 right-3 z-10 pointer-events-none">
             <span className="bg-white/95 text-[var(--color-text-on-light)] text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
-              ⚡ {property.workstation.wifiSpeed} Mbps
+              ⚡ {property.workstation?.wifiSpeed} Mbps
             </span>
           </div>
         )}
 
-        {/* Carousel controls if multiple images */}
+        {/* Carousel controls visible on touch devices, hover-reveal on pointer devices */}
         {images.length > 1 && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity">
             <button
               type="button"
               onClick={handlePrevImage}
               aria-label="Previous photo"
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 text-sm z-10"
+              className="absolute left-2 top-1/2 -translate-y-1/2 min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 text-sm z-10 cursor-pointer"
             >
               ‹
             </button>
@@ -94,16 +108,16 @@ function ApartmentCard({ property }: { property: Property }) {
               type="button"
               onClick={handleNextImage}
               aria-label="Next photo"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 text-sm z-10"
+              className="absolute right-2 top-1/2 -translate-y-1/2 min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 text-sm z-10 cursor-pointer"
             >
               ›
             </button>
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1 z-10 pointer-events-none">
               {images.map((_, idx) => (
                 <span
                   key={idx}
-                  className={`w-1.5 h-1.5 rounded-full transition-all ${
-                    idx === activeImageIndex ? 'bg-white w-3' : 'bg-white/60'
+                  className={`h-1.5 rounded-full transition-all ${
+                    idx === activeImageIndex ? 'bg-white w-3' : 'bg-white/60 w-1.5'
                   }`}
                 />
               ))}
@@ -115,7 +129,6 @@ function ApartmentCard({ property }: { property: Property }) {
       {/* Card Content */}
       <div className="p-5 flex-1 flex flex-col justify-between">
         <div>
-          {/* Metadata line */}
           <div className="flex items-center justify-between text-xs text-[var(--color-text-on-light-muted)] font-medium mb-2">
             <span>
               {property.neighborhood} · {property.bedrooms} Bed · {property.totalSurface} m²
@@ -125,27 +138,28 @@ function ApartmentCard({ property }: { property: Property }) {
             </Badge>
           </div>
 
-          {/* Title */}
           <h3 className="text-base font-bold text-[var(--color-text-on-light)] mb-3 line-clamp-2 h-12 leading-snug">
             <Link href={detailUrl} className="hover:text-[var(--color-brand)] transition-colors">
               {property.title}
             </Link>
           </h3>
 
-          {/* Workstation Specification Box */}
-          <div className="bg-[#faf8f5] border border-[#f0ede8] rounded-xl p-3 mb-4 text-xs text-[#4a3e33]">
+          <div className="bg-[var(--color-bg-light-subtle)] border border-[var(--color-surface-muted)] rounded-xl p-3 mb-4 text-xs text-[var(--color-text-on-light-secondary)]">
             <div className="font-semibold text-xs mb-1 flex items-center gap-1.5">
               <span>🖥️</span>
-              <span className="truncate">{property.workstation?.monitors || 'Dual 27" 4K UHD Monitors'}</span>
+              <span className="truncate">
+                {property.workstation?.monitors || 'Dual 27" 4K UHD Monitors'}
+              </span>
             </div>
             <div className="text-[var(--color-text-on-light-muted)] flex items-center gap-1.5">
               <span>💺</span>
-              <span className="truncate">{property.workstation?.chair || 'Ergonomic Executive Seating'}</span>
+              <span className="truncate">
+                {property.workstation?.chair || 'Ergonomic Executive Seating'}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Price & CTA */}
         <div className="pt-3 border-t border-[var(--color-border-light)] flex items-center justify-between mt-auto">
           <div>
             <span className="text-lg font-bold text-[var(--color-brand)]">
@@ -163,13 +177,11 @@ function ApartmentCard({ property }: { property: Property }) {
 }
 
 export function FeaturedApartments({ properties }: FeaturedApartmentsProps) {
-  // Ensure we display up to MAX_DISPLAY_FEATURED featured properties
   const displayProperties = properties.slice(0, MAX_DISPLAY_FEATURED);
 
   return (
     <section className="py-16 sm:py-20 bg-[var(--color-bg-light)] text-[var(--color-text-on-light)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Section Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 sm:mb-10 gap-4">
           <div>
             <Badge variant="accent" className="mb-2">
@@ -183,13 +195,10 @@ export function FeaturedApartments({ properties }: FeaturedApartmentsProps) {
             </p>
           </div>
           <Button asChild variant="outline" pill className="self-start sm:self-auto text-xs sm:text-sm">
-            <Link href={SITE_CONFIG.links.browse}>
-              {HOME_CONTENT.featured.exploreAllLabel}
-            </Link>
+            <Link href={SITE_CONFIG.links.browse}>{HOME_CONTENT.featured.exploreAllLabel}</Link>
           </Button>
         </div>
 
-        {/* Apartments Grid: 1 col on mobile 390px, 2 on tablet, 3 on desktop */}
         {displayProperties.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {displayProperties.map((property) => (

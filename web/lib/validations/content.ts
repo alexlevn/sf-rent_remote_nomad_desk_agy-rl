@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { safeImagePathSchema } from '@/lib/validations/media';
-
-const INT4_MAX = 2_147_483_647;
+import { INT4_MAX } from '@/lib/format';
 
 export const contentStatusSchema = z.enum(['draft', 'published']);
 
@@ -227,7 +226,7 @@ export const createBlogPostSchema = z.object({
   readTime: z.string().trim().min(1).max(50).optional().default('5 min read'),
   publishDate: z.string().trim().max(50).optional(),
   author: z.string().trim().min(1).max(100).optional().default('NomadDesk Team'),
-  image: safeImagePathSchema.optional().default('/seed/blog/blog-nomad-gear.webp'),
+  image: safeImagePathSchema.optional().default('/seed/blog/blog-1.webp'),
   excerpt: z.string().optional().default(''),
   content: z.string().optional().default(''),
   seoTitle: z.string().trim().max(255).optional(),
@@ -256,13 +255,22 @@ export const updateBlogPostSchema = z.object({
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });
 
+const safeExternalUrlSchema = z
+  .string()
+  .trim()
+  .max(255)
+  .refine(
+    (val) => val === '' || /^https?:\/\//i.test(val),
+    'URL must start with https:// or http://'
+  );
+
 /**
  * Zod schema for creating a new CommunityVideo.
  */
 export const createVideoSchema = z.object({
   platform: z.string().trim().min(1).max(50).optional().default('Instagram'),
-  url: z.string().trim().max(255).optional().default('https://www.instagram.com'),
-  embedSrc: z.string().trim().max(255).optional().default(''),
+  url: safeExternalUrlSchema.optional().default('https://www.instagram.com'),
+  embedSrc: safeExternalUrlSchema.optional().default(''),
   aspect: z.string().trim().max(20).optional().default('9:16'),
   authorName: z.string().trim().min(1).max(100).optional().default('Guest Story'),
   avatar: safeImagePathSchema.optional().default('/seed/location/madrid.jpg'),
@@ -276,8 +284,8 @@ export const createVideoSchema = z.object({
 export const updateVideoSchema = z.object({
   id: positiveIntIdSchema,
   platform: z.string().trim().min(1).max(50).optional(),
-  url: z.string().trim().max(255).optional(),
-  embedSrc: z.string().trim().max(255).optional(),
+  url: safeExternalUrlSchema.optional(),
+  embedSrc: safeExternalUrlSchema.optional(),
   aspect: z.string().trim().max(20).optional(),
   authorName: z.string().trim().min(1).max(100).optional(),
   avatar: safeImagePathSchema.optional(),

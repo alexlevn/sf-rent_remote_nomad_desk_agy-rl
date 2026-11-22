@@ -37,26 +37,11 @@ export function BuilderHardwarePicker({
   selectedAddons,
   onToggleAddon,
 }: BuilderHardwarePickerProps) {
-  // Helpers for displaying options clearly
-  const formatOptionTitle = (type: 'monitor' | 'chair' | 'desk' | 'keyboardMouse', opt: WorkstationComponentOption) => {
-    if (type === 'monitor') {
-      if (opt.id === 'mon-4k-ultrawide') return '4K UHD Ultrawide Monitor';
-      if (opt.id === 'mon-ultrawide') return 'Single 27" 4K UHD Display (Comfort Base)';
-    }
-    if (type === 'chair') {
-      if (opt.id === 'chair-aeron') return 'Herman Miller Aeron (Fully Adjustable)';
-      if (opt.id === 'chair-ergo') return 'Standard Ergonomic Breathable Mesh Chair';
-    }
-    if (type === 'desk') {
-      if (opt.id === 'desk-standing') return 'Dual-Motor Electric Standing Desk';
-      if (opt.id === 'desk-std') return 'Solid Oak Work Desk (120 x 60 cm)';
-    }
-    if (type === 'keyboardMouse') {
-      if (opt.id === 'km-mx') return 'Logitech MX Master 3S + Mechanical Wireless Keyboard';
-      if (opt.id === 'km-none') return 'Standard Full-Sized Keyboard & Wireless Precision Mouse';
-    }
-    return opt.name;
-  };
+  // Render authoritative option names directly from DB (Admin CMS edits reflect immediately)
+  const formatOptionTitle = (
+    _type: 'monitor' | 'chair' | 'desk' | 'keyboardMouse',
+    opt: WorkstationComponentOption
+  ) => opt.name;
 
   const formatPriceBadge = (priceEURCents: number) => {
     if (priceEURCents === 0) {

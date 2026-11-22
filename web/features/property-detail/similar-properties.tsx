@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { PropertyCard } from '@/features/city/property-card';
+import { slugifySegment } from '@/lib/format';
 import type { Property } from '@/lib/types';
 
 interface SimilarPropertiesProps {
@@ -32,7 +33,7 @@ export function SimilarProperties({
           </p>
         </div>
         <Link
-          href={`/c/furnished-apartments-${city.toLowerCase()}`}
+          href={`/c/furnished-apartments-${slugifySegment(city)}`}
           className="text-xs sm:text-sm text-[var(--color-brand)] font-semibold hover:underline"
         >
           View all in {city} →

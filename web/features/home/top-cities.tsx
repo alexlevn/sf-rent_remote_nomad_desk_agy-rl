@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HOME_CONTENT } from '@/content/home';
 import { SITE_CONFIG } from '@/content/site';
+import { normalizeImageSrc } from '@/lib/format';
 import type { Location } from '@/lib/types';
 
 const MAX_DISPLAY_CITIES = 8;
@@ -13,10 +14,7 @@ interface TopCitiesProps {
 }
 
 export function TopCities({ locations }: TopCitiesProps) {
-  // Take top cities
   const displayCities = locations.slice(0, MAX_DISPLAY_CITIES);
-
-  const normalizeSrc = (src: string) => (src.startsWith('/') ? src : `/${src}`);
 
   return (
     <section className="py-16 sm:py-20 bg-[var(--color-bg-light-alt)] text-[var(--color-text-on-light)] border-t border-[var(--color-border-light)]">
@@ -41,7 +39,11 @@ export function TopCities({ locations }: TopCitiesProps) {
           </Button>
         </div>
 
-        {/* Cities Grid: 1 col on mobile, 2 col on sm, 4 col on lg */}
+        {displayCities.length === 0 ? (
+          <div className="text-center py-10 bg-white rounded-2xl border border-[var(--color-border-light)] text-sm text-[var(--color-text-on-light-muted)]">
+            No destinations available right now.
+          </div>
+        ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {displayCities.map((location) => {
             const cityUrl = `/c/furnished-apartments-${location.slug}`;
@@ -53,7 +55,7 @@ export function TopCities({ locations }: TopCitiesProps) {
               >
                 {/* Background image */}
                 <Image
-                  src={normalizeSrc(location.image || '/seed/location/placeholder.jpg')}
+                  src={normalizeImageSrc(location.image, '/seed/location/madrid.jpg')}
                   alt={location.name}
                   fill
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
@@ -73,6 +75,7 @@ export function TopCities({ locations }: TopCitiesProps) {
             );
           })}
         </div>
+        )}
       </div>
     </section>
   );

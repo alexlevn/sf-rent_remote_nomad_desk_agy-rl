@@ -18,23 +18,23 @@ export function CountryGroup({
   totalApartments,
   cities,
 }: CountryGroupProps) {
-  const exploreSlug = cities[0]?.slug || '';
+  const primaryCity = cities[0];
 
   return (
     <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 mb-8 shadow-xs">
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4 border-b border-[var(--color-surface-muted)] pb-3">
         <h2 className="text-xl font-bold flex items-center gap-2 text-[var(--color-text-on-light)]">
           <span>📍 {country}</span>
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[rgba(217,72,41,0.2)]">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)] border border-[color-mix(in_srgb,var(--color-brand)_20%,transparent)]">
             {totalApartments} {totalApartments === 1 ? 'apartment' : 'apartments'}
           </span>
         </h2>
-        {exploreSlug && (
+        {primaryCity && (
           <Link
-            href={`/c/furnished-apartments-${exploreSlug}`}
+            href={`/c/furnished-apartments-${primaryCity.slug}`}
             className="text-sm text-[var(--color-brand)] hover:underline font-medium inline-flex items-center gap-1"
           >
-            Explore all in {country} →
+            Explore {primaryCity.name} →
           </Link>
         )}
       </div>

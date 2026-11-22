@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { getBlogPostBySlug, listBlogPosts } from '@/lib/api/blog';
 import { hasHtmlTags, sanitizeHtml } from '@/lib/validations/content';
+import { normalizeImageSrc } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { ArticleLayout } from '@/features/content/article-layout';
 
@@ -12,11 +13,6 @@ interface BlogDetailPageProps {
   params: Promise<{
     slug: string;
   }>;
-}
-
-function normalizeSrc(src: string): string {
-  if (!src) return '/seed/blog/blog-1.webp';
-  return src.startsWith('/') ? src : `/${src}`;
 }
 
 export async function generateMetadata({
@@ -31,9 +27,21 @@ export async function generateMetadata({
     };
   }
 
+  const title = post.seoTitle?.trim() || `${post.title} | NomadDesk Blog`;
+  const description = post.seoDescription?.trim() || post.excerpt;
+
   return {
-    title: post.seoTitle?.trim() || `${post.title} | NomadDesk Blog`,
-    description: post.seoDescription?.trim() || post.excerpt,
+    title,
+    description,
+    alternates: {
+      canonical: `/blog/${post.slug}`,
+    },
+    openGraph: {
+      title,
+      description,
+      type: 'article',
+      images: post.image ? [{ url: normalizeImageSrc(post.image, '/seed/blog/blog-1.webp') }] : undefined,
+    },
   };
 }
 
@@ -81,7 +89,7 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
                 >
                   <div className="relative h-36 w-full bg-neutral-100 overflow-hidden">
                     <Image
-                      src={normalizeSrc(related.image)}
+                      src={normalizeImageSrc(related.image, '/seed/blog/blog-1.webp')}
                       alt={related.title}
                       fill
                       sizes="(max-width: 640px) 100vw, 360px"
@@ -105,44 +113,6 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
           </div>
         ) : undefined
       }
-      verificationSection={
-        <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 sm:p-8">
-          <div className="text-base sm:text-lg font-bold text-[var(--color-text-on-light)] mb-1">
-            📋 UI States & Verification Blocks — Chi Tiết Blog (/blog/:slug)
-          </div>
-          <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] mb-6">
-            These verification blocks showcase alternative UI conditions (Empty states, Skeleton loading, Error alerts, Validation states) required for thorough stage review.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-[var(--color-bg-light)] border border-[var(--color-border-light)] rounded-xl p-5">
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)] mb-3">
-                Blog Category Filter
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-brand-light)] text-[var(--color-brand)]">
-                  All Posts
-                </span>
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)]">
-                  Workation Tips
-                </span>
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)]">
-                  Cost Guides
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-[var(--color-bg-light)] border border-[var(--color-border-light)] rounded-xl p-5">
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)] border border-[var(--color-warning-border)] mb-3">
-                Article Reading Time
-              </span>
-              <p className="text-xs text-[var(--color-text-on-light-muted)] leading-relaxed">
-                Calculated dynamically based on 220 words per minute average reading velocity.
-              </p>
-            </div>
-          </div>
-        </div>
-      }
     >
       {/* Rich Editorial Body */}
       {hasHtmlTags(post.content) ? (
@@ -162,7 +132,7 @@ export default async function BlogDetailPage({ params }: BlogDetailPageProps) {
           </p>
 
           {/* Key Takeaway Callout Box */}
-          <div className="bg-[#faf8f5] border border-[var(--color-border-light)] rounded-xl p-5 my-6">
+          <div className="bg-[var(--color-bg-light-subtle)] border border-[var(--color-border-light)] rounded-xl p-5 my-6">
             <strong className="block text-sm sm:text-base font-bold text-[var(--color-text-on-light)] mb-1">
               Key Takeaway for Tech Workers:
             </strong>

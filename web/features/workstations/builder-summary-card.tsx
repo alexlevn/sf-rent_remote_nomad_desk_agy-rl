@@ -17,6 +17,18 @@ interface BuilderSummaryCardProps {
   onReset: () => void;
   onApplyProPreset: () => void;
   proPriceEUR?: number;
+  isProPreset?: boolean;
+}
+
+function formatEurValue(amount: number): string {
+  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+}
+
+function formatSignedEur(amount: number, forceDecimals = false): string {
+  const sign = amount < 0 ? '-' : '+';
+  const abs = Math.abs(amount);
+  const formatted = forceDecimals ? abs.toFixed(2) : formatEurValue(abs);
+  return `${sign}€${formatted}`;
 }
 
 export function BuilderSummaryCard({
@@ -26,6 +38,7 @@ export function BuilderSummaryCard({
   onReset,
   onApplyProPreset,
   proPriceEUR = 150,
+  isProPreset = false,
 }: BuilderSummaryCardProps) {
   return (
     <div className="bg-white rounded-2xl p-6 border border-[var(--color-border-light)] shadow-md sticky top-28">
@@ -66,13 +79,13 @@ export function BuilderSummaryCard({
             onClick={onApplyProPreset}
             data-testid="preset-pro-btn"
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all flex items-center justify-center gap-1 cursor-pointer ${
-              totalUpgradeEUR >= proPriceEUR
+              isProPreset
                 ? 'bg-[var(--color-brand)] text-white border-transparent shadow-xs'
                 : 'bg-transparent text-[var(--color-brand)] border-[var(--color-brand)]/40 hover:bg-orange-50'
             }`}
           >
             <Zap className="w-3 h-3" />
-            <span>Pro (+€{proPriceEUR})</span>
+            <span>Pro (+€{formatEurValue(proPriceEUR)})</span>
           </button>
         </div>
       </div>
@@ -86,12 +99,12 @@ export function BuilderSummaryCard({
 
         {breakdownItems.map((item, idx) => (
           <div
-            key={idx}
+            key={`${item.name}-${idx}`}
             className="flex justify-between items-center text-xs sm:text-sm text-[var(--color-text-on-light)]"
           >
             <span className="truncate pr-2 text-neutral-700">{item.name}</span>
             <span className="font-medium text-[var(--color-brand)] shrink-0">
-              +€{item.priceEUR}.00
+              {formatSignedEur(item.priceEUR, true)}
             </span>
           </div>
         ))}
@@ -108,12 +121,14 @@ export function BuilderSummaryCard({
               data-testid="upgrade-total"
               className="font-bold text-xl text-[var(--color-brand)] block"
             >
-              {totalUpgradeEUR === 0 ? '€0/month' : `+€${totalUpgradeEUR}/month`}
+              {totalUpgradeEUR === 0
+                ? '€0/month'
+                : `${formatSignedEur(totalUpgradeEUR)}/month`}
             </span>
             <span className="text-[11px] text-[var(--color-text-on-light-muted)]">
               {totalUpgradeEUR === 0
                 ? 'Standard Comfort Included'
-                : `+€${totalUpgradeEUR}.00 / mo`}
+                : `${formatSignedEur(totalUpgradeEUR, true)} / mo`}
             </span>
           </div>
         </div>

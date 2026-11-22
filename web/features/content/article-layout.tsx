@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { normalizeImageSrc } from '@/lib/format';
 
 export interface BreadcrumbItem {
   label: string;
@@ -21,12 +22,6 @@ interface ArticleLayoutProps {
   leadText?: string;
   children: React.ReactNode;
   afterContent?: React.ReactNode;
-  verificationSection?: React.ReactNode;
-}
-
-function normalizeSrc(src: string): string {
-  if (!src) return '/seed/guide/362.webp';
-  return src.startsWith('/') ? src : `/${src}`;
 }
 
 export function ArticleLayout({
@@ -42,7 +37,6 @@ export function ArticleLayout({
   leadText,
   children,
   afterContent,
-  verificationSection,
 }: ArticleLayoutProps) {
   return (
     <article className="w-full">
@@ -93,7 +87,7 @@ export function ArticleLayout({
         {/* Hero Image */}
         <div className="relative h-[240px] sm:h-[340px] md:h-[380px] w-full rounded-2xl overflow-hidden mb-8 shadow-sm bg-neutral-100">
           <Image
-            src={normalizeSrc(image)}
+            src={normalizeImageSrc(image, '/seed/guide/362.webp')}
             alt={imageAlt || title}
             fill
             priority
@@ -104,7 +98,7 @@ export function ArticleLayout({
 
         {/* Lead Summary */}
         {leadText && (
-          <p className="text-base sm:text-lg font-medium text-[#4a3e33] leading-relaxed mb-6">
+          <p className="text-base sm:text-lg font-medium text-[var(--color-text-on-light-secondary)] leading-relaxed mb-6">
             {leadText}
           </p>
         )}
@@ -117,13 +111,6 @@ export function ArticleLayout({
         {/* After Content (Suggested Apartments or Related Articles) */}
         {afterContent && <div className="mt-12">{afterContent}</div>}
       </div>
-
-      {/* UI States & Verification Section */}
-      {verificationSection && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 mb-16">
-          {verificationSection}
-        </div>
-      )}
     </article>
   );
 }

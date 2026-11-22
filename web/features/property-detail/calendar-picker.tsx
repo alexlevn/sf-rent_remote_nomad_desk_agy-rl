@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { parseUtcDate, toUtcDateString } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { BlockedDate, Reservation } from '@/lib/types';
 
 interface CalendarPickerProps {
@@ -13,6 +15,23 @@ interface CalendarPickerProps {
   minimumStayNights?: number;
 }
 
+function addDaysUtc(dateStr: string, days: number): string {
+  const parsed = parseUtcDate(dateStr);
+  if (!parsed) return dateStr;
+  const next = new Date(
+    Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate() + days)
+  );
+  return toUtcDateString(next);
+}
+
+function getLocalTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function CalendarPicker({
   moveIn,
   moveOut,
@@ -21,51 +40,40 @@ export function CalendarPicker({
   reservations = [],
   minimumStayNights = 30,
 }: CalendarPickerProps) {
-  // Use moveIn month as initial viewing month, or current month
-  const initialDate = useMemo(() => {
-    if (moveIn) {
-      const d = new Date(moveIn);
-      if (!isNaN(d.getTime())) return d;
-    }
-    return new Date();
+  const initialUtcDate = useMemo(() => {
+    const parsed = moveIn ? parseUtcDate(moveIn) : null;
+    if (parsed) return parsed;
+    const now = new Date();
+    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
   }, [moveIn]);
 
-  const [currentYear, setCurrentYear] = useState(initialDate.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(initialDate.getMonth()); // 0-indexed
+  const [currentYear, setCurrentYear] = useState(initialUtcDate.getUTCFullYear());
+  const [currentMonth, setCurrentMonth] = useState(initialUtcDate.getUTCMonth()); // 0-indexed
   const [selectionStep, setSelectionStep] = useState<'in' | 'out'>('in');
 
-  // Check if a date string YYYY-MM-DD is disabled (AC-DETAIL-6)
+  // Sync displayed calendar month when moveIn input changes externally
+  useEffect(() => {
+    const parsed = moveIn ? parseUtcDate(moveIn) : null;
+    if (!parsed) return;
+    setCurrentYear(parsed.getUTCFullYear());
+    setCurrentMonth(parsed.getUTCMonth());
+  }, [moveIn]);
+
+  const todayStr = getLocalTodayString();
+
   const isDateDisabled = (dateStr: string): boolean => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dateObj = new Date(dateStr);
-    dateObj.setHours(0, 0, 0, 0);
+    if (dateStr < todayStr) return true;
 
-    // Past dates are disabled
-    if (dateObj < today) {
-      return true;
-    }
+    const isBlocked = blockedDates.some((b) => dateStr >= b.startDate && dateStr < b.endDate);
+    if (isBlocked) return true;
 
-    // Blocked dates from host
-    const isBlocked = blockedDates.some(
-      (b) => dateStr >= b.startDate && dateStr < b.endDate
-    );
-    if (isBlocked) {
-      return true;
-    }
-
-    // Active reservations (confirmed or pending)
     const isReserved = reservations.some(
       (r) =>
         (r.status === 'confirmed' || r.status === 'pending') &&
         dateStr >= r.moveInDate &&
         dateStr < r.moveOutDate
     );
-    if (isReserved) {
-      return true;
-    }
-
-    return false;
+    return isReserved;
   };
 
   const handlePrevMonth = () => {
@@ -91,23 +99,15 @@ export function CalendarPicker({
 
     if (selectionStep === 'in') {
       setSelectionStep('out');
-      // If previous moveOut is invalid relative to new moveIn, reset moveOut
-      if (moveOut && new Date(dateStr) >= new Date(moveOut)) {
-        const d = new Date(dateStr);
-        d.setDate(d.getDate() + minimumStayNights);
-        const autoOut = d.toISOString().slice(0, 10);
-        onChange(dateStr, autoOut);
+      if (moveOut && dateStr >= moveOut) {
+        onChange(dateStr, addDaysUtc(dateStr, minimumStayNights));
       } else {
         onChange(dateStr, moveOut);
       }
     } else {
-      // Step 'out'
-      if (new Date(dateStr) <= new Date(moveIn)) {
-        // If user clicked before or on moveIn, switch moveIn to this date
+      if (dateStr <= moveIn) {
         setSelectionStep('out');
-        const d = new Date(dateStr);
-        d.setDate(d.getDate() + minimumStayNights);
-        onChange(dateStr, d.toISOString().slice(0, 10));
+        onChange(dateStr, addDaysUtc(dateStr, minimumStayNights));
       } else {
         onChange(moveIn, dateStr);
         setSelectionStep('in');
@@ -115,17 +115,16 @@ export function CalendarPicker({
     }
   };
 
-  // Month metadata
-  const monthName = new Date(currentYear, currentMonth, 1).toLocaleString('en-US', {
+  const monthName = new Intl.DateTimeFormat('en-US', {
     month: 'long',
     year: 'numeric',
-  });
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(currentYear, currentMonth, 1)));
 
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay(); // 0 = Sun
+  const daysInMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0)).getUTCDate();
+  const firstDayOfWeek = new Date(Date.UTC(currentYear, currentMonth, 1)).getUTCDay();
 
-  const days = [];
-  // Empty slots before 1st day of month
+  const days: (string | null)[] = [];
   for (let i = 0; i < firstDayOfWeek; i++) {
     days.push(null);
   }
@@ -140,30 +139,26 @@ export function CalendarPicker({
       data-testid="calendar-picker"
       className="p-3 bg-white border border-[var(--color-border-light)] rounded-xl text-xs select-none shadow-xs"
     >
-      {/* Calendar Header with Navigation */}
       <div className="flex justify-between items-center mb-3 px-1">
         <button
           type="button"
           onClick={handlePrevMonth}
-          className="p-1 rounded-md hover:bg-neutral-100 transition-colors text-neutral-600"
+          className="inline-flex items-center justify-center min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 rounded-md hover:bg-neutral-100 transition-colors text-neutral-600 cursor-pointer"
           aria-label="Previous month"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="font-bold text-sm text-[var(--color-text-on-light)]">
-          {monthName}
-        </span>
+        <span className="font-bold text-sm text-[var(--color-text-on-light)]">{monthName}</span>
         <button
           type="button"
           onClick={handleNextMonth}
-          className="p-1 rounded-md hover:bg-neutral-100 transition-colors text-neutral-600"
+          className="inline-flex items-center justify-center min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 rounded-md hover:bg-neutral-100 transition-colors text-neutral-600 cursor-pointer"
           aria-label="Next month"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Weekday Labels */}
       <div className="grid grid-cols-7 gap-1 text-center font-semibold text-neutral-400 mb-1 text-[11px]">
         <span>Su</span>
         <span>Mo</span>
@@ -174,22 +169,17 @@ export function CalendarPicker({
         <span>Sa</span>
       </div>
 
-      {/* Days Grid */}
       <div className="grid grid-cols-7 gap-1 text-center">
         {days.map((dateStr, idx) => {
           if (!dateStr) {
-            return <div key={`empty-${idx}`} className="h-7 w-7" />;
+            return <div key={`empty-${idx}`} className="h-9 sm:h-8 w-full" />;
           }
 
-          const dayNum = parseInt(dateStr.slice(8), 10);
+          const dayNum = Number.parseInt(dateStr.slice(8), 10);
           const disabled = isDateDisabled(dateStr);
           const isMoveIn = dateStr === moveIn;
           const isMoveOut = dateStr === moveOut;
-          const isInRange =
-            moveIn &&
-            moveOut &&
-            dateStr > moveIn &&
-            dateStr < moveOut;
+          const isInRange = Boolean(moveIn && moveOut && dateStr > moveIn && dateStr < moveOut);
 
           return (
             <button
@@ -200,15 +190,16 @@ export function CalendarPicker({
               data-date={dateStr}
               data-disabled={disabled ? 'true' : undefined}
               onClick={() => handleDateClick(dateStr)}
-              className={`h-7 w-7 mx-auto rounded-full flex items-center justify-center font-medium transition-all text-xs ${
+              className={cn(
+                'h-9 w-9 sm:h-8 sm:w-8 mx-auto rounded-full flex items-center justify-center font-medium transition-all text-xs',
                 disabled
                   ? 'text-neutral-300 line-through bg-neutral-50 cursor-not-allowed opacity-50'
                   : isMoveIn || isMoveOut
-                    ? 'bg-[var(--color-brand)] text-white font-bold shadow-xs'
+                    ? 'bg-[var(--color-brand)] text-white font-bold shadow-xs cursor-pointer'
                     : isInRange
-                      ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] font-semibold'
-                      : 'hover:bg-neutral-100 text-[var(--color-text-on-light)]'
-              }`}
+                      ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)] font-semibold cursor-pointer'
+                      : 'hover:bg-neutral-100 text-[var(--color-text-on-light)] cursor-pointer'
+              )}
             >
               {dayNum}
             </button>
@@ -216,15 +207,14 @@ export function CalendarPicker({
         })}
       </div>
 
-      {/* Calendar Legend / Status */}
       <div className="mt-3 pt-2 border-t border-neutral-100 flex items-center justify-between text-[10px] text-neutral-500">
         <span className="flex items-center gap-1">
           <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-brand)] inline-block" />
           <span>Selected</span>
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2.5 h-2.5 rounded-full bg-neutral-200 inline-block line-through text-[8px] text-center" />
-          <span>Unavailable (AC-DETAIL-6)</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-neutral-200 inline-block" />
+          <span>Unavailable</span>
         </span>
         <span className="text-[var(--color-brand)] font-semibold">
           Min {minimumStayNights} nights

@@ -43,7 +43,7 @@ export function HomeFAQ() {
                   type="button"
                   onClick={() => toggle(idx)}
                   aria-expanded={isOpen}
-                  className="w-full flex items-center justify-between p-5 text-left text-sm sm:text-base font-semibold text-[var(--color-text-on-light)] hover:text-[var(--color-brand)] transition-colors focus:outline-none"
+                  className="w-full flex items-center justify-between p-5 text-left text-sm sm:text-base font-semibold text-[var(--color-text-on-light)] hover:text-[var(--color-brand)] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-brand)] cursor-pointer"
                 >
                   <span>{faq.question}</span>
                   <span
