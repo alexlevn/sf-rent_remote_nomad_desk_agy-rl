@@ -1,44 +1,37 @@
 # NomadDesk
 
+**NomadDesk** là nền tảng marketplace chọn lọc cho thuê căn hộ trung & dài hạn (≥ 30 đêm) trang bị sẵn trạm làm việc công thái học (Workstation) dành cho Digital Nomads và Remote Workers. Hệ thống hỗ trợ trọn vẹn 3 vai trò **Guest / Host / Admin** (kèm trình soạn thảo trực quan Tiptap, thư viện upload ảnh lưu trên Docker volume, chống đặt trùng bằng Postgres `btree_gist`, Mailpit email và thanh toán mock) và chạy hoàn toàn local.
 
-## Tổng quan kiến trúc & Cổng
+---
 
-- **App (FE + BE):** Next.js 16 (App Router, TypeScript strict, Tailwind CSS v4) trong thư mục `web/`.
-- **Database:** PostgreSQL 17 (extension `btree_gist` chống đặt trùng lịch) + Drizzle ORM.
-- **Auth:** Auth.js v5 Credentials (bcrypt + HttpOnly JWT cookie), 3 vai trò: **Guest**, **Host** (chọn lọc, cần Admin duyệt), **Admin**.
-- **Email local:** Mailpit (SMTP + Web UI xem email gửi đi).
-- **Thanh toán:** Driver mock theo mô hình `authorize → capture / void / refund` (không gọi dịch vụ thật).
-- **Upload ảnh (`--storage=volume`):** Xử lý bằng `sharp` → WebP `q80` (≤ 1600 px, gỡ EXIF/GPS), lưu trong Docker named volume `ky-uploads` (`UPLOAD_DIR=/app/web/.data/uploads`), quản lý qua bảng `media`.
+## Chạy nhanh bằng 1 lệnh (Docker Compose)
 
-| Dịch vụ | Cổng host | Đường dẫn truy cập |
+Yêu cầu: Docker Engine ≥ 24 và Docker Compose v2.
+
+```sh
+docker compose up -d --build
+```
+
+Lệnh trên dựng và khởi chạy đủ 3 container (`db`, `mailpit`, `web`), tự động chạy `db:migrate` (Drizzle + extension `btree_gist`) và `db:seed` (idempotent, không ghi đè dữ liệu đã sửa). Có thể thêm `--wait` để đợi container `web` báo `healthy`.
+
+### URL & Cổng
+
+| Dịch vụ / Khu vực | Cổng host | Đường dẫn |
 | --- | --- | --- |
-| Web (Public / Guest / Host / Admin) | **3288** | `http://localhost:3288` |
-| Admin Portal | **3288** | `http://localhost:3288/admin` |
-| Host Portal | **3288** | `http://localhost:3288/host` |
-| PostgreSQL 17 | **55188** | `postgres://postgres:postgres@localhost:55188/nomaddesk` |
-| Mailpit Web UI / SMTP | **18188** / **11188** | `http://localhost:18188` |
+| **Web công khai & Guest Portal** | **3288** | http://localhost:3288 |
+| **Host Portal** (quản lý căn hộ, lịch, đơn) | **3288** | http://localhost:3288/host |
+| **Admin Portal** (duyệt Host/tin, CMS, Media) | **3288** | http://localhost:3288/admin |
+| **Mailpit Web UI** (xem email local) | **18188** | http://localhost:18188 |
+| **Mailpit SMTP** | **11188** | `localhost:11188` |
+| **PostgreSQL 17** | **55188** | `postgres://postgres:postgres@localhost:55188/nomaddesk` |
 
-## Chạy nhanh bằng Docker Compose
-
-Yêu cầu: Docker Engine + Docker Compose v2.
-
-```sh
-# Dựng image, bật db + mailpit + web (tự chạy db:migrate và db:seed idempotent)
-docker compose up -d --build --wait
-
-# Mở ứng dụng
-open http://localhost:3288
-open http://localhost:3288/admin
-open http://localhost:18188   # Mailpit UI xem email local
-```
-
-Dừng container (giữ nguyên dữ liệu DB và ảnh đã upload):
+### Dừng container & Cảnh báo Volume ảnh
 
 ```sh
-docker compose stop    # hoặc: docker compose down
+docker compose down          # Dừng & xoá container, GIỮ NGUYÊN volume DB và ảnh upload
 ```
 
-> **Cảnh báo mất dữ liệu volume:** Lệnh `docker compose down -v` sẽ **xóa sạch cả volume cơ sở dữ liệu (`postgres_data`) lẫn volume ảnh đã upload (`ky-uploads`)**. Trước khi xóa volume hoặc chuyển máy, luôn backup volume ảnh:
+> **Cảnh báo mất dữ liệu:** `docker compose down -v` sẽ **xoá sạch cả volume PostgreSQL (`nomaddesk_postgres_data`) lẫn volume ảnh đã upload (`nomaddesk_ky-uploads`)**. Luôn backup volume ảnh trước khi xoá volume hoặc chuyển máy:
 >
 > ```sh
 > docker run --rm \
@@ -47,62 +40,90 @@ docker compose stop    # hoặc: docker compose down
 >   alpine tar czf /out/uploads.tgz -C /data .
 > ```
 >
-> Xem chi tiết quy trình deploy, cấu hình biến môi trường, backup/restore DB và volume tại [docs/deploy.md](docs/deploy.md).
+> Xem đầy đủ quy trình backup/restore DB & volume và cấu hình VPS tại [docs/deploy.md](docs/deploy.md).
 
-## Phát triển trên máy host (Host Dev)
+---
+
+## Tài khoản Seed mặc định
+
+| Vai trò | Email | Mật khẩu | Phạm vi truy cập |
+| --- | --- | --- | --- |
+| **Admin** | `admin@example.com` | `admin1234` | Toàn quyền `/admin/**`, `/admin/media`, duyệt Host/tin, quản lý toàn bộ CMS & ảnh |
+| **Host 1** (`approved`) | `host@example.com` | `host1234` | `/host/**`, sở hữu 4 căn hộ seed (Madrid & Barcelona), upload & xoá ảnh chưa dùng của mình |
+| **Host 2** (`approved`) | `host2@example.com` | `host1234` | `/host/**`, sở hữu 4 căn hộ seed (Buenos Aires & Lima), cô lập hoàn toàn với Host 1 |
+| **Guest** | `demo@example.com` | `demo1234` | Đặt phòng, `/guests/**`, nộp đơn Host tại `/host/apply` (bị chặn `/admin` & upload) |
+| **Guest** (đơn Host `pending`) | `applicant@example.com` | `applicant1234` | Kiểm thử luồng Admin duyệt đơn Host tại `/admin/hosts` |
+
+---
+
+## Chạy Dev trên máy host
 
 ```sh
-# 1. Bật Postgres + Mailpit
+# 1. Tạo file biến môi trường local từ mẫu
+cp web/.env.example web/.env.local
+
+# 2. Khởi chạy PostgreSQL 17 và Mailpit
 docker compose up -d db mailpit --wait
 
-# 2. Cài dependencies, chạy migration & seed
+# 3. Cài dependencies, chạy migration và seed dữ liệu mẫu
 cd web
 npm ci
 npm run db:migrate
 npm run db:seed
 
-# 3. Chạy dev server trên cổng 3288
+# 4. Bật Next.js dev server trên cổng 3288
 npm run dev -- -p 3288
 ```
 
-## Tài khoản Seed mặc định
+*(Nếu container `web` đang chạy trên cổng 3288, dừng nó trước bằng `docker compose stop web`.)*
 
-| Vai trò | Email | Mật khẩu | Ghi chú |
-| --- | --- | --- | --- |
-| **Admin** | `admin@example.com` | `admin1234` | Toàn quyền `/admin/**`, `/admin/media`, upload & quản lý toàn bộ ảnh |
-| **Host 1** (`approved`) | `host@example.com` | `host1234` | Truy cập `/host/**`, quản lý 4 căn hộ seed, upload & xóa ảnh chưa dùng của mình |
-| **Host 2** (`approved`) | `host2@example.com` | `host1234` | Truy cập `/host/**`, quản lý 4 căn hộ seed (cô lập dữ liệu với Host 1) |
-| **Guest** | `demo@example.com` | `demo1234` | Đặt phòng, quản lý `/guests/**`, không truy cập `/admin` hay API upload |
-| **Guest** (đơn Host `pending`) | `applicant@example.com` | `applicant1234` | Dùng để kiểm thử luồng Admin duyệt đơn Host tại `/admin/hosts` |
+---
 
-## Quản trị nội dung, Nhập liệu & Upload ảnh / Media Library
-
-- **Khu quản trị Admin (`/admin`):**
-  - Dashboard KPI thực theo kỳ (`Today` / `7d` / `30d` / `All`), duyệt Host (`/admin/hosts`), kiểm duyệt & CRUD căn hộ (`/admin/properties`, bố cục sửa 2 cột kiểu WordPress/WooCommerce tại `/admin/properties/new` và `/admin/properties/[id]/edit`), giám sát đơn đặt phòng (`/admin/reservations`), quản lý người dùng (`/admin/users`).
-  - Quản lý nội dung CMS: Thành phố (`/admin/locations`), Gói/Linh kiện/Phụ kiện Workstation (`/admin/workstations` kèm chip `features[]`), Travel Guides (`/admin/guides`), Blog (`/admin/blog`), Video cộng đồng (`/admin/videos`), Tỷ giá (`/admin/settings`).
-  - Trình soạn thảo trực quan **Tiptap v3** (2 tab Visual/HTML, giữ nguyên HTML gốc khi không sửa, làm sạch XSS qua `sanitizeHtml()` có allowlist YouTube iframe & `/uploads/`), ô tiền tệ định dạng dấu phân cách (`$` / `€`), thanh Lưu dính (sticky save bar), nút *View on Web* và cảnh báo khi rời trang đang sửa dở.
-- **Host Portal (`/host`):**
-  - Parity hoàn chỉnh với Admin cho màn tạo/sửa căn hộ (`/host/listings/new`, `/host/listings/[id]/edit`): trình soạn thảo Tiptap cho Description & House Rules, tải/chọn ảnh qua Media Library Modal (cô lập theo từng Host), ô giá tháng định dạng `$`, thanh Lưu dính, cùng upload ảnh đại diện ở `/host/profile`.
-- **Upload ảnh & Thư viện ảnh (`/admin/media` & Media Library Modal):**
-  - Hỗ trợ **Upload** (chọn file, kéo-thả, dán ảnh từ clipboard), **Media Library** (tìm kiếm, phân trang, badge `In use` / `Unused`, xóa ảnh chưa dùng) và **From URL** (vẫn chấp nhận `/seed/...`, `/uploads/...`, `https://...`).
-  - Mọi ảnh tải lên qua `POST /api/uploads` đều đi qua `sharp`: chỉ chấp nhận JPEG, PNG, WebP, GIF tĩnh (kiểm bằng nội dung file, chặn GIF động & file giả), tối đa **5 MB**, tự động xoay EXIF, thu nhỏ cạnh dài **≤ 1600 px**, chuyển sang **WebP q80**, gỡ toàn bộ metadata (EXIF/GPS), lưu bằng tên ngẫu nhiên 16 byte hex (`/uploads/<32-hex>.webp`).
-  - Kiểm quyền chặt ở server (`requireUploadActor()` đọc Auth.js JWT cookie + trạng thái mới nhất từ Postgres): chỉ `admin` và `host` đã duyệt được phép upload/truy cập thư viện; Host chỉ thấy và xóa được ảnh do chính mình tải lên.
-  - Chính sách an toàn (D33): gỡ ảnh khỏi form không tự xóa file đĩa; `DELETE /api/media/[id]` kiểm tra tham chiếu trên toàn bộ 6 bảng nội dung và trả `409 Conflict` nếu ảnh còn đang được sử dụng.
-
-## Kiểm thử & Xác minh
+## Chạy Test & Xác minh
 
 ```sh
-# Kiểm tra dữ liệu seed (14/14 bảng)
+# Kiểm tra khớp 100% số bản ghi seed (14/14 bảng)
 cd web && npm run db:verify-seed
 
-# Bộ kiểm tra tổng hợp: ESLint + TypeScript + Vitest (unit/integration) + Next.js production build
+# Unit & integration tests (Vitest — 15 file / 332 test)
+cd web && npm test
+
+# Bộ kiểm tra đầy đủ: ESLint + TypeScript + Vitest + Next.js production build
 cd web && npm run verify
 
-# Toàn bộ Playwright E2E chạy trên stack Docker (http://localhost:3288)
+# Toàn bộ Playwright E2E trên stack Docker (9 file / 54 test, yêu cầu docker compose up -d)
 cd web && npm run e2e:docker -- --reporter=list
 ```
 
-## Tài liệu tham chiếu
+---
 
-- [docs/deploy.md](docs/deploy.md) — Hướng dẫn deploy Docker, biến môi trường, backup & restore DB và volume ảnh.
-- [docs/requirements.md](docs/requirements.md) — Đặc tả chức năng (P0/P1/P2), ma trận màn hình và tiêu chí nghiệm thu.
+## Quản trị nội dung, Tiptap WYSIWYG & Upload ảnh
+
+- **Admin Portal (`/admin`):** Dashboard KPI theo kỳ (`Today`/`7d`/`30d`/`All`), duyệt & đình chỉ Host (`/admin/hosts`), kiểm duyệt & CRUD căn hộ bố cục 2 cột kiểu WordPress/WooCommerce (`/admin/properties`), giám sát & huỷ can thiệp đơn (`/admin/reservations`), quản lý người dùng (`/admin/users`), và CMS đầy đủ cho Thành phố (`/admin/locations`), Workstation (`/admin/workstations`), Travel Guides (`/admin/guides`), Blog (`/admin/blog`), Video cộng đồng (`/admin/videos`), Tỷ giá (`/admin/settings`) và Thư viện ảnh (`/admin/media`).
+- **Trình soạn thảo trực quan Tiptap v3:** Dùng cho mọi nội dung dài (mô tả/nội quy căn hộ ở cả Admin & Host, Travel Guide, Blog, Thành phố) với 2 tab Visual/HTML, bảo toàn HTML gốc khi không chỉnh sửa và làm sạch XSS (`sanitizeHtml()`, allowlist YouTube embed).
+- **Upload ảnh lưu Docker volume (`UPLOAD_DIR` → `ky-uploads`):** `POST /api/uploads` kiểm nội dung file (JPEG/PNG/WebP/GIF tĩnh ≤ 5 MB, chặn GIF động & file giả), tự động xoay EXIF, thu nhỏ cạnh dài ≤ 1600 px, nén sang WebP `q80` gỡ toàn bộ EXIF/GPS, lưu tên ngẫu nhiên 32-hex phục vụ tại `/uploads/[...path]`. Host đã duyệt và Admin đều dùng chung Media Library Modal (3 tab Upload kéo-thả/clipboard, Media Library phân trang, From URL) với cô lập sở hữu theo Host và chặn xoá ảnh đang được tham chiếu (`409 Conflict`).
+
+---
+
+## Cấu trúc thư mục
+
+```text
+.
+├── docker-compose.yml        # Stack local: db (Postgres 17), mailpit, web (Next.js 16)
+├── .env.example              # Biến môi trường mẫu ở gốc repo
+├── README.md                 # Tài liệu này
+├── docs/
+│   └── seed/                 # Dữ liệu mẫu (*.json) được seed vào Postgres
+└── web/                      # Ứng dụng Next.js 16 + TypeScript + Tailwind CSS v4
+    ├── app/                  # App Router pages, layouts, Server Actions, API Routes (/api/*, /uploads/*)
+    ├── components/           # UI primitives & layout dùng chung (Header, Footer, MobileNav, Modal...)
+    ├── content/              # Nội dung viết cứng gom 1 chỗ (booking-rules.ts, faqs.ts, nav.ts, site.ts, pages/*)
+    ├── context/              # CurrencyProvider đọc tỷ giá từ DB
+    ├── drizzle/migrations/   # SQL migrations append-only (0000, 0001, 0002)
+    ├── e2e/                  # 9 bộ test Playwright E2E (54 test phủ đủ 43 AC P0 + Admin/Upload)
+    ├── features/             # Module tính năng theo phân hệ (home, city, property-detail, booking, guest, host, admin, media)
+    ├── lib/                  # Lớp DB/API, Auth.js v5, email Mailpit, thanh toán mock, sharp upload, Zod validations
+    ├── public/seed/          # Ảnh dữ liệu mẫu phục vụ local
+    └── tests/                # Bộ unit/integration test Vitest
+```
+
