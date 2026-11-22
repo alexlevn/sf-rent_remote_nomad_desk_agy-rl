@@ -22,6 +22,6 @@ Stages of the automated build pipeline for this project.
 | S8 | agent | Frontend review & fixes | ✅ |  |
 | S9 | agent | Backend review & fixes | ✅ |  |
 | S10 | agent | Full local run, E2E & final report | ✅ |  |
-| W1 | script | Convert images to WebP | 🔲 |  |
+| W1 | script | Convert images to WebP | ⏳ | đang đổi ảnh |
 
 Legend: 🔲 todo · ⏳ running · ✅ done · ⏸ awaiting review · ❌ failed
