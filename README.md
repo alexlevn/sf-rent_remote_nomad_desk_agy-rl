@@ -12,7 +12,7 @@ Yêu cầu: Docker Engine ≥ 24 và Docker Compose v2.
 docker compose up -d --build
 ```
 
-Lệnh trên dựng và khởi chạy đủ 3 container (`db`, `mailpit`, `web`), tự động chạy `db:migrate` (Drizzle + extension `btree_gist`) và `db:seed` (idempotent, không ghi đè dữ liệu đã sửa). Có thể thêm `--wait` để đợi container `web` báo `healthy`.
+Lệnh trên dựng và khởi chạy đủ 3 container (`db`, `mailpit`, `web`). Mỗi lần container `web` khởi động sẽ tự chạy migrate (Drizzle + extension `btree_gist`) rồi seed (idempotent, chỉ chèn bản ghi còn thiếu, không ghi đè dữ liệu đã sửa) — bằng bản JS dựng sẵn `node dist/db/migrate.js` và `node dist/db/seed.js`. Có thể thêm `--wait` để đợi container `web` báo `healthy`.
 
 ### URL & Cổng
 
@@ -24,6 +24,15 @@ Lệnh trên dựng và khởi chạy đủ 3 container (`db`, `mailpit`, `web`)
 | **Mailpit Web UI** (xem email local) | **18188** | http://localhost:18188 |
 | **Mailpit SMTP** | **11188** | `localhost:11188` |
 | **PostgreSQL 17** | **55188** | `postgres://postgres:postgres@localhost:55188/nomaddesk` |
+
+### Reset về dữ liệu mẫu sạch (local)
+
+```sh
+docker compose down -v
+docker compose up -d --build --wait
+```
+
+Xoá volume DB và ảnh upload, rồi khởi động lại; seed nạp lại toàn bộ dữ liệu mẫu (kể cả ảnh mẫu trong `web/public/seed/`, nằm sẵn trong image). Chỉ mất những gì tự tạo sau khi seed: ảnh upload qua Media Library và dữ liệu thêm/sửa trên web. Dùng thoải mái khi test local.
 
 ### Dừng container & Cảnh báo Volume ảnh
 
