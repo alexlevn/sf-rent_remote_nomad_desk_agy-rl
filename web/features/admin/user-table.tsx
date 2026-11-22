@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
-import type { Property, Reservation, ReservationStatus, User, UserRole } from '@/lib/types';
+import type { Property, Reservation, User, UserRole } from '@/lib/types';
 import type { AdminUsersCounts } from '@/lib/api/users';
 import {
   fetchAdminPropertiesAction,
@@ -10,22 +10,10 @@ import {
   updateUserAction,
 } from '@/app/admin/admin-actions';
 import { PaginationBar } from '@/features/admin/pagination-bar';
-import {
-  Search,
-  ShieldCheck,
-  CheckCircle2,
-  XCircle,
-  UserCheck,
-  Lock,
-  Unlock,
-  AlertCircle,
-  AlertTriangle,
-  Sparkles,
-  Calendar,
-  BookmarkCheck,
-  X,
-} from 'lucide-react';
+import { Search, AlertCircle, AlertTriangle, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UserRow } from '@/features/admin/users/user-row';
+import { UserReservationsDrawer } from '@/features/admin/users/user-reservations-drawer';
 
 interface UserTableProps {
   currentAdminId?: number | null;
@@ -277,26 +265,6 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
     }
   };
 
-  const renderReservationStatusBadge = (status: ReservationStatus) => {
-    const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border';
-    switch (status) {
-      case 'confirmed':
-        return <span className={cn(base, 'bg-emerald-50 text-emerald-700 border-emerald-200')}>Confirmed</span>;
-      case 'pending':
-        return <span className={cn(base, 'bg-amber-50 text-amber-800 border-amber-200')}>Pending</span>;
-      case 'completed':
-        return <span className={cn(base, 'bg-blue-100 text-blue-800 border-blue-200')}>Completed</span>;
-      case 'cancelled':
-        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Cancelled</span>;
-      case 'rejected':
-        return <span className={cn(base, 'bg-red-50 text-red-700 border-red-200')}>Rejected</span>;
-      case 'expired':
-        return <span className={cn(base, 'bg-neutral-100 text-neutral-600 border-neutral-300')}>Expired</span>;
-      default:
-        return <span className={cn(base, 'bg-neutral-100 text-neutral-700 border-neutral-200')}>{status}</span>;
-    }
-  };
-
   return (
     <div className="space-y-4">
       {/* Toast Feedback */}
@@ -438,152 +406,16 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
                     user.role === 'admin' && user.isActive !== false && activeAdminCount <= 1;
 
                   return (
-                    <tr
+                    <UserRow
                       key={user.id}
-                      className="hover:bg-neutral-50/60 transition-colors group"
-                    >
-                      {/* Email & Name */}
-                      <td className="py-3.5 px-5">
-                        <div className="font-semibold text-neutral-900 flex items-center gap-1.5">
-                          <span>{user.email}</span>
-                          {isCurrentAdmin && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-100 text-neutral-600 font-mono font-medium">
-                              You
-                            </span>
-                          )}
-                        </div>
-                        {(user.firstName || user.lastName) && (
-                          <div className="text-[11px] text-neutral-500">
-                            {user.firstName} {user.lastName}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Role Badge */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {user.role === 'admin' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                            <span>ADMIN</span>
-                          </span>
-                        ) : user.role === 'host' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-orange-100 text-[var(--color-brand)]">
-                            <UserCheck className="w-3 h-3" />
-                            <span>HOST</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-neutral-100 text-neutral-700">
-                            <span>GUEST</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Status Badge */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {user.isActive !== false ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Active</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
-                            <XCircle className="w-3 h-3 text-red-600" />
-                            <span>Suspended</span>
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Created Date */}
-                      <td className="py-3.5 px-4 text-neutral-500 font-mono text-xs whitespace-nowrap">
-                        {user.createdAt ? user.createdAt.split('T')[0] : '—'}
-                      </td>
-
-                      {/* Role Modification */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {user.role === 'guest' ? (
-                          <button
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => handleRoleChange(user, 'admin')}
-                            className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 disabled:opacity-50 transition-colors shadow-2xs inline-flex items-center gap-1"
-                          >
-                            <span>Promote to Admin</span>
-                          </button>
-                        ) : user.role === 'admin' ? (
-                          isLastAdmin ? (
-                            <span className="text-xs text-neutral-400 font-medium" title="Cannot demote last admin">
-                              Fixed
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => handleRoleChange(user, 'guest')}
-                              className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50/50 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
-                            >
-                              <span>Demote to Guest</span>
-                            </button>
-                          )
-                        ) : (
-                          <span
-                            className="text-xs text-neutral-400 font-medium"
-                            title="Role host is managed via Host Approvals"
-                          >
-                            Fixed
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Actions: Bookings Drawer & Access Control */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            data-testid={`user-bookings-btn-${user.id}`}
-                            onClick={() => handleOpenBookings(user)}
-                            className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 transition-colors inline-flex items-center gap-1"
-                            title="View user reservations"
-                          >
-                            <BookmarkCheck className="w-3 h-3 text-[var(--color-brand)]" />
-                            <span>Bookings</span>
-                          </button>
-
-                          {user.isActive !== false ? (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(user)}
-                              disabled={isSubmitting || isCurrentAdmin || isLastAdmin}
-                              title={
-                                isCurrentAdmin
-                                  ? 'Cannot suspend your own account'
-                                  : isLastAdmin
-                                  ? 'Cannot suspend the last admin account'
-                                  : 'Suspend user account'
-                              }
-                              className={cn(
-                                'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1',
-                                isCurrentAdmin || isLastAdmin
-                                  ? 'opacity-40 cursor-not-allowed text-neutral-400'
-                                  : 'text-red-600 hover:bg-red-50 hover:border-red-200 border border-transparent',
-                              )}
-                            >
-                              <Lock className="w-3 h-3" />
-                              <span>Suspend</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => handleToggleStatus(user)}
-                              className="px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
-                            >
-                              <Unlock className="w-3 h-3" />
-                              <span>Reactivate</span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                      user={user}
+                      isCurrentAdmin={isCurrentAdmin}
+                      isLastAdmin={isLastAdmin}
+                      isSubmitting={isSubmitting}
+                      onRoleChange={handleRoleChange}
+                      onToggleStatus={handleToggleStatus}
+                      onOpenBookings={handleOpenBookings}
+                    />
                   );
                 })
               )}
@@ -605,132 +437,15 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
         </div>
       </div>
 
-      {/* Drawer: User Reservations History */}
       {drawerUser && (
-        <div
-          className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              closeDrawer();
-            }
-          }}
-        >
-          <div
-            data-testid="user-reservations-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Reservations for ${drawerUser.email}`}
-            className="w-full max-w-lg bg-white h-full shadow-2xl p-6 overflow-y-auto border-l border-[var(--color-border-light)] flex flex-col justify-between"
-          >
-            <div className="space-y-5">
-              {/* Drawer Header */}
-              <div className="flex items-start justify-between gap-3 pb-4 border-b border-[var(--color-border-light)]">
-                <div>
-                  <h3 className="text-lg font-bold text-[var(--color-text-on-light)]">
-                    User Reservations
-                  </h3>
-                  <p className="text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
-                    {drawerUser.firstName || drawerUser.lastName
-                      ? `${drawerUser.firstName ?? ''} ${drawerUser.lastName ?? ''}`.trim() + ' · '
-                      : ''}
-                    <span className="font-mono">{drawerUser.email}</span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  aria-label="Close reservations drawer"
-                  className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Drawer Body */}
-              {drawerLoading ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-2 text-xs text-neutral-500">
-                  <div className="w-6 h-6 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin" />
-                  <span>Loading user bookings...</span>
-                </div>
-              ) : drawerError ? (
-                <div
-                  role="alert"
-                  className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2"
-                >
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                  <span>{drawerError}</span>
-                </div>
-              ) : drawerReservations.length === 0 ? (
-                <div className="py-12 text-center text-xs text-neutral-500 space-y-2">
-                  <BookmarkCheck className="w-8 h-8 text-neutral-300 mx-auto" />
-                  <p className="font-semibold text-neutral-700">No bookings found</p>
-                  <p className="text-neutral-400">
-                    This user has not made any reservations on NomadDesk yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider">
-                    {drawerReservations.length}{' '}
-                    {drawerReservations.length === 1 ? 'Reservation' : 'Reservations'}
-                  </div>
-                  {drawerReservations.map((res) => {
-                    const prop = propertyById.get(res.propertyId);
-                    const totalUSD = Math.round((res.totalAmount || 0) / 100);
-                    return (
-                      <div
-                        key={res.id}
-                        data-testid={`user-drawer-reservation-${res.code}`}
-                        className="p-4 rounded-xl border border-[var(--color-border-light)] bg-neutral-50/70 space-y-2"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-xs font-bold text-[var(--color-brand)]">
-                            #{res.code}
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            {renderReservationStatusBadge(res.status)}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="text-sm font-semibold text-neutral-900">
-                            {prop ? prop.title : `Property #${res.propertyId}`}
-                          </div>
-                          {prop?.city && (
-                            <div className="text-xs text-neutral-500">{prop.city}</div>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 pt-1 text-xs border-t border-[var(--color-border-light)]">
-                          <div className="flex items-center gap-1.5 text-neutral-600">
-                            <Calendar className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                            <span>
-                              {res.moveInDate} → {res.moveOutDate} ({res.nights}n)
-                            </span>
-                          </div>
-                          <div className="font-bold text-neutral-900">
-                            ${totalUSD.toLocaleString('en-US')}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Drawer Footer */}
-            <div className="pt-4 border-t border-[var(--color-border-light)] flex items-center justify-end">
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <UserReservationsDrawer
+          user={drawerUser}
+          reservations={drawerReservations}
+          loading={drawerLoading}
+          error={drawerError}
+          propertyById={propertyById}
+          onClose={closeDrawer}
+        />
       )}
     </div>
   );
