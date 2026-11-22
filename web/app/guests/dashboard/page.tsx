@@ -2,17 +2,17 @@ import React from 'react';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import {
-  Calendar,
-  Heart,
-  KeyRound,
-  ShieldCheck,
-  Wifi,
-} from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { Calendar, Heart, KeyRound, ShieldCheck, Wifi } from 'lucide-react';
 import { listReservations } from '@/lib/api/reservations';
 import { getPropertyById } from '@/lib/api/properties';
-import { getCurrentUser } from '@/lib/auth/session';
+import { getStrictSessionUser } from '@/lib/auth/session';
 import { listUserFavoriteIds } from '@/lib/api/favorites';
+import {
+  getSmartLockPasscode,
+  getUtcOffsetDateString,
+  normalizeImageSrc,
+} from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { GuestSubnav } from '@/features/guest/guest-subnav';
 import { formatDatesDisplay } from '@/features/guest/guest-utils';
@@ -24,11 +24,16 @@ export const metadata: Metadata = {
 };
 
 export default async function GuestDashboardPage() {
-  const user = await getCurrentUser();
-  const reservations = await listReservations({ userId: user.id });
-  const favoriteIds = await listUserFavoriteIds(user.id);
+  const user = await getStrictSessionUser();
+  if (!user || !user.isActive) {
+    redirect('/login?callbackUrl=/guests/dashboard');
+  }
 
-  // Calculate KPIs
+  const [reservations, favoriteIds] = await Promise.all([
+    listReservations({ userId: user.id }),
+    listUserFavoriteIds(user.id),
+  ]);
+
   const confirmedReservations = reservations.filter((r) => r.status === 'confirmed');
   const pendingReservations = reservations.filter((r) => r.status === 'pending');
 
@@ -36,18 +41,16 @@ export default async function GuestDashboardPage() {
   const pendingCount = pendingReservations.length;
   const savedCount = favoriteIds.length;
 
-  // Find upcoming stay: earliest confirmed reservation that hasn't passed
-  const now = new Date();
+  // Pick the earliest upcoming/active confirmed reservation (never fall back to already-past stays)
+  const todayUtc = getUtcOffsetDateString(0);
   const upcomingStay =
-    confirmedReservations.find((r) => new Date(r.moveOutDate) >= now) ||
-    confirmedReservations[0] ||
-    null;
+    [...confirmedReservations]
+      .filter((r) => r.moveOutDate >= todayUtc)
+      .sort((a, b) => a.moveInDate.localeCompare(b.moveInDate))[0] || null;
 
   const property = upcomingStay ? await getPropertyById(upcomingStay.propertyId) : null;
-  const smartLockPasscode = upcomingStay
-    ? `${8400 + ((upcomingStay.id * 92) % 1000)}#`
-    : '8492#';
-  const propertyCity = property?.city || 'Madrid';
+  const smartLockPasscode = upcomingStay ? getSmartLockPasscode(upcomingStay.id) : '';
+  const propertyCity = property?.city || 'City';
 
   return (
     <div className="w-full bg-[var(--color-bg-light)] min-h-[calc(100vh-160px)] py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
@@ -56,23 +59,39 @@ export default async function GuestDashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-on-light)] tracking-tight">
-              Welcome back, {user.firstName || 'Alex'}!
+              Welcome back, {user.firstName || 'Guest'}!
             </h1>
             <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] mt-1">
               Manage your active nomad bookings and smart lock credentials.
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <Link
-              href="/partner-network"
-              className="btn btn-outline btn-sm inline-flex items-center text-xs"
-            >
-              Become a Host →
-            </Link>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {user.role === 'host' ? (
+              <Link
+                href="/host"
+                className="inline-flex items-center px-3.5 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-bg-light-alt)] transition-colors"
+              >
+                Switch to Hosting →
+              </Link>
+            ) : user.role === 'admin' ? (
+              <Link
+                href="/admin"
+                className="inline-flex items-center px-3.5 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-bg-light-alt)] transition-colors"
+              >
+                Admin Portal →
+              </Link>
+            ) : (
+              <Link
+                href="/partner-network"
+                className="inline-flex items-center px-3.5 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-bg-light-alt)] transition-colors"
+              >
+                Become a Host →
+              </Link>
+            )}
             <Link
               href="/guests/favorites"
-              className="btn btn-outline btn-sm inline-flex items-center gap-1.5 text-xs"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-bg-light-alt)] transition-colors"
             >
               <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500" />
               <span>Saved ({savedCount})</span>
@@ -90,7 +109,6 @@ export default async function GuestDashboardPage() {
 
         {/* Active KPIs Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {/* Confirmed Stays */}
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-xs">
             <span className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider block mb-1">
               Confirmed Stays
@@ -98,10 +116,11 @@ export default async function GuestDashboardPage() {
             <div className="text-2xl sm:text-3xl font-bold text-[var(--color-brand)]">
               {confirmedCount}
             </div>
-            <span className="text-[11px] text-neutral-400 mt-1 block">Active stays booked</span>
+            <span className="text-[11px] text-[var(--color-text-light-subtle)] mt-1 block">
+              Active stays booked
+            </span>
           </div>
 
-          {/* Pending Requests */}
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-xs">
             <span className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider block mb-1">
               Pending Requests
@@ -109,10 +128,11 @@ export default async function GuestDashboardPage() {
             <div className="text-2xl sm:text-3xl font-bold text-[var(--color-text-on-light)]">
               {pendingCount}
             </div>
-            <span className="text-[11px] text-neutral-400 mt-1 block">Awaiting host response</span>
+            <span className="text-[11px] text-[var(--color-text-light-subtle)] mt-1 block">
+              Awaiting host response
+            </span>
           </div>
 
-          {/* Saved Homes */}
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-xs">
             <span className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider block mb-1">
               Saved Homes
@@ -120,19 +140,22 @@ export default async function GuestDashboardPage() {
             <div className="text-2xl sm:text-3xl font-bold text-[var(--color-text-on-light)]">
               {savedCount}
             </div>
-            <span className="text-[11px] text-neutral-400 mt-1 block">Bookmarked for future trips</span>
+            <span className="text-[11px] text-[var(--color-text-light-subtle)] mt-1 block">
+              Bookmarked for future trips
+            </span>
           </div>
 
-          {/* Account Status */}
           <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-5 shadow-xs">
             <span className="text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider block mb-1">
               Account Status
             </span>
-            <div className="text-base sm:text-lg font-bold text-emerald-700 flex items-center gap-1.5 mt-1">
-              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            <div className="text-base sm:text-lg font-bold text-[var(--color-success)] flex items-center gap-1.5 mt-1">
+              <ShieldCheck className="w-5 h-5 text-[var(--color-success)]" />
               Verified Guest
             </div>
-            <span className="text-[11px] text-neutral-400 mt-1 block">Identity & card verified</span>
+            <span className="text-[11px] text-[var(--color-text-light-subtle)] mt-1 block">
+              Identity &amp; card verified
+            </span>
           </div>
         </div>
 
@@ -152,10 +175,9 @@ export default async function GuestDashboardPage() {
 
           {upcomingStay && property ? (
             <div className="bg-white border border-[var(--color-border-light)] rounded-3xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row gap-6 items-start">
-              {/* Image */}
               <div className="relative w-full md:w-64 h-48 sm:h-44 rounded-2xl overflow-hidden shrink-0 bg-neutral-100">
                 <Image
-                  src={property.images?.[0] || '/seed/property/prop-madrid-1.webp'}
+                  src={normalizeImageSrc(property.images?.[0])}
                   alt={property.title}
                   fill
                   sizes="(max-width: 768px) 100vw, 256px"
@@ -163,7 +185,6 @@ export default async function GuestDashboardPage() {
                 />
               </div>
 
-              {/* Details */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <Badge variant="success">Confirmed</Badge>
@@ -187,13 +208,15 @@ export default async function GuestDashboardPage() {
                 </p>
 
                 {/* Smart Lock and WiFi Credentials box (ONLY visible for confirmed stay) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-[#faf8f5] border border-[var(--color-border-light)] rounded-2xl text-xs mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-[var(--color-bg-light-subtle)] border border-[var(--color-border-light)] rounded-2xl text-xs mb-4">
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-orange-100 text-[var(--color-brand)] rounded-lg">
+                    <div className="p-1.5 bg-[var(--color-brand-light)] text-[var(--color-brand)] rounded-lg">
                       <KeyRound className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="text-neutral-500 block text-[11px]">Smart Lock Passcode</span>
+                      <span className="text-[var(--color-text-on-light-muted)] block text-[11px]">
+                        Smart Lock Passcode
+                      </span>
                       <span className="font-mono font-bold text-sm text-[var(--color-brand)]">
                         {smartLockPasscode}
                       </span>
@@ -201,24 +224,26 @@ export default async function GuestDashboardPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-neutral-200 text-neutral-700 rounded-lg">
+                    <div className="p-1.5 bg-[var(--color-surface-muted)] text-[var(--color-text-on-light)] rounded-lg">
                       <Wifi className="w-4 h-4" />
                     </div>
                     <div>
-                      <span className="text-neutral-500 block text-[11px]">WiFi Network</span>
-                      <span className="font-mono font-bold text-xs text-neutral-800">
+                      <span className="text-[var(--color-text-on-light-muted)] block text-[11px]">
+                        WiFi Network
+                      </span>
+                      <span className="font-mono font-bold text-xs text-[var(--color-text-on-light)]">
                         NomadDesk-{propertyCity}5G
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center flex-wrap gap-3">
                   <Link
                     href="/guests/reservations"
-                    className="btn btn-outline btn-sm inline-flex items-center gap-1.5 text-xs"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-bg-light-alt)] transition-colors"
                   >
-                    Manage Reservation & Receipt
+                    Manage Reservation &amp; Receipt
                   </Link>
                   <Link
                     href={`/l/apartments/${property.slug}`}
@@ -236,11 +261,12 @@ export default async function GuestDashboardPage() {
                 No upcoming confirmed stay
               </h3>
               <p className="text-xs text-[var(--color-text-on-light-muted)] mb-5">
-                Ready for your next remote working adventure? Explore curated apartments with fiber internet and ergonomic setups.
+                Ready for your next remote working adventure? Explore curated apartments with fiber
+                internet and ergonomic setups.
               </p>
               <Link
                 href="/c/furnished-apartments-madrid"
-                className="btn btn-primary btn-sm btn-pill inline-flex items-center"
+                className="inline-flex items-center px-5 py-2.5 rounded-full bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-xs font-semibold transition-colors shadow-sm"
               >
                 Browse Apartments
               </Link>

@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import type { Reservation } from '@/lib/types';
+import { BOOKING_RULES } from '@/content/booking-rules';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 
@@ -40,6 +41,7 @@ export const CancelBookingModal: React.FC<CancelBookingModalProps> = ({
 
   const isPending = reservation.status === 'pending';
   const isConfirmed = reservation.status === 'confirmed';
+  const freeCancelDays = reservation.freeCancelDays ?? BOOKING_RULES.freeCancelDays;
 
   const handleConfirm = async () => {
     if (isSubmittingRef.current) return;
@@ -76,20 +78,21 @@ export const CancelBookingModal: React.FC<CancelBookingModalProps> = ({
     >
       <div className="space-y-4">
         {/* Warning Callout */}
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div className="p-4 rounded-xl bg-[var(--color-warning-bg)] border border-[var(--color-warning-border)] text-xs text-[var(--color-warning-text)] flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-semibold text-amber-950">
-              Are you sure you want to cancel this booking?
-            </p>
+            <p className="font-semibold">Are you sure you want to cancel this booking?</p>
             {isPending && (
               <p>
-                Your booking request is currently pending host approval. Cancelling will release the card authorization hold immediately. No funds will be charged.
+                Your booking request is currently pending host approval. Cancelling will release the
+                card authorization hold immediately. No funds will be charged.
               </p>
             )}
             {isConfirmed && (
               <p>
-                Under our 14-day cancellation policy (D12), cancelling now entitles you to a <strong>100% full refund</strong> returned to your original payment method. The apartment dates will be released for other guests.
+                Under our {freeCancelDays}-day cancellation policy, cancelling now entitles you to a{' '}
+                <strong>100% full refund</strong> returned to your original payment method. The
+                apartment dates will be released for other guests.
               </p>
             )}
           </div>
@@ -107,14 +110,18 @@ export const CancelBookingModal: React.FC<CancelBookingModalProps> = ({
 
         {/* Reason Selector */}
         <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5">
+          <label
+            htmlFor="cancel-booking-reason"
+            className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
+          >
             Please select a cancellation reason:
           </label>
           <select
+            id="cancel-booking-reason"
             value={selectedReason}
             onChange={(e) => setSelectedReason(e.target.value)}
             disabled={isSubmitting}
-            className="w-full text-xs rounded-xl border border-[var(--color-border-light)] p-2.5 bg-white text-[var(--color-text-on-light)] focus:outline-hidden focus:border-[var(--color-brand)]"
+            className="w-full text-xs rounded-xl border border-[var(--color-border-light)] p-2.5 bg-white text-[var(--color-text-on-light)] focus:outline-none focus:border-[var(--color-brand)]"
           >
             {CANCELLATION_REASONS.map((r) => (
               <option key={r} value={r}>
@@ -126,22 +133,29 @@ export const CancelBookingModal: React.FC<CancelBookingModalProps> = ({
 
         {selectedReason === 'Other reasons' && (
           <div>
-            <label className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5">
+            <label
+              htmlFor="cancel-booking-notes"
+              className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
+            >
               Additional notes (optional):
             </label>
             <textarea
+              id="cancel-booking-notes"
               rows={2}
               value={customReason}
               onChange={(e) => setCustomReason(e.target.value)}
               disabled={isSubmitting}
               placeholder="Tell us more about why you're cancelling..."
-              className="w-full text-xs rounded-xl border border-[var(--color-border-light)] p-2.5 bg-white text-[var(--color-text-on-light)] focus:outline-hidden focus:border-[var(--color-brand)] resize-none"
+              className="w-full text-xs rounded-xl border border-[var(--color-border-light)] p-2.5 bg-white text-[var(--color-text-on-light)] focus:outline-none focus:border-[var(--color-brand)] resize-none"
             />
           </div>
         )}
 
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700">
+          <div
+            role="alert"
+            className="p-3 rounded-xl bg-[var(--color-error-bg)] border border-[var(--color-error-border)] text-xs text-[var(--color-error-text)]"
+          >
             {errorMessage}
           </div>
         )}
@@ -165,7 +179,7 @@ export const CancelBookingModal: React.FC<CancelBookingModalProps> = ({
             size="sm"
             onClick={handleConfirm}
             disabled={isSubmitting}
-            className="text-xs bg-red-600 hover:bg-red-700 border-red-600 text-white"
+            className="text-xs bg-[var(--color-error)] hover:opacity-90 border-[var(--color-error)] text-white"
           >
             {isSubmitting ? (
               <>

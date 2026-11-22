@@ -3,6 +3,7 @@
 import React from 'react';
 import { CreditCard, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { BOOKING_RULES } from '@/content/booking-rules';
 
 export interface PaymentDetails {
   cardNumber: string;
@@ -37,7 +38,7 @@ export const MockPaymentCard: React.FC<MockPaymentCardProps> = ({
       </div>
 
       {/* Mock Sandbox Card Box */}
-      <div className="bg-[#faf8f5] border border-[var(--color-border-light)] rounded-xl p-4 sm:p-5 mb-4">
+      <div className="bg-[var(--color-bg-light-subtle)] border border-[var(--color-border-light)] rounded-xl p-4 sm:p-5 mb-4">
         <div className="mb-4">
           <label
             htmlFor="mock-card-number"
@@ -114,7 +115,7 @@ export const MockPaymentCard: React.FC<MockPaymentCardProps> = ({
             </span>
           ) : (
             <span>
-              <strong>Authorization Hold:</strong> Your card is verified and funds held. You are only charged once <strong className="text-[var(--color-text-on-light)]">{hostName}</strong> confirms your request within 48 hours.
+              <strong>Authorization Hold:</strong> Your card is verified and funds held. You are only charged once <strong className="text-[var(--color-text-on-light)]">{hostName}</strong> confirms your request within {BOOKING_RULES.respondHours} hours.
             </span>
           )}
         </div>

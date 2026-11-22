@@ -6,9 +6,15 @@ import Link from 'next/link';
 import { KeyRound, Wifi, AlertCircle, Calendar, MapPin, UserCheck } from 'lucide-react';
 import type { Reservation, Property, HostProfile } from '@/lib/types';
 import { useCurrency } from '@/context/currency-context';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { getSmartLockPasscode, normalizeImageSrc } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { formatDatesDisplay, getDaysUntilMoveIn } from './guest-utils';
+import {
+  formatDatesDisplay,
+  formatRespondByCountdown,
+  getDaysUntilMoveIn,
+} from './guest-utils';
 
 export interface ReservationCardProps {
   reservation: Reservation;
@@ -32,29 +38,38 @@ export const ReservationCard: React.FC<ReservationCardProps> = ({
   const isRejected = reservation.status === 'rejected';
   const isCompleted = reservation.status === 'completed';
 
+  const freeCancelDays = reservation.freeCancelDays ?? BOOKING_RULES.freeCancelDays;
   const daysUntilMoveIn = getDaysUntilMoveIn(reservation.moveInDate);
-  const canCancelConfirmed = isConfirmed && daysUntilMoveIn >= 14;
-  const isConfirmedLocked = isConfirmed && daysUntilMoveIn < 14;
+  const canCancelConfirmed = isConfirmed && daysUntilMoveIn >= freeCancelDays;
+  const isConfirmedLocked = isConfirmed && daysUntilMoveIn < freeCancelDays;
 
   const propertyTitle = property?.title || 'Furnished Apartment';
-  const propertyCity = property?.city || 'Madrid';
-  const propertyImage = property?.images?.[0] || '/seed/property/prop-madrid-1.webp';
-  const hostName = host?.displayName || 'Casa Urbana Stays';
+  const propertyCity = property?.city || 'City';
+  const propertyImage = normalizeImageSrc(property?.images?.[0]);
+  const hostName = host?.displayName || 'Verified NomadDesk Host';
+  const smartLockPasscode = getSmartLockPasscode(reservation.id);
 
-  // Smart lock passcode derived deterministically from booking id
-  const smartLockPasscode = `${8400 + ((reservation.id * 92) % 1000)}#`;
+  const amountLabel =
+    reservation.paymentStatus === 'captured'
+      ? 'Total Paid'
+      : reservation.paymentStatus === 'authorized'
+        ? 'Authorized'
+        : reservation.paymentStatus === 'refunded'
+          ? 'Refunded'
+          : 'Total Amount';
 
-  // Status badge config
   const renderStatusBadge = () => {
     switch (reservation.status) {
       case 'confirmed':
         return <Badge variant="success">Confirmed</Badge>;
-      case 'pending':
+      case 'pending': {
+        const countdown = formatRespondByCountdown(reservation.respondBy);
         return (
-          <Badge variant="warning" className="animate-pulse">
-            Pending {reservation.respondBy ? '(38h left)' : ''}
+          <Badge variant="warning">
+            Pending {countdown}
           </Badge>
         );
+      }
       case 'rejected':
         return <Badge variant="error">Rejected</Badge>;
       case 'cancelled':
@@ -123,10 +138,9 @@ export const ReservationCard: React.FC<ReservationCardProps> = ({
             </span>
           </div>
 
-          {/* Rejection notice if rejected */}
           {isRejected && (
-            <div className="mb-3 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+            <div className="mb-3 p-2.5 rounded-lg bg-[var(--color-error-bg)] border border-[var(--color-error-border)] text-xs text-[var(--color-error-text)] flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-[var(--color-error)] mt-0.5" />
               <div>
                 <strong>Request Declined:</strong>{' '}
                 {reservation.rejectionReason || 'The host was unable to accept this booking.'}
@@ -134,9 +148,8 @@ export const ReservationCard: React.FC<ReservationCardProps> = ({
             </div>
           )}
 
-          {/* Smart lock passcode snippet ONLY when confirmed */}
           {isConfirmed && (
-            <div className="mb-3 py-2 px-3 bg-[#faf8f5] border border-[var(--color-border-light)] rounded-lg text-xs flex flex-wrap items-center gap-3">
+            <div className="mb-3 py-2 px-3 bg-[var(--color-bg-light-subtle)] border border-[var(--color-border-light)] rounded-lg text-xs flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1.5 text-[var(--color-text-on-light)]">
                 <KeyRound className="w-3.5 h-3.5 text-[var(--color-brand)]" />
                 <strong>Passcode:</strong>{' '}
@@ -156,29 +169,32 @@ export const ReservationCard: React.FC<ReservationCardProps> = ({
         {/* Bottom Actions Row */}
         <div className="pt-3 border-t border-[var(--color-border-light)] flex flex-wrap items-center justify-between gap-3">
           <div>
-            <span className="text-xs text-[var(--color-text-on-light-muted)] block">Total Paid</span>
+            <span className="text-xs text-[var(--color-text-on-light-muted)] block">
+              {amountLabel}
+            </span>
             <span className="text-base font-bold text-[var(--color-text-on-light)]">
               {formatPrice(reservation.totalAmount)}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
+              type="button"
               variant="outline"
               size="sm"
               onClick={() => onViewDetails(reservation)}
-              className="text-xs"
+              className="text-xs min-h-10 sm:min-h-8"
             >
-              Receipt & Details
+              Receipt &amp; Details
             </Button>
 
-            {/* Cancel Actions */}
             {isPending && (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => onCancelClick(reservation)}
-                className="text-xs text-[var(--color-error)] border-red-200 hover:bg-red-50"
+                className="text-xs min-h-10 sm:min-h-8 text-[var(--color-error)] border-[var(--color-error-border)] hover:bg-[var(--color-error-bg)]"
               >
                 Cancel Request
               </Button>
@@ -186,10 +202,11 @@ export const ReservationCard: React.FC<ReservationCardProps> = ({
 
             {canCancelConfirmed && (
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => onCancelClick(reservation)}
-                className="text-xs text-[var(--color-error)] border-red-200 hover:bg-red-50"
+                className="text-xs min-h-10 sm:min-h-8 text-[var(--color-error)] border-[var(--color-error-border)] hover:bg-[var(--color-error-bg)]"
               >
                 Cancel Stay
               </Button>
@@ -202,7 +219,7 @@ export const ReservationCard: React.FC<ReservationCardProps> = ({
             )}
 
             {isCompleted && (
-              <Button variant="outline" size="sm" disabled className="text-xs opacity-70">
+              <Button type="button" variant="outline" size="sm" disabled className="text-xs opacity-70">
                 Review (Soon)
               </Button>
             )}

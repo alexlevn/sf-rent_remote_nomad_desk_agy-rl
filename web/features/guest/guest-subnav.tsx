@@ -58,7 +58,7 @@ export const GuestSubnav: React.FC<GuestSubnavProps> = ({
             key={link.href}
             href={link.href}
             className={cn(
-              'flex items-center gap-2 py-3 px-1 sm:px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors transition-border',
+              'flex items-center gap-2 py-3 px-1 sm:px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors',
               link.isActive
                 ? 'border-[var(--color-brand)] text-[var(--color-brand)] font-semibold'
                 : 'border-transparent text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] hover:border-neutral-300'

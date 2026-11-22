@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React from 'react';
 
 export interface GuestInfo {
   firstName: string;
@@ -20,35 +20,6 @@ export const GuestInfoForm: React.FC<GuestInfoFormProps> = ({
   onChange,
   disabled = false,
 }) => {
-  // Auto-fill from localStorage if guest is logged in and fields are still default/empty
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('nomaddesk_user');
-      if (stored) {
-        const user = JSON.parse(stored);
-        if (user) {
-          if (!info.firstName && user.firstName) {
-            onChange('firstName', user.firstName);
-          } else if (!info.firstName && user.name) {
-            const parts = user.name.split(' ');
-            onChange('firstName', parts[0] || '');
-            if (parts.length > 1 && !info.lastName) {
-              onChange('lastName', parts.slice(1).join(' '));
-            }
-          }
-          if (!info.lastName && user.lastName) {
-            onChange('lastName', user.lastName);
-          }
-          if (!info.email && user.email) {
-            onChange('email', user.email);
-          }
-        }
-      }
-    } catch {
-      // Ignore localStorage read errors
-    }
-  }, [info.firstName, info.lastName, info.email, onChange]);
-
   return (
     <div className="bg-white border border-[var(--color-border-light)] rounded-2xl p-6 shadow-xs mb-6">
       <h2 className="text-lg font-bold text-[var(--color-text-on-light)] tracking-tight mb-4">
@@ -71,7 +42,7 @@ export const GuestInfoForm: React.FC<GuestInfoFormProps> = ({
             disabled={disabled}
             value={info.firstName}
             onChange={(e) => onChange('firstName', e.target.value)}
-            placeholder="Alex"
+            placeholder="Jordan"
             className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all disabled:bg-neutral-50 disabled:text-neutral-400"
           />
         </div>
@@ -91,7 +62,7 @@ export const GuestInfoForm: React.FC<GuestInfoFormProps> = ({
             disabled={disabled}
             value={info.lastName}
             onChange={(e) => onChange('lastName', e.target.value)}
-            placeholder="Le"
+            placeholder="Taylor"
             className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all disabled:bg-neutral-50 disabled:text-neutral-400"
           />
         </div>
@@ -102,7 +73,10 @@ export const GuestInfoForm: React.FC<GuestInfoFormProps> = ({
           htmlFor="guest-email"
           className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
         >
-          Email Address <span className="text-[var(--color-text-on-light-muted)] font-normal">(for keys and receipts)</span>
+          Email Address{' '}
+          <span className="text-[var(--color-text-on-light-muted)] font-normal">
+            (for keys and receipts)
+          </span>
         </label>
         <input
           id="guest-email"
@@ -112,7 +86,7 @@ export const GuestInfoForm: React.FC<GuestInfoFormProps> = ({
           disabled={disabled}
           value={info.email}
           onChange={(e) => onChange('email', e.target.value)}
-          placeholder="demo@example.com"
+          placeholder="you@domain.com"
           className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all disabled:bg-neutral-50 disabled:text-neutral-400"
         />
       </div>
@@ -122,7 +96,10 @@ export const GuestInfoForm: React.FC<GuestInfoFormProps> = ({
           htmlFor="guest-phone"
           className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
         >
-          Phone Number <span className="text-[var(--color-text-on-light-muted)] font-normal">(WhatsApp for Host arrival coordination)</span>
+          Phone Number{' '}
+          <span className="text-[var(--color-text-on-light-muted)] font-normal">
+            (WhatsApp for Host arrival coordination)
+          </span>
         </label>
         <input
           id="guest-phone"

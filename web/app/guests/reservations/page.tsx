@@ -1,9 +1,10 @@
 import React from 'react';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { listReservations } from '@/lib/api/reservations';
 import { getPropertyById } from '@/lib/api/properties';
 import { getHostProfile } from '@/lib/api/hosts';
-import { getCurrentUser } from '@/lib/auth/session';
+import { getStrictSessionUser } from '@/lib/auth/session';
 import { listUserFavoriteIds } from '@/lib/api/favorites';
 import type { Property, HostProfile } from '@/lib/types';
 import { GuestSubnav } from '@/features/guest/guest-subnav';
@@ -16,11 +17,16 @@ export const metadata: Metadata = {
 };
 
 export default async function GuestReservationsPage() {
-  const user = await getCurrentUser();
-  const reservations = await listReservations({ userId: user.id });
-  const favoriteIds = await listUserFavoriteIds(user.id);
+  const user = await getStrictSessionUser();
+  if (!user || !user.isActive) {
+    redirect('/login?callbackUrl=/guests/reservations');
+  }
 
-  // Fetch unique properties
+  const [reservations, favoriteIds] = await Promise.all([
+    listReservations({ userId: user.id }),
+    listUserFavoriteIds(user.id),
+  ]);
+
   const propertyIds = Array.from(new Set(reservations.map((r) => r.propertyId)));
   const propertiesList = await Promise.all(propertyIds.map((id) => getPropertyById(id)));
   const propertiesMap: Record<number, Property> = {};
@@ -28,10 +34,7 @@ export default async function GuestReservationsPage() {
     if (p) propertiesMap[p.id] = p;
   });
 
-  // Fetch unique hosts
-  const hostIds = Array.from(
-    new Set(Object.values(propertiesMap).map((p) => p.hostId))
-  );
+  const hostIds = Array.from(new Set(Object.values(propertiesMap).map((p) => p.hostId)));
   const hostsList = await Promise.all(hostIds.map((id) => getHostProfile(id)));
   const hostsMap: Record<number, HostProfile> = {};
   hostsList.forEach((h) => {
@@ -43,14 +46,13 @@ export default async function GuestReservationsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-on-light)] tracking-tight">
-            My Stays & Bookings
+            My Stays &amp; Bookings
           </h1>
           <p className="text-xs sm:text-sm text-[var(--color-text-on-light-muted)] mt-1">
             Review status, download receipts, or cancel eligible reservations.
           </p>
         </div>
 
-        {/* Subnavigation Bar */}
         <GuestSubnav
           activeCount={{
             bookings: reservations.length,
@@ -58,7 +60,6 @@ export default async function GuestReservationsPage() {
           }}
         />
 
-        {/* Main Reservations Table & Card List */}
         <ReservationsView
           initialReservations={reservations}
           propertiesMap={propertiesMap}

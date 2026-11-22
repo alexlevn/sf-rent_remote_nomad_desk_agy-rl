@@ -1,7 +1,9 @@
 import React, { Suspense } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { z } from 'zod';
 import { getUserByEmail, createUser } from '@/lib/api/users';
+import { signIn } from '@/lib/auth/config';
 import { setCurrentUserId } from '@/lib/auth/session';
 import { hashPassword } from '@/lib/auth/password';
 import { RegisterForm, type RegisterResult } from '@/features/auth/register-form';
@@ -10,7 +12,15 @@ export const metadata: Metadata = {
   title: 'Create Account | NomadDesk',
   description:
     'Join thousands of remote professionals and digital nomads booking monthly stays.',
+  robots: { index: false, follow: false },
 };
+
+const registerSchema = z.object({
+  firstName: z.string().trim().min(1, 'Please provide your first name.').max(100),
+  lastName: z.string().trim().min(1, 'Please provide your last name.').max(100),
+  email: z.string().trim().toLowerCase().email('Please provide a valid email address.').max(255),
+  password: z.string().min(8, 'Password must be at least 8 characters long.').max(128),
+});
 
 interface RegisterPageProps {
   searchParams: Promise<{
@@ -21,7 +31,6 @@ interface RegisterPageProps {
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const params = await searchParams;
 
-  // Server Action for registering a new guest user
   async function registerAction(data: {
     firstName: string;
     lastName: string;
@@ -31,7 +40,15 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     'use server';
 
     try {
-      const email = data.email.trim().toLowerCase();
+      const parsed = registerSchema.safeParse(data);
+      if (!parsed.success) {
+        return {
+          success: false,
+          error: parsed.error.issues[0]?.message || 'Please check your registration details.',
+        };
+      }
+
+      const { firstName, lastName, email, password } = parsed.data;
       const existing = await getUserByEmail(email);
 
       if (existing) {
@@ -41,15 +58,21 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         };
       }
 
-      const hashedPassword = await hashPassword(data.password);
+      const hashedPassword = await hashPassword(password);
 
       const newUser = await createUser({
-        firstName: data.firstName.trim(),
-        lastName: data.lastName.trim(),
+        firstName,
+        lastName,
         email,
         passwordHash: hashedPassword,
         role: 'guest',
         isActive: true,
+      });
+
+      await signIn('credentials', {
+        email: newUser.email,
+        password,
+        redirect: false,
       });
 
       await setCurrentUserId(newUser.id);
@@ -66,15 +89,13 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     } catch (err: unknown) {
       return {
         success: false,
-        error:
-          err instanceof Error ? err.message : 'Registration failed. Please try again.',
+        error: err instanceof Error ? err.message : 'Registration failed. Please try again.',
       };
     }
   }
 
   return (
     <div className="min-h-[calc(100vh-120px)] flex flex-col justify-between py-6 px-4 sm:px-6">
-      {/* Top back navigation */}
       <div className="max-w-[600px] mx-auto w-full flex items-center justify-between pb-4">
         <Link
           href="/"
@@ -90,7 +111,6 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         </Link>
       </div>
 
-      {/* Main Form Card (600px max-w measured from design/register.html) */}
       <main className="flex-1 flex items-center justify-center my-4">
         <div className="w-full max-w-[600px] bg-white rounded-3xl border border-[var(--color-border-light)] shadow-[var(--shadow-lg)] overflow-hidden">
           <Suspense
@@ -103,10 +123,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               </div>
             }
           >
-            <RegisterForm
-              registerAction={registerAction}
-              callbackUrl={params.callbackUrl}
-            />
+            <RegisterForm registerAction={registerAction} callbackUrl={params.callbackUrl} />
           </Suspense>
         </div>
       </main>

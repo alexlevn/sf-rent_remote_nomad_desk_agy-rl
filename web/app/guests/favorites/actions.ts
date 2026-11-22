@@ -1,11 +1,13 @@
 'use server';
 
-import { removeFavorite, toggleFavorite } from '@/lib/api/favorites';
 import { revalidatePath } from 'next/cache';
+import { removeFavorite, toggleFavorite, listUserFavoriteIds } from '@/lib/api/favorites';
+import { requireStrictUser } from '@/lib/auth/guards';
 
-export async function removeFavoriteAction(propertyId: number, userId: number = 1) {
+export async function removeFavoriteAction(propertyId: number) {
   try {
-    const updatedIds = await removeFavorite(propertyId, userId);
+    const user = await requireStrictUser();
+    const updatedIds = await removeFavorite(propertyId, user.id);
     revalidatePath('/guests/favorites');
     revalidatePath('/guests/dashboard');
     return { success: true, favoriteIds: updatedIds };
@@ -18,9 +20,10 @@ export async function removeFavoriteAction(propertyId: number, userId: number = 
   }
 }
 
-export async function toggleFavoriteAction(propertyId: number, userId: number = 1) {
+export async function toggleFavoriteAction(propertyId: number) {
   try {
-    const result = await toggleFavorite(propertyId, userId);
+    const user = await requireStrictUser();
+    const result = await toggleFavorite(propertyId, user.id);
     revalidatePath('/guests/favorites');
     revalidatePath('/guests/dashboard');
     return { success: true, ...result };
@@ -31,5 +34,15 @@ export async function toggleFavoriteAction(propertyId: number, userId: number = 
       isFavorite: false,
       favoriteIds: [],
     };
+  }
+}
+
+export async function getUserFavoriteIdsAction() {
+  try {
+    const user = await requireStrictUser();
+    const favoriteIds = await listUserFavoriteIds(user.id);
+    return { success: true, authenticated: true, favoriteIds };
+  } catch {
+    return { success: false, authenticated: false, favoriteIds: [] as number[] };
   }
 }

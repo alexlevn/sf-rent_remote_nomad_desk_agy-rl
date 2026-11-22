@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowRight, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { sanitizeCallbackUrl } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export interface LoginResult {
   success: boolean;
@@ -28,11 +30,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   callbackUrl: propCallbackUrl,
 }) => {
   const searchParams = useSearchParams();
-  const callbackUrl = propCallbackUrl || searchParams.get('callbackUrl') || undefined;
+  const rawCallbackUrl = propCallbackUrl || searchParams.get('callbackUrl') || undefined;
+  const safeCallbackUrl = rawCallbackUrl ? sanitizeCallbackUrl(rawCallbackUrl, '/') : undefined;
 
   const [email, setEmail] = useState('demo@example.com');
   const [password, setPassword] = useState('demo1234');
-  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSuspended, setIsSuspended] = useState(false);
@@ -46,37 +48,39 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     setErrorMessage(null);
     setIsSuspended(false);
 
+    let willRedirect = false;
     try {
-      const res = await loginAction({
+      const loginResult = await loginAction({
         email: email.trim(),
         password,
       });
 
-      if (!res.success) {
-        setErrorMessage(res.error || 'Invalid email or password. Please try again.');
-        setIsSuspended(Boolean(res.isSuspended));
+      if (!loginResult.success) {
+        setErrorMessage(loginResult.error || 'Invalid email or password. Please try again.');
+        setIsSuspended(Boolean(loginResult.isSuspended));
         return;
       }
 
-      if (res.user) {
+      if (loginResult.user) {
         try {
-          localStorage.setItem('nomaddesk_user', JSON.stringify(res.user));
+          localStorage.setItem('nomaddesk_user', JSON.stringify(loginResult.user));
           window.dispatchEvent(new Event('storage'));
         } catch {
           // Ignore localStorage errors
         }
 
-        // Redirect to callbackUrl if present, otherwise home page (AC-AUTH-1)
-        const targetUrl = callbackUrl || '/';
-        window.location.href = targetUrl;
+        willRedirect = true;
+        window.location.href = safeCallbackUrl || '/';
       }
     } catch (err: unknown) {
       setErrorMessage(
         err instanceof Error ? err.message : 'An unexpected error occurred during sign in.'
       );
     } finally {
-      setIsLoading(false);
-      isSubmittingRef.current = false;
+      if (!willRedirect) {
+        setIsLoading(false);
+        isSubmittingRef.current = false;
+      }
     }
   };
 
@@ -100,16 +104,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       {errorMessage && (
         <div
           role="alert"
-          className={`mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 transition-all ${
+          className={cn(
+            'mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 transition-all border',
             isSuspended
-              ? 'bg-[#fffbeb] border border-[#fde68a] text-[#92400e]'
-              : 'bg-[#fef2f2] border border-[#fecaca] text-[#991b1b]'
-          }`}
+              ? 'bg-[var(--color-warning-bg)] border-[var(--color-warning-border)] text-[var(--color-warning-text)]'
+              : 'bg-[var(--color-error-bg)] border-[var(--color-error-border)] text-[var(--color-error-text)]'
+          )}
         >
           {isSuspended ? (
-            <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-[#b45309]" />
+            <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-warning)]" />
           ) : (
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#b91c1c]" />
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]" />
           )}
           <span className="leading-snug">{errorMessage}</span>
         </div>
@@ -163,22 +168,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
           />
         </div>
 
-        <div className="flex items-center justify-between pt-1">
-          <label
-            htmlFor="remember-me"
-            className="flex items-center gap-2 text-xs text-[var(--color-text-on-light-muted)] cursor-pointer select-none"
-          >
-            <input
-              id="remember-me"
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 rounded border-[var(--color-border-light)] text-[var(--color-brand)] focus:ring-[var(--color-brand)] cursor-pointer"
-            />
-            <span>Remember me for 30 days</span>
-          </label>
-        </div>
-
         <Button
           type="submit"
           variant="primary"
@@ -192,7 +181,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         </Button>
       </form>
 
-      {/* Social Login Buttons (Disabled Mock) */}
+      {/* Social Login Buttons (P2 Coming Soon) */}
       <div className="flex gap-2 mt-4">
         <button
           type="button"
@@ -229,7 +218,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         <button
           type="button"
           onClick={() => handleQuickFill('demo@example.com', 'demo1234')}
-          className="px-2.5 py-1 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-medium transition-colors border border-neutral-200 cursor-pointer"
+          className="px-2.5 py-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-medium transition-colors border border-neutral-200 cursor-pointer"
           title="Sign in as Guest Demo"
         >
           Guest: demo@example.com
@@ -237,7 +226,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         <button
           type="button"
           onClick={() => handleQuickFill('host@example.com', 'host1234')}
-          className="px-2.5 py-1 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 font-medium transition-colors border border-amber-200 cursor-pointer"
+          className="px-2.5 py-1.5 rounded-full bg-[var(--color-warning-bg)] hover:opacity-90 text-[var(--color-warning-text)] font-medium transition-colors border border-[var(--color-warning-border)] cursor-pointer"
           title="Sign in as Host"
         >
           Host: host@example.com
@@ -245,7 +234,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         <button
           type="button"
           onClick={() => handleQuickFill('admin@example.com', 'admin1234')}
-          className="px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-800 font-medium transition-colors border border-sky-200 cursor-pointer"
+          className="px-2.5 py-1.5 rounded-full bg-[var(--color-info-bg)] hover:opacity-90 text-[var(--color-info)] font-medium transition-colors border border-[var(--color-info-border)] cursor-pointer"
           title="Sign in as Admin"
         >
           Admin: admin@example.com
@@ -256,7 +245,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       <div className="text-xs text-[var(--color-text-on-light-muted)] text-center mt-6">
         Don&apos;t have an account yet?{' '}
         <Link
-          href={callbackUrl ? `/register?callbackUrl=${encodeURIComponent(callbackUrl)}` : '/register'}
+          href={
+            safeCallbackUrl
+              ? `/register?callbackUrl=${encodeURIComponent(safeCallbackUrl)}`
+              : '/register'
+          }
           className="text-[var(--color-brand)] font-semibold hover:underline"
         >
           Create account

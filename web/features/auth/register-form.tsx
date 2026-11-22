@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { sanitizeCallbackUrl } from '@/lib/format';
+
+const MIN_PASSWORD_LENGTH = 8;
 
 export interface RegisterResult {
   success: boolean;
@@ -32,7 +35,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
   callbackUrl: propCallbackUrl,
 }) => {
   const searchParams = useSearchParams();
-  const callbackUrl = propCallbackUrl || searchParams.get('callbackUrl') || undefined;
+  const rawCallbackUrl = propCallbackUrl || searchParams.get('callbackUrl') || undefined;
+  const safeCallbackUrl = sanitizeCallbackUrl(rawCallbackUrl, '/guests/dashboard');
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -49,14 +53,13 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     if (isSubmittingRef.current) return;
     setErrorMessage(null);
 
-    // Validation
     if (!firstName.trim() || !lastName.trim()) {
       setErrorMessage('Please provide both first and last name.');
       return;
     }
 
-    if (password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters long.');
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setErrorMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`);
       return;
     }
 
@@ -73,38 +76,40 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
     isSubmittingRef.current = true;
     setIsLoading(true);
 
+    let willRedirect = false;
     try {
-      const res = await registerAction({
+      const registerResult = await registerAction({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
         password,
       });
 
-      if (!res.success) {
-        setErrorMessage(res.error || 'Failed to create account. Please try again.');
+      if (!registerResult.success) {
+        setErrorMessage(registerResult.error || 'Failed to create account. Please try again.');
         return;
       }
 
-      if (res.user) {
+      if (registerResult.user) {
         try {
-          localStorage.setItem('nomaddesk_user', JSON.stringify(res.user));
+          localStorage.setItem('nomaddesk_user', JSON.stringify(registerResult.user));
           window.dispatchEvent(new Event('storage'));
         } catch {
           // Ignore localStorage errors
         }
 
-        // Redirect to callbackUrl if present, otherwise guests dashboard or home
-        const targetUrl = callbackUrl || '/guests/dashboard';
-        window.location.href = targetUrl;
+        willRedirect = true;
+        window.location.href = safeCallbackUrl;
       }
     } catch (err: unknown) {
       setErrorMessage(
         err instanceof Error ? err.message : 'An unexpected error occurred during registration.'
       );
     } finally {
-      setIsLoading(false);
-      isSubmittingRef.current = false;
+      if (!willRedirect) {
+        setIsLoading(false);
+        isSubmittingRef.current = false;
+      }
     }
   };
 
@@ -121,9 +126,9 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
       {errorMessage && (
         <div
           role="alert"
-          className="mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 bg-[#fef2f2] border border-[#fecaca] text-[#991b1b] transition-all"
+          className="mb-5 p-3.5 rounded-xl text-xs sm:text-sm flex items-start gap-2.5 bg-[var(--color-error-bg)] border border-[var(--color-error-border)] text-[var(--color-error-text)] transition-all"
         >
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#b91c1c]" />
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[var(--color-error)]" />
           <span className="leading-snug">{errorMessage}</span>
         </div>
       )}
@@ -145,7 +150,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               required
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              placeholder="Alex"
+              placeholder="Jordan"
               className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all"
             />
           </div>
@@ -163,7 +168,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
               required
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              placeholder="Le"
+              placeholder="Taylor"
               className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all"
             />
           </div>
@@ -183,7 +188,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="alex@example.com"
+            placeholder="you@domain.com"
             className="w-full px-4 py-2.5 text-sm bg-white border border-[var(--color-border-light)] rounded-xl placeholder:text-[var(--color-text-light-subtle)] focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)] transition-all"
           />
         </div>
@@ -193,14 +198,14 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             htmlFor="register-password"
             className="block text-xs font-semibold text-[var(--color-text-on-light)] mb-1.5"
           >
-            Password (Min 8 characters)
+            Password (Min {MIN_PASSWORD_LENGTH} characters)
           </label>
           <input
             id="register-password"
             name="password"
             type="password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
@@ -220,7 +225,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
             name="confirmPassword"
             type="password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="••••••••"
@@ -263,7 +268,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({
         </Button>
       </form>
 
-      {/* Social Register Buttons (Disabled Mock) */}
+      {/* Social Register Buttons (P2 Coming Soon) */}
       <div className="flex gap-2 mt-4">
         <button
           type="button"

@@ -1,17 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Calendar, CheckCircle2 } from 'lucide-react';
 import type { Reservation, Property, HostProfile } from '@/lib/types';
 import { useCurrency } from '@/context/currency-context';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ReservationCard } from './reservation-card';
-import { formatDatesDisplay, getDaysUntilMoveIn } from './guest-utils';
+import {
+  formatDatesDisplay,
+  formatRespondByCountdown,
+  getDaysUntilMoveIn,
+} from './guest-utils';
 import { ReservationDetailDrawer } from './reservation-detail-drawer';
 import { CancelBookingModal } from './cancel-booking-modal';
 import { cancelBookingAction } from '@/app/guests/reservations/actions';
+
+const TOAST_DURATION_MS = 5000;
 
 export interface ReservationsViewProps {
   initialReservations: Reservation[];
@@ -26,6 +35,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
   propertiesMap,
   hostsMap,
 }) => {
+  const router = useRouter();
   const { formatPrice } = useCurrency();
   const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
   const [activeTab, setActiveTab] = useState<TabKey>('all');
@@ -36,8 +46,18 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
     null
   );
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Tab counts
+  useEffect(() => {
+    setReservations(initialReservations);
+  }, [initialReservations]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
   const counts = {
     all: reservations.length,
     confirmed: reservations.filter((r) => r.status === 'confirmed').length,
@@ -54,36 +74,32 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
   });
 
   const handleConfirmCancel = async (id: number, reason: string) => {
-    const res = await cancelBookingAction(id, reason);
-    if (!res.success) {
-      throw new Error(res.error || 'Failed to cancel reservation');
+    const cancelResult = await cancelBookingAction(id, reason);
+    if (!cancelResult.success || !cancelResult.reservation) {
+      throw new Error(cancelResult.error || 'Failed to cancel reservation');
     }
 
-    // Update local state optimistically
+    const updatedReservation = cancelResult.reservation;
     setReservations((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: 'cancelled',
-              paymentStatus: 'refunded',
-              cancelledBy: 'guest',
-              rejectionReason: reason,
-            }
-          : item
-      )
+      prev.map((item) => (item.id === id ? updatedReservation : item))
     );
 
-    setToastMessage(`Reservation #${res.reservation?.code || id} has been successfully cancelled.`);
-    setTimeout(() => setToastMessage(null), 5000);
+    setToastMessage(
+      `Reservation #${updatedReservation.code || id} has been successfully cancelled.`
+    );
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), TOAST_DURATION_MS);
+    router.refresh();
   };
 
-  const getStatusBadge = (res: Reservation) => {
-    switch (res.status) {
+  const getStatusBadge = (booking: Reservation) => {
+    switch (booking.status) {
       case 'confirmed':
         return <Badge variant="success">Confirmed</Badge>;
-      case 'pending':
-        return <Badge variant="warning">Pending (38h left)</Badge>;
+      case 'pending': {
+        const countdown = formatRespondByCountdown(booking.respondBy);
+        return <Badge variant="warning">Pending {countdown}</Badge>;
+      }
       case 'rejected':
         return <Badge variant="error">Rejected</Badge>;
       case 'cancelled':
@@ -93,7 +109,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
       case 'expired':
         return <Badge variant="neutral">Expired</Badge>;
       default:
-        return <Badge variant="neutral">{res.status}</Badge>;
+        return <Badge variant="neutral">{booking.status}</Badge>;
     }
   };
 
@@ -101,14 +117,19 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
     <div>
       {/* Toast notification */}
       {toastMessage && (
-        <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-800 flex items-center justify-between shadow-xs transition-all">
+        <div
+          role="status"
+          className="mb-6 p-4 rounded-xl bg-[var(--color-success-bg)] border border-[var(--color-success-border)] text-xs sm:text-sm text-[var(--color-success)] flex items-center justify-between shadow-xs transition-all"
+        >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-[var(--color-success)] shrink-0" />
             <span>{toastMessage}</span>
           </div>
           <button
+            type="button"
+            aria-label="Dismiss notification"
             onClick={() => setToastMessage(null)}
-            className="text-emerald-600 hover:text-emerald-900 font-bold ml-4 cursor-pointer"
+            className="inline-flex items-center justify-center min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 text-[var(--color-success)] hover:opacity-80 font-bold ml-4 cursor-pointer"
           >
             ×
           </button>
@@ -116,7 +137,11 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
       )}
 
       {/* Tabs bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none border-b border-[var(--color-border-light)]">
+      <div
+        role="tablist"
+        aria-label="Filter reservations by status"
+        className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none border-b border-[var(--color-border-light)]"
+      >
         {(
           [
             { key: 'all', label: `All Stays (${counts.all})` },
@@ -130,12 +155,16 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
         ).map((tab) => (
           <button
             key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-3.5 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors cursor-pointer ${
+            className={cn(
+              'px-3.5 py-2 min-h-10 sm:min-h-9 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors cursor-pointer',
               activeTab === tab.key
-                ? 'bg-neutral-900 text-white font-semibold'
-                : 'text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] hover:bg-neutral-100'
-            }`}
+                ? 'bg-[var(--color-bg-dark)] text-white font-semibold'
+                : 'text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] hover:bg-[var(--color-bg-light-alt)]'
+            )}
           >
             {tab.label}
           </button>
@@ -150,12 +179,12 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
             No reservations found
           </h3>
           <p className="text-xs text-[var(--color-text-on-light-muted)] mb-6">
-            You don&apos;t have any bookings in this view. Browse available furnished apartments with
-            dedicated workspaces to plan your next stay.
+            You don&apos;t have any bookings in this view. Browse available furnished apartments
+            with dedicated workspaces to plan your next stay.
           </p>
           <Link
             href="/c/furnished-apartments-madrid"
-            className="btn btn-primary btn-sm btn-pill inline-flex items-center"
+            className="inline-flex items-center px-5 py-2.5 rounded-full bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-xs font-semibold transition-colors shadow-sm"
           >
             Browse Apartments
           </Link>
@@ -167,7 +196,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-[var(--color-border-light)] bg-[#faf8f5] text-[var(--color-text-on-light-muted)] font-semibold uppercase text-[11px] tracking-wider">
+                  <tr className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-light-subtle)] text-[var(--color-text-on-light-muted)] font-semibold uppercase text-[11px] tracking-wider">
                     <th className="py-3.5 px-5">Property</th>
                     <th className="py-3.5 px-4">City</th>
                     <th className="py-3.5 px-4">Dates</th>
@@ -178,50 +207,50 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border-light)] text-[var(--color-text-on-light)]">
-                  {filteredReservations.map((res) => {
-                    const prop = propertiesMap[res.propertyId];
+                  {filteredReservations.map((booking) => {
+                    const prop = propertiesMap[booking.propertyId];
                     const host = prop ? hostsMap[prop.hostId] : null;
-                    const hostName = host?.displayName || 'Casa Urbana Stays';
-                    const propTitle = prop?.title || 'Sky Home Apartment';
+                    const hostName = host?.displayName || 'Verified Host';
+                    const propTitle = prop?.title || 'Furnished Apartment';
 
-                    const isConfirmed = res.status === 'confirmed';
-                    const isPending = res.status === 'pending';
-                    const isCompleted = res.status === 'completed';
-                    const daysUntil = getDaysUntilMoveIn(res.moveInDate);
-                    const canCancelConfirmed = isConfirmed && daysUntil >= 14;
-                    const isConfirmedLocked = isConfirmed && daysUntil < 14;
+                    const isConfirmed = booking.status === 'confirmed';
+                    const isPending = booking.status === 'pending';
+                    const isCompleted = booking.status === 'completed';
+                    const freeCancelDays = booking.freeCancelDays ?? BOOKING_RULES.freeCancelDays;
+                    const daysUntil = getDaysUntilMoveIn(booking.moveInDate);
+                    const canCancelConfirmed = isConfirmed && daysUntil >= freeCancelDays;
+                    const isConfirmedLocked = isConfirmed && daysUntil < freeCancelDays;
 
                     return (
-                      <tr
-                        key={res.id}
-                        className="hover:bg-neutral-50/70 transition-colors"
-                      >
+                      <tr key={booking.id} className="hover:bg-neutral-50/70 transition-colors">
                         <td className="py-4 px-5 font-semibold text-[var(--color-text-on-light)] max-w-xs truncate">
                           <button
-                            onClick={() => setSelectedDrawerReservation(res)}
+                            type="button"
+                            onClick={() => setSelectedDrawerReservation(booking)}
                             className="text-left hover:text-[var(--color-brand)] transition-colors cursor-pointer truncate max-w-full block"
                           >
                             {propTitle}
                           </button>
                           <span className="text-[11px] font-normal text-neutral-400 block font-mono">
-                            #{res.code}
+                            #{booking.code}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-neutral-600">{prop?.city || 'Madrid'}</td>
+                        <td className="py-4 px-4 text-neutral-600">{prop?.city || '—'}</td>
                         <td className="py-4 px-4 text-neutral-600 whitespace-nowrap">
-                          {formatDatesDisplay(res.moveInDate, res.moveOutDate)}
+                          {formatDatesDisplay(booking.moveInDate, booking.moveOutDate)}
                         </td>
                         <td className="py-4 px-4 text-neutral-600">{hostName}</td>
                         <td className="py-4 px-4 font-bold text-[var(--color-text-on-light)]">
-                          {formatPrice(res.totalAmount)}
+                          {formatPrice(booking.totalAmount)}
                         </td>
-                        <td className="py-4 px-4">{getStatusBadge(res)}</td>
+                        <td className="py-4 px-4">{getStatusBadge(booking)}</td>
                         <td className="py-4 px-5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-2">
                             <Button
+                              type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => setSelectedDrawerReservation(res)}
+                              onClick={() => setSelectedDrawerReservation(booking)}
                               className="text-xs h-8 px-2.5"
                             >
                               Receipt
@@ -229,10 +258,11 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
 
                             {isPending && (
                               <Button
+                                type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setSelectedCancelReservation(res)}
-                                className="text-xs h-8 px-2.5 text-[var(--color-error)] border-red-200 hover:bg-red-50"
+                                onClick={() => setSelectedCancelReservation(booking)}
+                                className="text-xs h-8 px-2.5 text-[var(--color-error)] border-[var(--color-error-border)] hover:bg-[var(--color-error-bg)]"
                               >
                                 Cancel
                               </Button>
@@ -240,23 +270,28 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
 
                             {canCancelConfirmed && (
                               <Button
+                                type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setSelectedCancelReservation(res)}
-                                className="text-xs h-8 px-2.5 text-[var(--color-error)] border-red-200 hover:bg-red-50"
+                                onClick={() => setSelectedCancelReservation(booking)}
+                                className="text-xs h-8 px-2.5 text-[var(--color-error)] border-[var(--color-error-border)] hover:bg-[var(--color-error-bg)]"
                               >
                                 Cancel
                               </Button>
                             )}
 
                             {isConfirmedLocked && (
-                              <span className="text-[11px] text-[var(--color-text-on-light-muted)] italic max-w-[140px] truncate block text-right">
-                                Locked (&lt;14d)
+                              <span
+                                title="Contact support to change this booking"
+                                className="text-[11px] text-[var(--color-text-on-light-muted)] italic max-w-[180px] truncate block text-right"
+                              >
+                                Contact support to change this booking
                               </span>
                             )}
 
                             {isCompleted && (
                               <Button
+                                type="button"
                                 variant="outline"
                                 size="sm"
                                 disabled
@@ -277,13 +312,13 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
 
           {/* Mobile Card Stack (< 768px) */}
           <div className="md:hidden space-y-4">
-            {filteredReservations.map((res) => {
-              const prop = propertiesMap[res.propertyId] || null;
+            {filteredReservations.map((booking) => {
+              const prop = propertiesMap[booking.propertyId] || null;
               const host = prop ? hostsMap[prop.hostId] || null : null;
               return (
                 <ReservationCard
-                  key={res.id}
-                  reservation={res}
+                  key={booking.id}
+                  reservation={booking}
                   property={prop}
                   host={host}
                   onViewDetails={(r) => setSelectedDrawerReservation(r)}
@@ -295,7 +330,7 @@ export const ReservationsView: React.FC<ReservationsViewProps> = ({
         </>
       )}
 
-      {/* Reservation Detail Drawer / Modal */}
+      {/* Reservation Detail Drawer */}
       {selectedDrawerReservation && (
         <ReservationDetailDrawer
           isOpen={Boolean(selectedDrawerReservation)}
