@@ -24,6 +24,7 @@ import {
   listAdminUsersPaginated,
   listUsers,
   updateUser,
+  updateUserWithAdminGuards,
   type AdminUsersPaginatedParams,
 } from '@/lib/api/users';
 import {
@@ -252,38 +253,7 @@ export async function updateUserAction(
   const validId = adminUserIdSchema.parse(id);
   const parsed = adminUpdateUserSchema.parse(data);
 
-  if (currentAdmin.id === validId && parsed.isActive === false) {
-    throw new Error('You cannot suspend your own active administrator account.');
-  }
-
-  const targetUser = await getUserById(validId);
-  if (!targetUser) {
-    throw new Error(`User ${validId} not found`);
-  }
-
-  if (Object.keys(parsed).length === 0) {
-    return stripUserSecret(targetUser);
-  }
-
-  const isTargetActiveAdmin =
-    targetUser.role === 'admin' && targetUser.isActive !== false;
-  const wouldRemoveAdmin =
-    (parsed.role !== undefined && parsed.role !== 'admin') ||
-    parsed.isActive === false;
-
-  if (isTargetActiveAdmin && wouldRemoveAdmin) {
-    const allUsers = await listUsers();
-    const activeAdminCount = allUsers.filter(
-      (u) => u.role === 'admin' && u.isActive !== false
-    ).length;
-    if (activeAdminCount <= 1) {
-      throw new Error(
-        'Cannot demote or suspend the last remaining active administrator account.'
-      );
-    }
-  }
-
-  const updated = await updateUser(validId, parsed);
+  const updated = await updateUserWithAdminGuards(validId, parsed, currentAdmin.id);
   revalidatePath('/admin');
   revalidatePath('/admin/users');
   return stripUserSecret(updated);

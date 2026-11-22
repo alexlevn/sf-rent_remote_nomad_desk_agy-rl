@@ -373,6 +373,6 @@ describe('Reservations & Availability PostgreSQL API Layer', () => {
     expect(adminUser.email).toBe('admin@example.com');
 
     const curr = await getCurrentUser();
-    expect(curr.id).toBe(adminUser.id);
+    expect(curr?.id).toBe(adminUser.id);
   });
 });

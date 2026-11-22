@@ -1,6 +1,12 @@
 import { and, asc, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { hostProfiles, properties, reservations, users } from '@/lib/db/schema';
+import {
+  escapeIlike,
+  getPgErrorCode,
+  normalizePagination,
+  sanitizeSearchInput,
+} from '@/lib/db/query-helpers';
 import { notifyBookingCancelled, notifyHostApplication } from '@/lib/email/notifications';
 import type { EmailPropertyInfo, EmailReservationInfo } from '@/lib/email/templates';
 import { getPaymentDriver } from '@/lib/payments/driver';
@@ -52,6 +58,23 @@ export async function listHosts(): Promise<HostProfile[]> {
     .select()
     .from(hostProfiles)
     .orderBy(asc(hostProfiles.id));
+  return rows.map((r) => mapHostRow(r));
+}
+
+/**
+ * Retrieves multiple host profiles by ID in a single batched query.
+ */
+export async function listHostsByIds(ids: number[]): Promise<HostProfile[]> {
+  const validIds = Array.from(
+    new Set(ids.filter((id) => hostInt4IdSchema.safeParse(id).success))
+  );
+  if (validIds.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(hostProfiles)
+    .where(inArray(hostProfiles.id, validIds));
+
   return rows.map((r) => mapHostRow(r));
 }
 
@@ -116,70 +139,79 @@ export async function applyHost(
   data: HostApplicationInput
 ): Promise<HostProfile> {
   const parsed = hostApplicationSchema.parse(data);
-  const targetUserId = parsed.userId ?? 5;
-
-  const existing = await db
-    .select()
-    .from(hostProfiles)
-    .where(eq(hostProfiles.userId, targetUserId))
-    .limit(1);
+  const targetUserId = parsed.userId;
 
   let saved: HostProfile;
+  try {
+    saved = await db.transaction(async (tx) => {
+      const existing = await tx
+        .select()
+        .from(hostProfiles)
+        .where(eq(hostProfiles.userId, targetUserId))
+        .for('update')
+        .limit(1);
 
-  if (existing.length > 0) {
-    if (existing[0].status === 'suspended') {
-      throw new Error('Suspended host accounts cannot reapply; please contact support');
+      if (existing.length > 0) {
+        if (existing[0].status === 'suspended') {
+          throw new Error('Suspended host accounts cannot reapply; please contact support');
+        }
+        if (existing[0].status === 'approved') {
+          throw new Error('Host account is already approved');
+        }
+        const updatedRows = await tx
+          .update(hostProfiles)
+          .set({
+            displayName: parsed.displayName,
+            phone: parsed.phone,
+            website: parsed.website ?? null,
+            cities: parsed.cities ?? '',
+            portfolioSize: parsed.portfolioSize ?? 1,
+            bio: parsed.bio ?? '',
+            status: 'pending',
+            rejectionReason: null,
+          })
+          .where(eq(hostProfiles.id, existing[0].id))
+          .returning();
+
+        return mapHostRow(updatedRows[0]);
+      }
+
+      let candidateSlug = slugifyHostName(parsed.displayName, targetUserId);
+      const slugConflict = await tx
+        .select({ id: hostProfiles.id })
+        .from(hostProfiles)
+        .where(eq(hostProfiles.slug, candidateSlug))
+        .limit(1);
+
+      if (slugConflict.length > 0) {
+        candidateSlug = `${candidateSlug}-${targetUserId}`;
+      }
+
+      const insertedRows = await tx
+        .insert(hostProfiles)
+        .values({
+          userId: targetUserId,
+          displayName: parsed.displayName,
+          slug: candidateSlug,
+          phone: parsed.phone,
+          website: parsed.website ?? null,
+          cities: parsed.cities ?? '',
+          portfolioSize: parsed.portfolioSize ?? 1,
+          bio: parsed.bio ?? '',
+          avatar: null,
+          status: 'pending',
+          rejectionReason: null,
+          approvedAt: null,
+        })
+        .returning();
+
+      return mapHostRow(insertedRows[0]);
+    });
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('A host application already exists for this account or name. Please try again.');
     }
-    if (existing[0].status === 'approved') {
-      throw new Error('Host account is already approved');
-    }
-    const updatedRows = await db
-      .update(hostProfiles)
-      .set({
-        displayName: parsed.displayName,
-        phone: parsed.phone,
-        website: parsed.website ?? null,
-        cities: parsed.cities ?? '',
-        portfolioSize: parsed.portfolioSize ?? 1,
-        bio: parsed.bio ?? '',
-        status: 'pending',
-        rejectionReason: null,
-      })
-      .where(eq(hostProfiles.id, existing[0].id))
-      .returning();
-
-    saved = mapHostRow(updatedRows[0]);
-  } else {
-    let candidateSlug = slugifyHostName(parsed.displayName, targetUserId);
-    const slugConflict = await db
-      .select({ id: hostProfiles.id })
-      .from(hostProfiles)
-      .where(eq(hostProfiles.slug, candidateSlug))
-      .limit(1);
-
-    if (slugConflict.length > 0) {
-      candidateSlug = `${candidateSlug}-${targetUserId}`;
-    }
-
-    const insertedRows = await db
-      .insert(hostProfiles)
-      .values({
-        userId: targetUserId,
-        displayName: parsed.displayName,
-        slug: candidateSlug,
-        phone: parsed.phone,
-        website: parsed.website ?? null,
-        cities: parsed.cities ?? '',
-        portfolioSize: parsed.portfolioSize ?? 1,
-        bio: parsed.bio ?? '',
-        avatar: null,
-        status: 'pending',
-        rejectionReason: null,
-        approvedAt: null,
-      })
-      .returning();
-
-    saved = mapHostRow(insertedRows[0]);
+    throw err;
   }
 
   await notifyHostApplication(
@@ -223,6 +255,7 @@ export async function reviewHostApplication(
       .select()
       .from(hostProfiles)
       .where(eq(hostProfiles.id, parsed.id))
+      .for('update')
       .limit(1);
 
     if (existingRows.length === 0) {
@@ -398,22 +431,25 @@ export async function updateHostProfile(
   if (parsed.portfolioSize !== undefined) updatePayload.portfolioSize = parsed.portfolioSize;
   if (parsed.bio !== undefined) updatePayload.bio = parsed.bio;
   if (parsed.avatar !== undefined) updatePayload.avatar = parsed.avatar;
-  if (parsed.status !== undefined) updatePayload.status = parsed.status;
-  if (parsed.rejectionReason !== undefined) {
-    updatePayload.rejectionReason = parsed.rejectionReason;
-  }
 
   if (Object.keys(updatePayload).length === 0) {
     return mapHostRow(existingRows[0]);
   }
 
-  const updatedRows = await db
-    .update(hostProfiles)
-    .set(updatePayload)
-    .where(eq(hostProfiles.id, validId))
-    .returning();
+  try {
+    const updatedRows = await db
+      .update(hostProfiles)
+      .set(updatePayload)
+      .where(eq(hostProfiles.id, validId))
+      .returning();
 
-  return mapHostRow(updatedRows[0]);
+    return mapHostRow(updatedRows[0]);
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('This host profile URL slug is already in use.');
+    }
+    throw err;
+  }
 }
 
 export interface AdminHostsPaginatedParams {
@@ -445,25 +481,6 @@ const VALID_HOST_STATUSES = new Set<HostStatus>([
   'rejected',
   'suspended',
 ]);
-
-function escapeIlike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-function normalizePagination(page?: number, pageSize?: number) {
-  const safePage =
-    typeof page === 'number' && Number.isFinite(page)
-      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
-      : 1;
-  const rawSize =
-    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
-  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
-  return {
-    page: safePage,
-    pageSize: safePageSize,
-    offset: (safePage - 1) * safePageSize,
-  };
-}
 
 /**
  * Lists host profiles for the Admin Portal using SQL LIMIT/OFFSET pagination,
@@ -506,15 +523,18 @@ export async function listAdminHostsPaginated(
     conditions.push(eq(hostProfiles.status, params.status));
   }
 
-  if (typeof params?.search === 'string' && params.search.trim()) {
-    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
-    const searchCond = or(
-      ilike(hostProfiles.displayName, pattern),
-      ilike(hostProfiles.cities, pattern),
-      ilike(hostProfiles.phone, pattern),
-      ilike(users.email, pattern)
-    );
-    if (searchCond) conditions.push(searchCond);
+  if (typeof params?.search === 'string') {
+    const cleanSearch = sanitizeSearchInput(params.search, 200);
+    if (cleanSearch) {
+      const pattern = `%${escapeIlike(cleanSearch, 200)}%`;
+      const searchCond = or(
+        ilike(hostProfiles.displayName, pattern),
+        ilike(hostProfiles.cities, pattern),
+        ilike(hostProfiles.phone, pattern),
+        ilike(users.email, pattern)
+      );
+      if (searchCond) conditions.push(searchCond);
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

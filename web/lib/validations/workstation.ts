@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const INT4_MAX = 2_147_483_647;
+import { INT4_MAX } from '@/lib/format';
 
 export const workstationCategorySchema = z.enum([
   'desk',

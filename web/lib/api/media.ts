@@ -1,6 +1,11 @@
 import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import {
+  escapeIlike,
+  normalizePagination,
+  sanitizeSearchInput,
+} from '@/lib/db/query-helpers';
+import {
   blogPosts,
   communityVideos,
   hostProfiles,
@@ -9,10 +14,10 @@ import {
   properties,
   travelGuides,
 } from '@/lib/db/schema';
+import { INT4_MAX } from '@/lib/format';
 import { deleteUploadFile, saveUploadedFile } from '@/lib/storage/upload';
 import type { MediaItem, MediaListResult, UploadActor } from '@/lib/types';
 
-const INT4_MAX = 2_147_483_647;
 export const MAX_MEDIA_ALT_LENGTH = 255;
 
 export type MediaServiceErrorStatus = 400 | 403 | 404 | 409;
@@ -69,29 +74,9 @@ function mapMediaRow(row: typeof media.$inferSelect, usageCount: number = 0): Me
 
 function normalizeAlt(alt?: string | null): string | null {
   if (typeof alt !== 'string') return null;
-  const trimmed = alt.trim();
+  const trimmed = sanitizeSearchInput(alt, MAX_MEDIA_ALT_LENGTH);
   if (trimmed.length === 0) return null;
-  return trimmed.slice(0, MAX_MEDIA_ALT_LENGTH);
-}
-
-function escapeIlike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-function normalizePagination(page?: number, pageSize?: number) {
-  const safePage =
-    typeof page === 'number' && Number.isFinite(page)
-      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
-      : 1;
-  const rawSize =
-    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 24;
-  const safePageSize = Math.min(Math.max(rawSize, 1), 60);
-
-  return {
-    page: safePage,
-    pageSize: safePageSize,
-    offset: (safePage - 1) * safePageSize,
-  };
+  return trimmed;
 }
 
 /**
@@ -138,71 +123,53 @@ export async function uploadMediaFile(
   }
 }
 
+type MediaQueryRunner = Pick<typeof db, 'execute'>;
+
 /**
- * Checks whether a media URL is referenced across all 6 content/entity tables.
+ * Checks whether a media URL is referenced across all 6 content/entity tables
+ * in a single SQL query (safe on both pooled db and single-client transactions).
  */
-export async function findMediaUsages(url: string): Promise<string[]> {
+export async function findMediaUsages(
+  url: string,
+  runner: MediaQueryRunner = db,
+): Promise<string[]> {
   const normalizedUrl = url.trim();
   if (normalizedUrl.length === 0) {
     return [];
   }
 
-  const [propRows, locRows, guideRows, blogRows, videoRows, hostRows] = await Promise.all([
-    db
-      .select({ id: properties.id })
-      .from(properties)
-      .where(
-        or(
-          sql`${properties.images} @> jsonb_build_array(${normalizedUrl}::text)`,
-          sql`strpos(coalesce(${properties.description}, ''), ${normalizedUrl}) > 0`,
-          sql`strpos(coalesce(${properties.houseRules}, ''), ${normalizedUrl}) > 0`,
-        ),
-      ),
-    db
-      .select({ id: locations.id })
-      .from(locations)
-      .where(
-        or(
-          eq(locations.image, normalizedUrl),
-          sql`strpos(coalesce(${locations.description}, ''), ${normalizedUrl}) > 0`,
-        ),
-      ),
-    db
-      .select({ id: travelGuides.id })
-      .from(travelGuides)
-      .where(
-        or(
-          eq(travelGuides.coverImage, normalizedUrl),
-          sql`strpos(coalesce(${travelGuides.content}, ''), ${normalizedUrl}) > 0`,
-        ),
-      ),
-    db
-      .select({ id: blogPosts.id })
-      .from(blogPosts)
-      .where(
-        or(
-          eq(blogPosts.coverImage, normalizedUrl),
-          sql`strpos(coalesce(${blogPosts.content}, ''), ${normalizedUrl}) > 0`,
-        ),
-      ),
-    db
-      .select({ id: communityVideos.id })
-      .from(communityVideos)
-      .where(eq(communityVideos.thumbnailUrl, normalizedUrl)),
-    db
-      .select({ id: hostProfiles.id })
-      .from(hostProfiles)
-      .where(eq(hostProfiles.avatar, normalizedUrl)),
-  ]);
+  const res = await runner.execute<{ ref: string }>(sql`
+    SELECT 'property:' || ${properties.id}::text AS ref
+    FROM ${properties}
+    WHERE ${properties.images} @> jsonb_build_array(${normalizedUrl}::text)
+       OR strpos(coalesce(${properties.description}, ''), ${normalizedUrl}) > 0
+       OR strpos(coalesce(${properties.houseRules}, ''), ${normalizedUrl}) > 0
+    UNION ALL
+    SELECT 'location:' || ${locations.id}::text AS ref
+    FROM ${locations}
+    WHERE ${locations.image} = ${normalizedUrl}
+       OR strpos(coalesce(${locations.description}, ''), ${normalizedUrl}) > 0
+    UNION ALL
+    SELECT 'travel_guide:' || ${travelGuides.id}::text AS ref
+    FROM ${travelGuides}
+    WHERE ${travelGuides.coverImage} = ${normalizedUrl}
+       OR strpos(coalesce(${travelGuides.content}, ''), ${normalizedUrl}) > 0
+    UNION ALL
+    SELECT 'blog_post:' || ${blogPosts.id}::text AS ref
+    FROM ${blogPosts}
+    WHERE ${blogPosts.coverImage} = ${normalizedUrl}
+       OR strpos(coalesce(${blogPosts.content}, ''), ${normalizedUrl}) > 0
+    UNION ALL
+    SELECT 'community_video:' || ${communityVideos.id}::text AS ref
+    FROM ${communityVideos}
+    WHERE ${communityVideos.thumbnailUrl} = ${normalizedUrl}
+    UNION ALL
+    SELECT 'host_profile:' || ${hostProfiles.id}::text AS ref
+    FROM ${hostProfiles}
+    WHERE ${hostProfiles.avatar} = ${normalizedUrl}
+  `);
 
-  return [
-    ...propRows.map((row) => `property:${row.id}`),
-    ...locRows.map((row) => `location:${row.id}`),
-    ...guideRows.map((row) => `travel_guide:${row.id}`),
-    ...blogRows.map((row) => `blog_post:${row.id}`),
-    ...videoRows.map((row) => `community_video:${row.id}`),
-    ...hostRows.map((row) => `host_profile:${row.id}`),
-  ];
+  return res.rows.map((row) => row.ref);
 }
 
 // Batch usage counts for a page of URLs in 6 queries instead of 6*N queries
@@ -300,7 +267,10 @@ async function findMediaUsageCounts(urls: string[]): Promise<Map<string, number>
 export async function listMediaPaginated(
   params?: ListMediaParams,
 ): Promise<MediaListResult> {
-  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize);
+  const { page, pageSize, offset } = normalizePagination(params?.page, params?.pageSize, {
+    defaultPageSize: 24,
+    maxPageSize: 60,
+  });
 
   const conditions: SQL[] = [];
 
@@ -321,15 +291,18 @@ export async function listMediaPaginated(
     conditions.push(eq(media.uploadedBy, params.uploadedBy));
   }
 
-  if (typeof params?.search === 'string' && params.search.trim().length > 0) {
-    const pattern = `%${escapeIlike(params.search.trim().slice(0, 100))}%`;
-    const searchCond = or(
-      ilike(media.alt, pattern),
-      ilike(media.url, pattern),
-      ilike(media.storageKey, pattern),
-    );
-    if (searchCond) {
-      conditions.push(searchCond);
+  if (typeof params?.search === 'string') {
+    const cleanSearch = sanitizeSearchInput(params.search, 100);
+    if (cleanSearch.length > 0) {
+      const pattern = `%${escapeIlike(cleanSearch, 100)}%`;
+      const searchCond = or(
+        ilike(media.alt, pattern),
+        ilike(media.url, pattern),
+        ilike(media.storageKey, pattern),
+      );
+      if (searchCond) {
+        conditions.push(searchCond);
+      }
     }
   }
 
@@ -381,51 +354,57 @@ export async function deleteUnusedMedia(
     throw new MediaServiceError('Invalid media ID.', 400);
   }
 
-  const [row] = await db
-    .select()
-    .from(media)
-    .where(eq(media.id, id))
-    .limit(1);
+  // Lock the media row, verify references, and delete DB row atomically before unlinking disk file
+  const deletedRow = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(media)
+      .where(eq(media.id, id))
+      .for('update')
+      .limit(1);
 
-  if (!row) {
-    throw new MediaServiceError('Media item not found.', 404);
-  }
+    if (!row) {
+      throw new MediaServiceError('Media item not found.', 404);
+    }
 
-  if (actor.role === 'host' && row.uploadedBy !== actor.user.id) {
-    throw new MediaServiceError(
-      'Forbidden: You can only delete media that you uploaded.',
-      403,
-    );
-  }
+    if (actor.role === 'host' && row.uploadedBy !== actor.user.id) {
+      throw new MediaServiceError(
+        'Forbidden: You can only delete media that you uploaded.',
+        403,
+      );
+    }
 
-  const usages = await findMediaUsages(row.url);
-  if (usages.length > 0) {
-    const noun = usages.length === 1 ? 'reference' : 'references';
-    throw new MediaServiceError(
-      `Cannot delete media because it is currently in use (${usages.length} ${noun}).`,
-      409,
-    );
-  }
+    const usages = await findMediaUsages(row.url, tx);
+    if (usages.length > 0) {
+      const noun = usages.length === 1 ? 'reference' : 'references';
+      throw new MediaServiceError(
+        `Cannot delete media because it is currently in use (${usages.length} ${noun}).`,
+        409,
+      );
+    }
 
-  const deleteWhere =
-    actor.role === 'host'
-      ? and(eq(media.id, row.id), eq(media.uploadedBy, actor.user.id))
-      : eq(media.id, row.id);
+    const deleteWhere =
+      actor.role === 'host'
+        ? and(eq(media.id, row.id), eq(media.uploadedBy, actor.user.id))
+        : eq(media.id, row.id);
 
-  const deletedRows = await db
-    .delete(media)
-    .where(deleteWhere)
-    .returning({ id: media.id, storageKey: media.storageKey });
+    const deletedRows = await tx
+      .delete(media)
+      .where(deleteWhere)
+      .returning({ id: media.id, storageKey: media.storageKey });
 
-  if (deletedRows.length === 0) {
-    throw new MediaServiceError('Media item not found.', 404);
-  }
+    if (deletedRows.length === 0) {
+      throw new MediaServiceError('Media item not found.', 404);
+    }
 
-  await deleteUploadFile(row.storageKey, { uploadDir: options?.uploadDir });
+    return deletedRows[0];
+  });
+
+  await deleteUploadFile(deletedRow.storageKey, { uploadDir: options?.uploadDir });
 
   return {
     deleted: true,
-    id: row.id,
-    storageKey: row.storageKey,
+    id: deletedRow.id,
+    storageKey: deletedRow.storageKey,
   };
 }

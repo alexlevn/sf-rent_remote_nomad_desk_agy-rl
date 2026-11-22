@@ -1,5 +1,6 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
+import { getPgErrorCode } from '@/lib/db/query-helpers';
 import {
   reservations,
   workstationAddons,
@@ -249,13 +250,20 @@ export async function saveWorkstationPackage(
       return mapPackageRow(existing);
     }
 
-    const updated = await db
-      .update(workstationPackages)
-      .set(updateValues)
-      .where(eq(workstationPackages.id, existing.id))
-      .returning();
+    try {
+      const updated = await db
+        .update(workstationPackages)
+        .set(updateValues)
+        .where(eq(workstationPackages.id, existing.id))
+        .returning();
 
-    return mapPackageRow(updated[0]);
+      return mapPackageRow(updated[0]);
+    } catch (err) {
+      if (getPgErrorCode(err) === '23505') {
+        throw new Error('A workstation package with this slug already exists.');
+      }
+      throw err;
+    }
   }
 
   const validated = createWorkstationPackageSchema.parse(pkg);
@@ -265,21 +273,28 @@ export async function saveWorkstationPackage(
   const nextPos = validated.position ?? (maxPosResult[0]?.maxPos ?? 0) + 1;
   const slug = (validated.slug ?? validated.id).toLowerCase().replace(/\s+/g, '-');
 
-  const inserted = await db
-    .insert(workstationPackages)
-    .values({
-      slug,
-      name: validated.name,
-      description: validated.description,
-      monthlyPriceEUR: validated.pricePerMonth,
-      isIncluded: validated.isIncluded,
-      features: validated.features,
-      isActive: validated.isActive,
-      position: nextPos,
-    })
-    .returning();
+  try {
+    const inserted = await db
+      .insert(workstationPackages)
+      .values({
+        slug,
+        name: validated.name,
+        description: validated.description,
+        monthlyPriceEUR: validated.pricePerMonth,
+        isIncluded: validated.isIncluded,
+        features: validated.features,
+        isActive: validated.isActive,
+        position: nextPos,
+      })
+      .returning();
 
-  return mapPackageRow(inserted[0]);
+    return mapPackageRow(inserted[0]);
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('A workstation package with this slug already exists.');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -504,36 +519,47 @@ export async function reorderWorkstationItems(
   const validated = reorderWorkstationSchema.parse({ type, orderedIds });
   const uniqueIds = Array.from(new Set(validated.orderedIds));
 
-  await db.transaction(async (tx) => {
-    for (let idx = 0; idx < uniqueIds.length; idx += 1) {
-      const itemId = uniqueIds[idx];
-      const nextPos = idx + 1;
-
+  if (uniqueIds.length > 0) {
+    await db.transaction(async (tx) => {
       if (validated.type === 'package') {
-        const normalized = itemId.toLowerCase();
-        const resolvedSlug = resolvePackageSlug(normalized);
-        await tx
-          .update(workstationPackages)
-          .set({ position: nextPos })
-          .where(
-            or(
-              eq(sql`lower(${workstationPackages.slug})`, normalized),
-              eq(sql`lower(${workstationPackages.slug})`, resolvedSlug)
-            )
-          );
+        const orderValues = sql.join(
+          uniqueIds.map((itemId, idx) => {
+            const resolvedSlug = resolvePackageSlug(itemId.toLowerCase());
+            return sql`(${resolvedSlug}::text, ${idx + 1}::int)`;
+          }),
+          sql`, `
+        );
+        await tx.execute(sql`
+          UPDATE ${workstationPackages} AS wp
+          SET position = v.pos
+          FROM (VALUES ${orderValues}) AS v(slug, pos)
+          WHERE lower(wp.slug) = v.slug
+        `);
       } else if (validated.type === 'component') {
-        await tx
-          .update(workstationComponents)
-          .set({ position: nextPos })
-          .where(eq(workstationComponents.componentId, itemId));
+        const orderValues = sql.join(
+          uniqueIds.map((itemId, idx) => sql`(${itemId}::text, ${idx + 1}::int)`),
+          sql`, `
+        );
+        await tx.execute(sql`
+          UPDATE ${workstationComponents} AS wc
+          SET position = v.pos
+          FROM (VALUES ${orderValues}) AS v(component_id, pos)
+          WHERE wc.component_id = v.component_id
+        `);
       } else {
-        await tx
-          .update(workstationAddons)
-          .set({ position: nextPos })
-          .where(eq(workstationAddons.addonId, itemId));
+        const orderValues = sql.join(
+          uniqueIds.map((itemId, idx) => sql`(${itemId}::text, ${idx + 1}::int)`),
+          sql`, `
+        );
+        await tx.execute(sql`
+          UPDATE ${workstationAddons} AS wa
+          SET position = v.pos
+          FROM (VALUES ${orderValues}) AS v(addon_id, pos)
+          WHERE wa.addon_id = v.addon_id
+        `);
       }
-    }
-  });
+    });
+  }
 
   return listWorkstations({ includeInactive: true });
 }

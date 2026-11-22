@@ -1,6 +1,13 @@
 import { and, asc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { users } from '@/lib/db/schema';
+import {
+  escapeIlike,
+  getPgErrorCode,
+  normalizePagination,
+  sanitizeSearchInput,
+} from '@/lib/db/query-helpers';
+import { createUserSchema, updateUserSchema, userIdSchema } from '@/lib/validations/user';
 import type { User, UserRole } from '@/lib/types';
 
 function mapUserRow(row: typeof users.$inferSelect): User {
@@ -28,15 +35,25 @@ export async function listUsers(): Promise<User[]> {
  * Retrieves a user by ID.
  */
 export async function getUserById(id: number): Promise<User | null> {
-  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  const parsedId = userIdSchema.safeParse(id);
+  if (!parsedId.success) return null;
+
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, parsedId.data))
+    .limit(1);
   return rows.length > 0 ? mapUserRow(rows[0]) : null;
 }
 
 /**
- * Retrieves a user by email address.
+ * Retrieves a user by email address (case-insensitive).
  */
 export async function getUserByEmail(email: string): Promise<User | null> {
-  const normalized = email.trim().toLowerCase();
+  if (typeof email !== 'string') return null;
+  const normalized = sanitizeSearchInput(email, 255).toLowerCase();
+  if (!normalized) return null;
+
   const rows = await db
     .select()
     .from(users)
@@ -49,49 +66,148 @@ export async function getUserByEmail(email: string): Promise<User | null> {
  * Updates a user account (e.g. status, profile, role).
  */
 export async function updateUser(id: number, data: Partial<User>): Promise<User> {
-  const updateValues: Record<string, unknown> = {};
-  if (data.email !== undefined) updateValues.email = data.email.trim().toLowerCase();
-  if (data.passwordHash !== undefined) updateValues.passwordHash = data.passwordHash;
-  if (data.firstName !== undefined) updateValues.firstName = data.firstName;
-  if (data.lastName !== undefined) updateValues.lastName = data.lastName;
-  if (data.role !== undefined) updateValues.role = data.role;
-  if (data.isActive !== undefined) updateValues.isActive = data.isActive;
+  const validId = userIdSchema.parse(id);
+  const parsed = updateUserSchema.parse(data);
 
-  const rows = await db
-    .update(users)
-    .set(updateValues)
-    .where(eq(users.id, id))
-    .returning();
+  const updateValues: Partial<typeof users.$inferInsert> = {};
+  if (parsed.email !== undefined) updateValues.email = parsed.email;
+  if (parsed.passwordHash !== undefined) updateValues.passwordHash = parsed.passwordHash;
+  if (parsed.firstName !== undefined) updateValues.firstName = parsed.firstName;
+  if (parsed.lastName !== undefined) updateValues.lastName = parsed.lastName;
+  if (parsed.role !== undefined) updateValues.role = parsed.role;
+  if (parsed.isActive !== undefined) updateValues.isActive = parsed.isActive;
 
-  if (!rows.length) {
-    throw new Error(`User ${id} not found`);
+  if (Object.keys(updateValues).length === 0) {
+    const existing = await getUserById(validId);
+    if (!existing) {
+      throw new Error(`User ${validId} not found`);
+    }
+    return existing;
   }
-  return mapUserRow(rows[0]);
+
+  try {
+    const rows = await db
+      .update(users)
+      .set(updateValues)
+      .where(eq(users.id, validId))
+      .returning();
+
+    if (!rows.length) {
+      throw new Error(`User ${validId} not found`);
+    }
+    return mapUserRow(rows[0]);
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('Email is already registered to another account.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Atomically updates a user account while enforcing self-suspension and
+ * last-active-administrator guards under row locks inside a single transaction.
+ */
+export async function updateUserWithAdminGuards(
+  targetUserId: number,
+  data: Partial<User>,
+  currentAdminId: number
+): Promise<User> {
+  const validId = userIdSchema.parse(targetUserId);
+  const validAdminId = userIdSchema.parse(currentAdminId);
+  const parsed = updateUserSchema.parse(data);
+
+  if (validAdminId === validId && parsed.isActive === false) {
+    throw new Error('You cannot suspend your own active administrator account.');
+  }
+
+  try {
+    return await db.transaction(async (tx) => {
+      const targetRows = await tx
+        .select()
+        .from(users)
+        .where(eq(users.id, validId))
+        .for('update')
+        .limit(1);
+
+      if (targetRows.length === 0) {
+        throw new Error(`User ${validId} not found`);
+      }
+
+      const targetUser = targetRows[0];
+      const updateValues: Partial<typeof users.$inferInsert> = {};
+      if (parsed.email !== undefined) updateValues.email = parsed.email;
+      if (parsed.passwordHash !== undefined) updateValues.passwordHash = parsed.passwordHash;
+      if (parsed.firstName !== undefined) updateValues.firstName = parsed.firstName;
+      if (parsed.lastName !== undefined) updateValues.lastName = parsed.lastName;
+      if (parsed.role !== undefined) updateValues.role = parsed.role;
+      if (parsed.isActive !== undefined) updateValues.isActive = parsed.isActive;
+
+      if (Object.keys(updateValues).length === 0) {
+        return mapUserRow(targetUser);
+      }
+
+      const isTargetActiveAdmin = targetUser.role === 'admin' && targetUser.isActive;
+      const wouldRemoveAdmin =
+        (parsed.role !== undefined && parsed.role !== 'admin') || parsed.isActive === false;
+
+      if (isTargetActiveAdmin && wouldRemoveAdmin) {
+        // Lock all active admin rows to prevent concurrent demotion leaving 0 active admins
+        const activeAdminRows = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.role, 'admin'), eq(users.isActive, true)))
+          .for('update');
+
+        if (activeAdminRows.length <= 1) {
+          throw new Error(
+            'Cannot demote or suspend the last remaining active administrator account.'
+          );
+        }
+      }
+
+      const updatedRows = await tx
+        .update(users)
+        .set(updateValues)
+        .where(eq(users.id, validId))
+        .returning();
+
+      return mapUserRow(updatedRows[0]);
+    });
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('Email is already registered to another account.');
+    }
+    throw err;
+  }
 }
 
 /**
  * Creates a new user account (e.g. during register).
  */
 export async function createUser(data: Omit<User, 'id'>): Promise<User> {
-  const normalized = data.email.trim().toLowerCase();
-  const existing = await getUserByEmail(normalized);
-  if (existing) {
-    throw new Error(`Email ${data.email} is already registered`);
+  const parsed = createUserSchema.parse(data);
+
+  try {
+    const rows = await db
+      .insert(users)
+      .values({
+        email: parsed.email,
+        passwordHash: parsed.passwordHash,
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
+        role: parsed.role,
+        isActive: parsed.isActive,
+      })
+      .returning();
+
+    return mapUserRow(rows[0]);
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error(`Email ${parsed.email} is already registered`);
+    }
+    throw err;
   }
-
-  const rows = await db
-    .insert(users)
-    .values({
-      email: normalized,
-      passwordHash: data.passwordHash,
-      firstName: data.firstName || '',
-      lastName: data.lastName || '',
-      role: data.role || 'guest',
-      isActive: data.isActive ?? true,
-    })
-    .returning();
-
-  return mapUserRow(rows[0]);
 }
 
 export interface AdminUsersPaginatedParams {
@@ -121,25 +237,6 @@ export interface AdminUsersPaginatedResult {
 }
 
 const VALID_USER_ROLES = new Set<UserRole>(['guest', 'host', 'admin']);
-
-function escapeIlike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-function normalizePagination(page?: number, pageSize?: number) {
-  const safePage =
-    typeof page === 'number' && Number.isFinite(page)
-      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
-      : 1;
-  const rawSize =
-    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
-  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
-  return {
-    page: safePage,
-    pageSize: safePageSize,
-    offset: (safePage - 1) * safePageSize,
-  };
-}
 
 /**
  * Lists users for the Admin Portal using SQL LIMIT/OFFSET pagination,
@@ -192,15 +289,21 @@ export async function listAdminUsersPaginated(
     }
   }
 
-  if (typeof params?.search === 'string' && params.search.trim()) {
-    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
-    const searchCond = or(
-      ilike(users.email, pattern),
-      ilike(users.firstName, pattern),
-      ilike(users.lastName, pattern),
-      ilike(sql`coalesce(${users.firstName}, '') || ' ' || coalesce(${users.lastName}, '')`, pattern)
-    );
-    if (searchCond) conditions.push(searchCond);
+  if (typeof params?.search === 'string') {
+    const cleanSearch = sanitizeSearchInput(params.search, 200);
+    if (cleanSearch) {
+      const pattern = `%${escapeIlike(cleanSearch, 200)}%`;
+      const searchCond = or(
+        ilike(users.email, pattern),
+        ilike(users.firstName, pattern),
+        ilike(users.lastName, pattern),
+        ilike(
+          sql`coalesce(${users.firstName}, '') || ' ' || coalesce(${users.lastName}, '')`,
+          pattern
+        )
+      );
+      if (searchCond) conditions.push(searchCond);
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

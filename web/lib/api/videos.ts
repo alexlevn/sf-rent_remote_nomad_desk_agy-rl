@@ -17,7 +17,7 @@ function mapVideoRow(row: typeof communityVideos.$inferSelect): CommunityVideo {
     embedSrc: row.embedUrl || '',
     aspect: row.aspect || '9:16',
     authorName: row.author || 'Guest Story',
-    avatar: row.thumbnailUrl || '/seed/location/madrid.jpg',
+    avatar: row.thumbnailUrl || '/seed/location/2241.jpg',
     isActive: row.isActive,
     position: row.position,
   };
@@ -125,15 +125,22 @@ export async function deleteVideo(id: number): Promise<boolean> {
  */
 export async function reorderVideos(orderedIds: number[]): Promise<CommunityVideo[]> {
   const parsedIds = reorderVideosSchema.parse(orderedIds);
+  const uniqueIds = Array.from(new Set(parsedIds));
 
-  await db.transaction(async (tx) => {
-    for (let idx = 0; idx < parsedIds.length; idx++) {
-      await tx
-        .update(communityVideos)
-        .set({ position: idx + 1 })
-        .where(eq(communityVideos.id, parsedIds[idx]));
-    }
-  });
+  if (uniqueIds.length > 0) {
+    const orderValues = sql.join(
+      uniqueIds.map((id, idx) => sql`(${id}::int, ${idx + 1}::int)`),
+      sql`, `
+    );
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        UPDATE ${communityVideos} AS cv
+        SET position = v.pos
+        FROM (VALUES ${orderValues}) AS v(id, pos)
+        WHERE cv.id = v.id
+      `);
+    });
+  }
 
   return listVideos({ includeInactive: true });
 }

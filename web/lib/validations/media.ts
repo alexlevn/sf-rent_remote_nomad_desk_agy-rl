@@ -1,6 +1,6 @@
 import { z } from 'zod';
+import { INT4_MAX } from '@/lib/format';
 
-const INT4_MAX = 2_147_483_647;
 const MAX_IMAGE_PATH_LENGTH = 255;
 
 const SAFE_LOCAL_PREFIXES = ['/uploads/', '/seed/'] as const;

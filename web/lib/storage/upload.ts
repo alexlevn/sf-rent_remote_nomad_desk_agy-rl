@@ -6,6 +6,7 @@ import sharp, { type Metadata, type OutputInfo } from 'sharp';
 export const MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 export const MAX_IMAGES_PER_LISTING = 20;
 export const MAX_IMAGE_DIMENSION = 1600;
+export const MAX_INPUT_PIXELS = 40_000_000; // ~6324x6324 ceiling against decompression bombs
 export const WEBP_QUALITY = 80;
 
 export type AllowedImageMimeType =
@@ -170,7 +171,10 @@ export async function saveUploadedBuffer(
 
   let metadata: Metadata;
   try {
-    metadata = await sharp(buffer, { animated: true }).metadata();
+    metadata = await sharp(buffer, {
+      animated: true,
+      limitInputPixels: MAX_INPUT_PIXELS,
+    }).metadata();
   } catch {
     throw new UploadValidationError(
       'CORRUPT_IMAGE',
@@ -196,7 +200,7 @@ export async function saveUploadedBuffer(
   let processedData: Buffer;
   let processedInfo: OutputInfo;
   try {
-    const output = await sharp(buffer)
+    const output = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
       .resize({
         width: MAX_IMAGE_DIMENSION,

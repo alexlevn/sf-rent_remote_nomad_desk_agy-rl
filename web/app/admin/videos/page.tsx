@@ -95,7 +95,7 @@ export default function AdminVideosPage() {
       platform: 'Instagram',
       authorName: '',
       url: '',
-      avatar: '/seed/location/madrid.jpg',
+      avatar: '/seed/location/2241.jpg',
       aspect: '9:16',
       isActive: true,
       position: videos.length + 1,
@@ -510,7 +510,7 @@ export default function AdminVideosPage() {
                   setEditingVideo((prev) => (prev ? { ...prev, avatar: url } : null))
                 }
                 onModalOpenChange={setIsMediaPickerOpen}
-                placeholder="/seed/location/madrid.jpg"
+                placeholder="/seed/location/2241.jpg"
                 helperText="Shown as the circular creator avatar in the homepage community reels."
                 testIdPrefix="video-avatar-image"
                 previewAlt={editingVideo.authorName || 'Creator avatar'}

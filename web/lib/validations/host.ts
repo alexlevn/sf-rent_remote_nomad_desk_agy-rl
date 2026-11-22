@@ -1,7 +1,6 @@
 import { z } from 'zod';
+import { INT4_MAX } from '@/lib/format';
 import { optionalSafeImagePathSchema } from '@/lib/validations/media';
-
-const INT4_MAX = 2147483647;
 
 export const hostInt4IdSchema = z.number().int().min(1).max(INT4_MAX);
 
@@ -35,9 +34,10 @@ export const hostApplicationSchema = z.object({
   portfolioSize: z.number().int().min(1).max(100000).optional(),
   bio: z.string().trim().max(5000).optional(),
   termsAccepted: z.boolean().optional(),
-  userId: hostInt4IdSchema.optional(),
+  userId: hostInt4IdSchema,
 });
 
+// Excludes status/rejectionReason so profile edits can never mass-assign moderation state
 export const updateHostProfileSchema = z.object({
   displayName: z.string().trim().min(1, 'Display name is required').max(150).optional(),
   slug: z.string().trim().min(1).max(150).optional(),
@@ -53,8 +53,6 @@ export const updateHostProfileSchema = z.object({
   portfolioSize: z.number().int().min(1).max(100000).optional(),
   bio: z.string().trim().max(5000).optional(),
   avatar: optionalSafeImagePathSchema.optional(),
-  status: hostStatusSchema.optional(),
-  rejectionReason: z.string().trim().max(2000).nullable().optional(),
 });
 
 export const reviewHostApplicationSchema = z.object({

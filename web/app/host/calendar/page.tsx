@@ -6,7 +6,7 @@ import { getHostPortalContext, redactUnconfirmedReservation } from '@/lib/auth/h
 import { getPropertyById, listProperties } from '@/lib/api/properties';
 import {
   listReservations,
-  listBlockedDates,
+  listBlockedDatesForProperties,
   addBlockedDate,
   deleteBlockedDate,
 } from '@/lib/api/reservations';
@@ -31,10 +31,9 @@ export default async function HostCalendarPage() {
 
   const reservations = rawReservations.map(redactUnconfirmedReservation);
 
-  const blockedDatesNested = await Promise.all(
-    properties.map((p) => listBlockedDates(p.id))
+  const blockedDates: BlockedDate[] = await listBlockedDatesForProperties(
+    properties.map((p) => p.id)
   );
-  const blockedDates: BlockedDate[] = blockedDatesNested.flat();
 
   async function blockDatesAction(data: {
     propertyId: number;

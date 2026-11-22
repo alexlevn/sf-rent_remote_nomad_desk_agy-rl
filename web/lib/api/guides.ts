@@ -1,5 +1,11 @@
 import { eq, and, asc, desc, ilike, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
+import {
+  escapeIlike,
+  getPgErrorCode,
+  normalizePagination,
+  sanitizeSearchInput,
+} from '@/lib/db/query-helpers';
 import { travelGuides } from '@/lib/db/schema';
 import type { TravelGuide } from '@/lib/types';
 import {
@@ -159,13 +165,20 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
         return mapGuideRow(existing[0]);
       }
 
-      const [updated] = await db
-        .update(travelGuides)
-        .set(updateValues)
-        .where(eq(travelGuides.id, parsed.id))
-        .returning();
+      try {
+        const [updated] = await db
+          .update(travelGuides)
+          .set(updateValues)
+          .where(eq(travelGuides.id, parsed.id))
+          .returning();
 
-      return mapGuideRow(updated);
+        return mapGuideRow(updated);
+      } catch (err) {
+        if (getPgErrorCode(err) === '23505') {
+          throw new Error('A travel guide with this URL slug already exists.');
+        }
+        throw err;
+      }
     }
   }
 
@@ -179,30 +192,48 @@ export async function saveTravelGuide(data: Partial<TravelGuide>): Promise<Trave
     .from(travelGuides);
   const nextPosition = parsed.position ?? Number(maxPosRow?.maxPos ?? 0) + 1;
 
-  const baseSlug = parsed.slug || slugify(parsed.title) || `guide-${nextPosition}`;
+  const baseSlug = (parsed.slug || slugify(parsed.title) || `guide-${nextPosition}`).slice(0, 140);
+  let finalSlug = baseSlug;
+  if (!parsed.slug) {
+    const existingSlug = await db
+      .select({ id: travelGuides.id })
+      .from(travelGuides)
+      .where(eq(travelGuides.slug, finalSlug))
+      .limit(1);
+    if (existingSlug.length > 0) {
+      finalSlug = `${baseSlug}-${nextPosition}`;
+    }
+  }
   const sanitizedContent = sanitizeHtml(parsed.content);
   const createdAt = parsePublishDate(parsed.publishDate) ?? new Date();
 
-  const [created] = await db
-    .insert(travelGuides)
-    .values({
-      slug: baseSlug,
-      title: parsed.title,
-      city: parsed.city,
-      category: parsed.category,
-      excerpt: parsed.excerpt,
-      content: sanitizedContent,
-      coverImage: parsed.image,
-      isFeatured: parsed.featured,
-      status: parsed.status,
-      seoTitle: parsed.seoTitle || parsed.title,
-      seoDescription: parsed.seoDescription || parsed.excerpt,
-      position: nextPosition,
-      createdAt,
-    })
-    .returning();
+  try {
+    const [created] = await db
+      .insert(travelGuides)
+      .values({
+        slug: finalSlug,
+        title: parsed.title,
+        city: parsed.city,
+        category: parsed.category,
+        excerpt: parsed.excerpt,
+        content: sanitizedContent,
+        coverImage: parsed.image,
+        isFeatured: parsed.featured,
+        status: parsed.status,
+        seoTitle: parsed.seoTitle || parsed.title,
+        seoDescription: parsed.seoDescription || parsed.excerpt,
+        position: nextPosition,
+        createdAt,
+      })
+      .returning();
 
-  return mapGuideRow(created);
+    return mapGuideRow(created);
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('A travel guide with this URL slug already exists.');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -237,25 +268,6 @@ export interface AdminGuidesPaginatedResult {
     all: number;
     published: number;
     draft: number;
-  };
-}
-
-function escapeIlike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-function normalizePagination(page?: number, pageSize?: number) {
-  const safePage =
-    typeof page === 'number' && Number.isFinite(page)
-      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
-      : 1;
-  const rawSize =
-    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
-  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
-  return {
-    page: safePage,
-    pageSize: safePageSize,
-    offset: (safePage - 1) * safePageSize,
   };
 }
 
@@ -302,15 +314,18 @@ export async function listAdminGuidesPaginated(
     }
   }
 
-  if (typeof params?.search === 'string' && params.search.trim()) {
-    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
-    const searchCond = or(
-      ilike(travelGuides.title, pattern),
-      ilike(travelGuides.slug, pattern),
-      ilike(travelGuides.city, pattern),
-      ilike(travelGuides.category, pattern)
-    );
-    if (searchCond) conditions.push(searchCond);
+  if (typeof params?.search === 'string') {
+    const cleanSearch = sanitizeSearchInput(params.search, 200);
+    if (cleanSearch) {
+      const pattern = `%${escapeIlike(cleanSearch, 200)}%`;
+      const searchCond = or(
+        ilike(travelGuides.title, pattern),
+        ilike(travelGuides.slug, pattern),
+        ilike(travelGuides.city, pattern),
+        ilike(travelGuides.category, pattern)
+      );
+      if (searchCond) conditions.push(searchCond);
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

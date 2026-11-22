@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import { safeImagePathSchema } from '@/lib/validations/media';
 import { INT4_MAX } from '@/lib/format';
@@ -100,6 +101,17 @@ function sanitizeYoutubeIframe(rawAttrs: string): string {
   return `<iframe ${parts.join(' ')}></iframe>`;
 }
 
+function isDangerousStyleValue(rawValue: string): boolean {
+  const normalized = decodeHtmlUriValue(rawValue);
+  return (
+    normalized.includes('expression(') ||
+    normalized.includes('javascript:') ||
+    normalized.includes('vbscript:') ||
+    normalized.includes('behavior:') ||
+    normalized.includes('-moz-binding')
+  );
+}
+
 /**
  * Sanitizes rich HTML content to prevent XSS while preserving benign formatting tags
  * and allowlisted YouTube embed iframes.
@@ -107,13 +119,14 @@ function sanitizeYoutubeIframe(rawAttrs: string): string {
 export function sanitizeHtml(html: string): string {
   if (!html) return '';
 
-  // Placeholder tokens protect allowlisted YouTube iframes from the fallback iframe strip
+  // Per-call random nonce prevents attacker-crafted placeholder collisions
+  const nonce = crypto.randomBytes(8).toString('hex');
   const preservedIframes: string[] = [];
   const keepIframe = (rawAttrs: string): string => {
     const safe = sanitizeYoutubeIframe(rawAttrs);
     if (!safe) return '';
     const idx = preservedIframes.push(safe) - 1;
-    return `<!--__SAFE_YT_IFRAME_${idx}__-->`;
+    return `__SAFE_YT_IFRAME_${nonce}_${idx}__`;
   };
 
   let cleaned = html;
@@ -123,19 +136,34 @@ export function sanitizeHtml(html: string): string {
     previous = cleaned;
     cleaned = cleaned
       .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
-      .replace(/<(object|embed|svg|math|style|form)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
-      .replace(/<\/?(script|object|embed|svg|math|style|form|base)\b[^>]*>/gi, '')
+      .replace(
+        /<(object|embed|svg|math|style|form|template|noscript|applet|textarea)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+        ''
+      )
+      .replace(
+        /<\/?(script|object|embed|svg|math|style|form|base|meta|link|template|noscript|applet|input|button|select|textarea)\b[^>]*>/gi,
+        ''
+      )
       .replace(/<iframe\b([^>]*)>[\s\S]*?<\/iframe\s*>/gi, (_full, attrs: string) => keepIframe(attrs))
       .replace(/<iframe\b([^>]*)\/?>/gi, (_full, attrs: string) => keepIframe(attrs))
       .replace(/<\/iframe\s*>/gi, '')
+      .replace(/\s+srcdoc\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+      .replace(/\bsrcdoc\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
       .replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
       .replace(/\bon[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
       .replace(
-        /\s*\b(?:href|src|action|formaction)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+        /\s*\b(?:href|src|srcset|poster|xlink:href|action|formaction|background|data)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
         (fullMatch: string, dq?: string, sq?: string, bare?: string) => {
           const val = dq ?? sq ?? bare ?? '';
           return isDangerousUriScheme(val) ? '' : fullMatch;
-        },
+        }
+      )
+      .replace(
+        /\s*\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+        (fullMatch: string, dq?: string, sq?: string, bare?: string) => {
+          const val = dq ?? sq ?? bare ?? '';
+          return isDangerousStyleValue(val) ? '' : fullMatch;
+        }
       )
       .replace(/javascript\s*:/gi, '')
       .replace(/vbscript\s*:/gi, '')
@@ -144,7 +172,9 @@ export function sanitizeHtml(html: string): string {
   }
 
   for (let i = 0; i < preservedIframes.length; i += 1) {
-    cleaned = cleaned.replace(`<!--__SAFE_YT_IFRAME_${i}__-->`, preservedIframes[i]);
+    const safeIframe = preservedIframes[i];
+    // Callback replacement prevents special $& / $$ sequences in title attributes from misbehaving
+    cleaned = cleaned.replace(`__SAFE_YT_IFRAME_${nonce}_${i}__`, () => safeIframe);
   }
 
   return cleaned;
@@ -273,7 +303,7 @@ export const createVideoSchema = z.object({
   embedSrc: safeExternalUrlSchema.optional().default(''),
   aspect: z.string().trim().max(20).optional().default('9:16'),
   authorName: z.string().trim().min(1).max(100).optional().default('Guest Story'),
-  avatar: safeImagePathSchema.optional().default('/seed/location/madrid.jpg'),
+  avatar: safeImagePathSchema.optional().default('/seed/location/2241.jpg'),
   isActive: z.boolean().optional().default(true),
   position: z.number().int().nonnegative().max(INT4_MAX).optional(),
 });

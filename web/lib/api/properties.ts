@@ -15,6 +15,12 @@ import {
 } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import {
+  escapeIlike,
+  getPgErrorCode,
+  normalizePagination,
+  sanitizeSearchInput,
+} from '@/lib/db/query-helpers';
+import {
   blockedDates,
   hostProfiles,
   locations,
@@ -114,10 +120,6 @@ export function mapPropertyRow(row: typeof properties.$inferSelect): Property {
   };
 }
 
-function escapeIlike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
 /**
  * Lists properties matching filter criteria from PostgreSQL.
  * Defaults to 'published' properties belonging to 'approved' hosts (AC-LIST-6).
@@ -138,13 +140,16 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
   }
 
   // City filter (case-insensitive substring on city or neighborhood)
-  if (params?.city && params.city.trim()) {
-    const pattern = `%${escapeIlike(params.city.trim())}%`;
-    const cityCond = or(
-      ilike(properties.city, pattern),
-      ilike(properties.neighborhood, pattern)
-    );
-    if (cityCond) conditions.push(cityCond);
+  if (typeof params?.city === 'string') {
+    const cleanCity = sanitizeSearchInput(params.city, 150);
+    if (cleanCity) {
+      const pattern = `%${escapeIlike(cleanCity, 150)}%`;
+      const cityCond = or(
+        ilike(properties.city, pattern),
+        ilike(properties.neighborhood, pattern)
+      );
+      if (cityCond) conditions.push(cityCond);
+    }
   }
 
   // Location ID filter
@@ -155,10 +160,13 @@ export async function listProperties(params?: PropertyFilterParams): Promise<Pro
   }
 
   // Neighborhood filter (case-insensitive exact match)
-  if (params?.neighborhood && params.neighborhood.trim()) {
-    conditions.push(
-      eq(sql`lower(${properties.neighborhood})`, params.neighborhood.trim().toLowerCase())
-    );
+  if (typeof params?.neighborhood === 'string') {
+    const cleanNeighborhood = sanitizeSearchInput(params.neighborhood, 150);
+    if (cleanNeighborhood) {
+      conditions.push(
+        eq(sql`lower(${properties.neighborhood})`, cleanNeighborhood.toLowerCase())
+      );
+    }
   }
 
   // Host filter
@@ -334,6 +342,23 @@ export async function getPropertyBySlug(
 }
 
 /**
+ * Retrieves multiple properties by ID in a single batched query.
+ */
+export async function listPropertiesByIds(ids: number[]): Promise<Property[]> {
+  const validIds = Array.from(
+    new Set(ids.filter((id) => int4IdSchema.safeParse(id).success))
+  );
+  if (validIds.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(inArray(properties.id, validIds));
+
+  return rows.map(mapPropertyRow);
+}
+
+/**
  * Retrieves a property by its unique ID.
  */
 export async function getPropertyById(id: number): Promise<Property | null> {
@@ -495,13 +520,20 @@ export async function saveHostListing(
     delete payload.featuredPosition;
     delete payload.rejectionReason;
 
-    const updatedRows = await db
-      .update(properties)
-      .set(payload)
-      .where(and(eq(properties.id, validId), eq(properties.hostId, validHostId)))
-      .returning();
+    try {
+      const updatedRows = await db
+        .update(properties)
+        .set(payload)
+        .where(and(eq(properties.id, validId), eq(properties.hostId, validHostId)))
+        .returning();
 
-    return mapPropertyRow(updatedRows[0]);
+      return mapPropertyRow(updatedRows[0]);
+    } catch (err) {
+      if (getPgErrorCode(err) === '23505') {
+        throw new Error('A property with this URL slug or reference code already exists.');
+      }
+      throw err;
+    }
   }
 
   // Create new listing inside a transaction with advisory lock (properties.id is non-serial integer PK)
@@ -581,8 +613,9 @@ export async function saveHostListing(
         checkOut: parsed.checkOut || '11:00',
         minimumStayNights: parsed.minimumStayNights ?? 30,
         isDirectBooking: parsed.isDirectBooking ?? false,
+        // Preserve explicit empty arrays for drafts; only supply default photo when omitted
         images:
-          parsed.images && parsed.images.length > 0
+          parsed.images !== undefined
             ? parsed.images
             : ['/seed/property/prop-madrid-1.webp'],
         featuredPosition: null,
@@ -763,13 +796,20 @@ export async function updateProperty(
     payload.locationId = await resolveLocationId(null, parsed.city);
   }
 
-  const rows = await db
-    .update(properties)
-    .set(payload)
-    .where(eq(properties.id, parsedId.data))
-    .returning();
+  try {
+    const rows = await db
+      .update(properties)
+      .set(payload)
+      .where(eq(properties.id, parsedId.data))
+      .returning();
 
-  return rows.length > 0 ? mapPropertyRow(rows[0]) : null;
+    return rows.length > 0 ? mapPropertyRow(rows[0]) : null;
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('A property with this URL slug or reference code already exists.');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -783,11 +823,18 @@ export async function reorderFeaturedProperties(orderedIds: number[]): Promise<P
   const rows = await db.transaction(async (tx) => {
     await tx.update(properties).set({ featuredPosition: null });
 
-    for (let i = 0; i < uniqueIds.length; i++) {
-      await tx
-        .update(properties)
-        .set({ featuredPosition: i + 1, updatedAt: new Date() })
-        .where(eq(properties.id, uniqueIds[i]));
+    if (uniqueIds.length > 0) {
+      const now = new Date();
+      const orderValues = sql.join(
+        uniqueIds.map((id, idx) => sql`(${id}::int, ${idx + 1}::int)`),
+        sql`, `
+      );
+      await tx.execute(sql`
+        UPDATE ${properties} AS p
+        SET featured_position = v.pos, updated_at = ${now}
+        FROM (VALUES ${orderValues}) AS v(id, pos)
+        WHERE p.id = v.id
+      `);
     }
 
     return tx
@@ -867,21 +914,6 @@ export interface AdminPropertiesPaginatedResult {
   counts: AdminPropertiesStatusCounts;
 }
 
-function normalizePagination(page?: number, pageSize?: number) {
-  const safePage =
-    typeof page === 'number' && Number.isFinite(page)
-      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
-      : 1;
-  const rawSize =
-    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
-  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
-  return {
-    page: safePage,
-    pageSize: safePageSize,
-    offset: (safePage - 1) * safePageSize,
-  };
-}
-
 /**
  * Lists properties for the Admin Portal using SQL LIMIT/OFFSET pagination,
  * filtered COUNT(*), and global per-status counts.
@@ -943,16 +975,19 @@ export async function listAdminPropertiesPaginated(
     conditions.push(eq(properties.hostId, validHostId.data));
   }
 
-  if (typeof params?.search === 'string' && params.search.trim()) {
-    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
-    const searchCond = or(
-      ilike(properties.title, pattern),
-      ilike(properties.reference, pattern),
-      ilike(properties.city, pattern),
-      ilike(properties.neighborhood, pattern),
-      ilike(properties.slug, pattern)
-    );
-    if (searchCond) conditions.push(searchCond);
+  if (typeof params?.search === 'string') {
+    const cleanSearch = sanitizeSearchInput(params.search, 200);
+    if (cleanSearch) {
+      const pattern = `%${escapeIlike(cleanSearch, 200)}%`;
+      const searchCond = or(
+        ilike(properties.title, pattern),
+        ilike(properties.reference, pattern),
+        ilike(properties.city, pattern),
+        ilike(properties.neighborhood, pattern),
+        ilike(properties.slug, pattern)
+      );
+      if (searchCond) conditions.push(searchCond);
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

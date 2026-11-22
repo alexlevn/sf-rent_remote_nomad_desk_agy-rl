@@ -146,7 +146,7 @@ export default function AdminLocationsPage() {
       continent: 'Europe',
       propertiesCount: 0,
       description: '',
-      image: '/seed/location/placeholder.jpg',
+      image: '/seed/location/2241.jpg',
       center: [40.4168, -3.7038],
       isActive: true,
       position: undefined,

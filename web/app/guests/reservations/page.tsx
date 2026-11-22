@@ -2,8 +2,8 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { listReservations } from '@/lib/api/reservations';
-import { getPropertyById } from '@/lib/api/properties';
-import { getHostProfile } from '@/lib/api/hosts';
+import { listPropertiesByIds } from '@/lib/api/properties';
+import { listHostsByIds } from '@/lib/api/hosts';
 import { getStrictSessionUser } from '@/lib/auth/session';
 import { listUserFavoriteIds } from '@/lib/api/favorites';
 import type { Property, HostProfile } from '@/lib/types';
@@ -28,17 +28,17 @@ export default async function GuestReservationsPage() {
   ]);
 
   const propertyIds = Array.from(new Set(reservations.map((r) => r.propertyId)));
-  const propertiesList = await Promise.all(propertyIds.map((id) => getPropertyById(id)));
+  const propertiesList = await listPropertiesByIds(propertyIds);
   const propertiesMap: Record<number, Property> = {};
   propertiesList.forEach((p) => {
-    if (p) propertiesMap[p.id] = p;
+    propertiesMap[p.id] = p;
   });
 
-  const hostIds = Array.from(new Set(Object.values(propertiesMap).map((p) => p.hostId)));
-  const hostsList = await Promise.all(hostIds.map((id) => getHostProfile(id)));
+  const hostIds = Array.from(new Set(propertiesList.map((p) => p.hostId)));
+  const hostsList = await listHostsByIds(hostIds);
   const hostsMap: Record<number, HostProfile> = {};
   hostsList.forEach((h) => {
-    if (h) hostsMap[h.id] = h;
+    hostsMap[h.id] = h;
   });
 
   return (

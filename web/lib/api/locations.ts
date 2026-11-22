@@ -1,8 +1,16 @@
 import { eq, and, or, sql, asc, gte, ne, ilike, type SQL } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
+import {
+  escapeIlike,
+  getPgErrorCode,
+  normalizePagination,
+  sanitizeSearchInput,
+} from '@/lib/db/query-helpers';
 import { locations, categories, properties } from '@/lib/db/schema';
 import type { Location, Category } from '@/lib/types';
 import {
+  DEFAULT_LOCATION_IMAGE,
+  locationIdSchema,
   locationInputSchema,
   updateLocationSchema,
   locationReorderSchema,
@@ -28,7 +36,7 @@ function mapLocationRow(row: typeof locations.$inferSelect): Location {
     continent: row.continent || '',
     propertiesCount: row.propertiesCount,
     description: row.description || '',
-    image: row.image || '/seed/location/placeholder.jpg',
+    image: row.image || DEFAULT_LOCATION_IMAGE,
     center: (row.center as [number, number]) || [0, 0],
     isActive: row.isActive,
     position: row.position,
@@ -58,12 +66,18 @@ export async function listLocations(options?: ListLocationsOptions): Promise<Loc
     conditions.push(eq(locations.isActive, true));
   }
 
-  if (options?.continent && options.continent.toLowerCase() !== 'all') {
-    conditions.push(eq(sql`lower(${locations.continent})`, options.continent.trim().toLowerCase()));
+  if (typeof options?.continent === 'string') {
+    const cleanContinent = sanitizeSearchInput(options.continent, 50);
+    if (cleanContinent && cleanContinent.toLowerCase() !== 'all') {
+      conditions.push(eq(sql`lower(${locations.continent})`, cleanContinent.toLowerCase()));
+    }
   }
 
-  if (options?.country) {
-    conditions.push(eq(sql`lower(${locations.country})`, options.country.trim().toLowerCase()));
+  if (typeof options?.country === 'string') {
+    const cleanCountry = sanitizeSearchInput(options.country, 100);
+    if (cleanCountry) {
+      conditions.push(eq(sql`lower(${locations.country})`, cleanCountry.toLowerCase()));
+    }
   }
 
   const query = db.select().from(locations);
@@ -86,7 +100,10 @@ export async function listLocations(options?: ListLocationsOptions): Promise<Loc
  */
 export async function getLocationBySlug(slug?: string): Promise<Location | null> {
   if (!slug || typeof slug !== 'string') return null;
-  const cleanSlug = slug.replace(/^furnished-apartments-/i, '').trim().toLowerCase();
+  const cleanSlug = sanitizeSearchInput(slug, 150)
+    .replace(/^furnished-apartments-/i, '')
+    .trim()
+    .toLowerCase();
   if (!cleanSlug) return null;
 
   const rows = await db
@@ -107,11 +124,13 @@ export async function getLocationBySlug(slug?: string): Promise<Location | null>
  * Retrieves a location by its ID.
  */
 export async function getLocationById(id: number): Promise<Location | null> {
-  if (!id || typeof id !== 'number') return null;
+  const parsedId = locationIdSchema.safeParse(id);
+  if (!parsedId.success) return null;
+
   const rows = await db
     .select()
     .from(locations)
-    .where(eq(locations.id, id))
+    .where(eq(locations.id, parsedId.data))
     .limit(1);
 
   return rows.length > 0 ? mapLocationRow(rows[0]) : null;
@@ -119,117 +138,146 @@ export async function getLocationById(id: number): Promise<Location | null> {
 
 /**
  * Saves location updates or creates a new location (admin CMS).
- * Validates payload with Zod and manages position collision shifts.
+ * Validates payload with Zod, serializes non-serial PK allocation with an advisory lock,
+ * and manages top-city position shifts.
  */
 export async function saveLocation(data: Partial<Location>): Promise<Location> {
-  return await db.transaction(async (tx) => {
-    // 1. Check if updating existing record
-    let existingRow: typeof locations.$inferSelect | null = null;
-    if (data.id) {
-      const res = await tx.select().from(locations).where(eq(locations.id, data.id)).limit(1);
-      if (res.length > 0) existingRow = res[0];
-    } else {
-      const cleanSlug = data.slug
-        ? data.slug.toLowerCase().replace(/^furnished-apartments-/, '').trim()
-        : undefined;
-      const cleanName = data.name ? data.name.trim().toLowerCase() : undefined;
-      const conditions = [];
-      if (cleanSlug) conditions.push(eq(sql`lower(${locations.slug})`, cleanSlug));
-      if (cleanName) conditions.push(eq(sql`lower(${locations.name})`, cleanName));
-      if (conditions.length > 0) {
-        const res = await tx.select().from(locations).where(or(...conditions)).limit(1);
+  try {
+    return await db.transaction(async (tx) => {
+      // 1. Check if updating existing record
+      let existingRow: typeof locations.$inferSelect | null = null;
+      if (data.id !== undefined) {
+        const validId = locationIdSchema.parse(data.id);
+        const res = await tx.select().from(locations).where(eq(locations.id, validId)).limit(1);
         if (res.length > 0) existingRow = res[0];
+      } else {
+        const cleanSlug =
+          typeof data.slug === 'string'
+            ? sanitizeSearchInput(data.slug, 150)
+                .toLowerCase()
+                .replace(/^furnished-apartments-/, '')
+                .trim()
+            : undefined;
+        const cleanName =
+          typeof data.name === 'string'
+            ? sanitizeSearchInput(data.name, 150).toLowerCase()
+            : undefined;
+        const conditions = [];
+        if (cleanSlug) conditions.push(eq(sql`lower(${locations.slug})`, cleanSlug));
+        if (cleanName) conditions.push(eq(sql`lower(${locations.name})`, cleanName));
+        if (conditions.length > 0) {
+          const res = await tx.select().from(locations).where(or(...conditions)).limit(1);
+          if (res.length > 0) existingRow = res[0];
+        }
       }
-    }
 
-    if (existingRow) {
-      const validated = updateLocationSchema.parse(data);
-      const targetId = existingRow.id;
+      if (existingRow) {
+        const validated = updateLocationSchema.parse(data);
+        const targetId = existingRow.id;
+
+        if (validated.position != null && validated.position <= 8) {
+          await tx
+            .update(locations)
+            .set({ position: sql`${locations.position} + 1` })
+            .where(and(ne(locations.id, targetId), gte(locations.position, validated.position)));
+        }
+
+        const updateValues: Partial<typeof locations.$inferInsert> = {};
+        if (validated.name !== undefined) updateValues.name = validated.name;
+        if (validated.city !== undefined) updateValues.city = validated.city;
+        if (validated.slug !== undefined) {
+          updateValues.slug = validated.slug
+            .toLowerCase()
+            .replace(/^furnished-apartments-/, '')
+            .trim();
+        }
+        if (validated.country !== undefined) updateValues.country = validated.country;
+        if (validated.countryCode !== undefined) updateValues.countryCode = validated.countryCode;
+        if (validated.continent !== undefined) updateValues.continent = validated.continent;
+        if (validated.propertiesCount !== undefined) {
+          updateValues.propertiesCount = validated.propertiesCount;
+        }
+        if (validated.description !== undefined) {
+          updateValues.description = sanitizeHtml(validated.description);
+        }
+        if (validated.image !== undefined) updateValues.image = validated.image;
+        if (validated.center !== undefined) updateValues.center = validated.center;
+        if (validated.isActive !== undefined) updateValues.isActive = validated.isActive;
+        if (validated.position !== undefined) updateValues.position = validated.position;
+
+        if (Object.keys(updateValues).length === 0) {
+          return mapLocationRow(existingRow);
+        }
+
+        const updated = await tx
+          .update(locations)
+          .set(updateValues)
+          .where(eq(locations.id, targetId))
+          .returning();
+
+        return mapLocationRow(updated[0]);
+      }
+
+      // 2. Insert new record with advisory lock for non-serial integer PK allocation
+      const validated = locationInputSchema.parse(data);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(728392)`);
 
       if (validated.position != null && validated.position <= 8) {
         await tx
           .update(locations)
           .set({ position: sql`${locations.position} + 1` })
-          .where(and(ne(locations.id, targetId), gte(locations.position, validated.position)));
+          .where(gte(locations.position, validated.position));
       }
 
-      const updateValues: Record<string, unknown> = {};
-      if (validated.name !== undefined) updateValues.name = validated.name;
-      if (validated.city !== undefined) updateValues.city = validated.city;
-      if (validated.slug !== undefined) {
-        updateValues.slug = validated.slug.toLowerCase().replace(/^furnished-apartments-/, '').trim();
-      }
-      if (validated.country !== undefined) updateValues.country = validated.country;
-      if (validated.countryCode !== undefined) updateValues.countryCode = validated.countryCode;
-      if (validated.continent !== undefined) updateValues.continent = validated.continent;
-      if (validated.propertiesCount !== undefined) updateValues.propertiesCount = validated.propertiesCount;
-      if (validated.description !== undefined) {
-        updateValues.description = sanitizeHtml(validated.description);
-      }
-      if (validated.image !== undefined) updateValues.image = validated.image;
-      if (validated.center !== undefined) updateValues.center = validated.center;
-      if (validated.isActive !== undefined) updateValues.isActive = validated.isActive;
-      if (validated.position !== undefined) updateValues.position = validated.position;
+      const maxIdResult = await tx
+        .select({ maxId: sql<number>`coalesce(max(${locations.id}), 0)::int` })
+        .from(locations);
+      const newId = (maxIdResult[0]?.maxId ?? 0) + 1;
 
-      const updated = await tx
-        .update(locations)
-        .set(updateValues)
-        .where(eq(locations.id, targetId))
+      const city = validated.city || validated.name.toLowerCase().replace(/\s+/g, '-');
+      const slug = (validated.slug || validated.name)
+        .toLowerCase()
+        .replace(/^furnished-apartments-/, '')
+        .replace(/\s+/g, '-');
+      const position = validated.position ?? newId;
+
+      const inserted = await tx
+        .insert(locations)
+        .values({
+          id: newId,
+          city,
+          name: validated.name,
+          slug,
+          country: validated.country,
+          countryCode: validated.countryCode,
+          continent: validated.continent || 'Europe',
+          propertiesCount: validated.propertiesCount ?? 0,
+          description: sanitizeHtml(validated.description || ''),
+          image: validated.image || DEFAULT_LOCATION_IMAGE,
+          center: validated.center || [40.4168, -3.7038],
+          isActive: validated.isActive ?? true,
+          position,
+        })
         .returning();
 
-      return mapLocationRow(updated[0]);
+      return mapLocationRow(inserted[0]);
+    });
+  } catch (err) {
+    if (getPgErrorCode(err) === '23505') {
+      throw new Error('A destination with this URL slug already exists.');
     }
-
-    // 2. Insert new record
-    const validated = locationInputSchema.parse(data);
-
-    if (validated.position != null && validated.position <= 8) {
-      await tx
-        .update(locations)
-        .set({ position: sql`${locations.position} + 1` })
-        .where(gte(locations.position, validated.position));
-    }
-
-    const maxIdResult = await tx
-      .select({ maxId: sql<number>`coalesce(max(${locations.id}), 0)::int` })
-      .from(locations);
-    const newId = (maxIdResult[0]?.maxId ?? 0) + 1;
-
-    const city = validated.city || validated.name.toLowerCase().replace(/\s+/g, '-');
-    const slug = (validated.slug || validated.name)
-      .toLowerCase()
-      .replace(/^furnished-apartments-/, '')
-      .replace(/\s+/g, '-');
-    const position = validated.position ?? newId;
-
-    const inserted = await tx
-      .insert(locations)
-      .values({
-        id: newId,
-        city,
-        name: validated.name,
-        slug,
-        country: validated.country,
-        countryCode: validated.countryCode,
-        continent: validated.continent || 'Europe',
-        propertiesCount: validated.propertiesCount ?? 0,
-        description: sanitizeHtml(validated.description || ''),
-        image: validated.image || '/seed/location/placeholder.jpg',
-        center: validated.center || [40.4168, -3.7038],
-        isActive: validated.isActive ?? true,
-        position,
-      })
-      .returning();
-
-    return mapLocationRow(inserted[0]);
-  });
+    throw err;
+  }
 }
 
 /**
  * Deletes a location if it has no associated properties in DB.
  */
 export async function deleteLocation(id: number): Promise<boolean> {
-  const existing = await getLocationById(id);
+  const parsedId = locationIdSchema.safeParse(id);
+  if (!parsedId.success) return false;
+
+  const existing = await getLocationById(parsedId.data);
   if (!existing) return false;
 
   const propertyRows = await db
@@ -237,7 +285,7 @@ export async function deleteLocation(id: number): Promise<boolean> {
     .from(properties)
     .where(
       or(
-        eq(properties.locationId, id),
+        eq(properties.locationId, parsedId.data),
         eq(sql`lower(${properties.city})`, existing.city.toLowerCase())
       )
     );
@@ -247,24 +295,41 @@ export async function deleteLocation(id: number): Promise<boolean> {
     throw new Error('Cannot delete destination with existing properties. Please hide it instead.');
   }
 
-  await db.delete(locations).where(eq(locations.id, id));
-  return true;
+  try {
+    const deleted = await db
+      .delete(locations)
+      .where(eq(locations.id, parsedId.data))
+      .returning({ id: locations.id });
+    return deleted.length > 0;
+  } catch (err) {
+    if (getPgErrorCode(err) === '23503') {
+      throw new Error('Cannot delete destination with existing properties. Please hide it instead.');
+    }
+    throw err;
+  }
 }
 
 /**
- * Reorders top cities positions in a transaction.
+ * Reorders top cities positions in a single batched SQL UPDATE inside a transaction.
  */
 export async function reorderTopCities(orderedIds: number[]): Promise<Location[]> {
   const validatedIds = locationReorderSchema.parse(orderedIds);
-  await db.transaction(async (tx) => {
-    for (let idx = 0; idx < validatedIds.length; idx++) {
-      const id = validatedIds[idx];
-      await tx
-        .update(locations)
-        .set({ position: idx + 1 })
-        .where(eq(locations.id, id));
-    }
-  });
+  const uniqueIds = Array.from(new Set(validatedIds));
+
+  if (uniqueIds.length > 0) {
+    const orderValues = sql.join(
+      uniqueIds.map((id, idx) => sql`(${id}::int, ${idx + 1}::int)`),
+      sql`, `
+    );
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        UPDATE ${locations} AS l
+        SET position = v.pos
+        FROM (VALUES ${orderValues}) AS v(id, pos)
+        WHERE l.id = v.id
+      `);
+    });
+  }
 
   return listLocations({ includeInactive: true });
 }
@@ -284,8 +349,10 @@ export async function listCategories(): Promise<Category[]> {
  * Retrieves a category by slug from PostgreSQL DB.
  */
 export async function getCategoryBySlug(slug: string): Promise<Category | null> {
-  if (!slug) return null;
-  const normalized = slug.trim().toLowerCase();
+  if (!slug || typeof slug !== 'string') return null;
+  const normalized = sanitizeSearchInput(slug, 100).toLowerCase();
+  if (!normalized) return null;
+
   const rows = await db
     .select()
     .from(categories)
@@ -315,25 +382,6 @@ export interface AdminLocationsPaginatedResult {
   };
 }
 
-function escapeIlike(input: string): string {
-  return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
-
-function normalizePagination(page?: number, pageSize?: number) {
-  const safePage =
-    typeof page === 'number' && Number.isFinite(page)
-      ? Math.min(Math.max(1, Math.floor(page)), 1_000_000)
-      : 1;
-  const rawSize =
-    typeof pageSize === 'number' && Number.isFinite(pageSize) ? Math.floor(pageSize) : 20;
-  const safePageSize = Math.min(Math.max(rawSize, 1), 100);
-  return {
-    page: safePage,
-    pageSize: safePageSize,
-    offset: (safePage - 1) * safePageSize,
-  };
-}
-
 /**
  * Lists locations for the Admin Portal using SQL LIMIT/OFFSET pagination,
  * filtered COUNT(*), and global active/inactive counts.
@@ -359,17 +407,11 @@ export async function listAdminLocationsPaginated(
 
   const conditions: SQL[] = [];
 
-  if (
-    typeof params?.continent === 'string' &&
-    params.continent.trim() &&
-    params.continent.trim().toLowerCase() !== 'all'
-  ) {
-    conditions.push(
-      eq(
-        sql`lower(${locations.continent})`,
-        params.continent.trim().slice(0, 100).toLowerCase()
-      )
-    );
+  if (typeof params?.continent === 'string') {
+    const cleanContinent = sanitizeSearchInput(params.continent, 100);
+    if (cleanContinent && cleanContinent.toLowerCase() !== 'all') {
+      conditions.push(eq(sql`lower(${locations.continent})`, cleanContinent.toLowerCase()));
+    }
   }
 
   if (params?.status && params.status !== 'all') {
@@ -382,15 +424,18 @@ export async function listAdminLocationsPaginated(
     }
   }
 
-  if (typeof params?.search === 'string' && params.search.trim()) {
-    const pattern = `%${escapeIlike(params.search.trim().slice(0, 200))}%`;
-    const searchCond = or(
-      ilike(locations.name, pattern),
-      ilike(locations.city, pattern),
-      ilike(locations.country, pattern),
-      ilike(locations.slug, pattern)
-    );
-    if (searchCond) conditions.push(searchCond);
+  if (typeof params?.search === 'string') {
+    const cleanSearch = sanitizeSearchInput(params.search, 200);
+    if (cleanSearch) {
+      const pattern = `%${escapeIlike(cleanSearch, 200)}%`;
+      const searchCond = or(
+        ilike(locations.name, pattern),
+        ilike(locations.city, pattern),
+        ilike(locations.country, pattern),
+        ilike(locations.slug, pattern)
+      );
+      if (searchCond) conditions.push(searchCond);
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

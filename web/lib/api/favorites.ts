@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '@/lib/db/client';
 import { favorites, properties } from '@/lib/db/schema';
+import { getPgErrorCode } from '@/lib/db/query-helpers';
 import type { Property } from '@/lib/types';
 import { int4IdSchema } from '@/lib/validations/property';
 import { mapPropertyRow } from './properties';
@@ -64,10 +65,17 @@ export async function addFavorite(propertyId: number, userId: number = 1): Promi
   const validUserId = int4IdSchema.parse(userId);
   const validPropId = int4IdSchema.parse(propertyId);
 
-  await db
-    .insert(favorites)
-    .values({ userId: validUserId, propertyId: validPropId })
-    .onConflictDoNothing();
+  try {
+    await db
+      .insert(favorites)
+      .values({ userId: validUserId, propertyId: validPropId })
+      .onConflictDoNothing();
+  } catch (err) {
+    if (getPgErrorCode(err) === '23503') {
+      throw new Error('Property not found.');
+    }
+    throw err;
+  }
 
   return listUserFavoriteIds(validUserId);
 }
@@ -99,22 +107,30 @@ export async function toggleFavorite(
   const validUserId = int4IdSchema.parse(userId);
   const validPropId = int4IdSchema.parse(propertyId);
 
-  const isFavorite = await db.transaction(async (tx) => {
-    const deleted = await tx
-      .delete(favorites)
-      .where(and(eq(favorites.userId, validUserId), eq(favorites.propertyId, validPropId)))
-      .returning({ id: favorites.id });
+  let isFavorite: boolean;
+  try {
+    isFavorite = await db.transaction(async (tx) => {
+      const deleted = await tx
+        .delete(favorites)
+        .where(and(eq(favorites.userId, validUserId), eq(favorites.propertyId, validPropId)))
+        .returning({ id: favorites.id });
 
-    if (deleted.length > 0) {
-      return false;
+      if (deleted.length > 0) {
+        return false;
+      }
+
+      await tx
+        .insert(favorites)
+        .values({ userId: validUserId, propertyId: validPropId })
+        .onConflictDoNothing();
+      return true;
+    });
+  } catch (err) {
+    if (getPgErrorCode(err) === '23503') {
+      throw new Error('Property not found.');
     }
-
-    await tx
-      .insert(favorites)
-      .values({ userId: validUserId, propertyId: validPropId })
-      .onConflictDoNothing();
-    return true;
-  });
+    throw err;
+  }
 
   const favoriteIds = await listUserFavoriteIds(validUserId);
   return { isFavorite, favoriteIds };
