@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -24,8 +24,9 @@ export const Modal: React.FC<ModalProps> = ({
   className,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
-  // Close on Escape key press
+  // Close on Escape key press and lock background scroll
   useEffect(() => {
     if (!isOpen) return;
 
@@ -52,7 +53,7 @@ export const Modal: React.FC<ModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
-      aria-labelledby={title ? 'modal-title' : undefined}
+      aria-labelledby={title ? titleId : undefined}
     >
       {/* Backdrop */}
       <div
@@ -65,16 +66,16 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         ref={dialogRef}
         className={cn(
-          'relative w-full rounded-2xl bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] border border-[var(--color-border-light)] p-6 shadow-2xl transition-all duration-200 z-10',
+          'relative w-full max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] border border-[var(--color-border-light)] p-6 shadow-2xl transition-all duration-200 z-10',
           maxWidth,
           className
         )}
       >
         <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
+          <div className="min-w-0">
             {title && (
               <h2
-                id="modal-title"
+                id={titleId}
                 className="text-lg font-semibold tracking-tight text-[var(--color-text-on-light)]"
               >
                 {title}
@@ -90,7 +91,7 @@ export const Modal: React.FC<ModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="rounded-full p-1.5 text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] hover:bg-black/5 transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 rounded-full p-1.5 text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)] hover:bg-black/5 transition-colors cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
           </button>

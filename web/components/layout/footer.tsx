@@ -70,7 +70,8 @@ export const Footer: React.FC = () => {
                     linkColorClass =
                       'text-[var(--color-brand)] hover:brightness-110 font-medium';
                   } else if (link.highlight === 'admin') {
-                    linkColorClass = 'text-[#38bdf8] hover:text-[#7dd3fc] font-medium';
+                    linkColorClass =
+                      'text-[var(--color-info-light)] hover:text-[var(--color-info-lighter)] font-medium';
                   }
 
                   return (

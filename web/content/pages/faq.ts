@@ -2,7 +2,7 @@ import { BOOKING_RULES } from '@/content/booking-rules';
 
 export interface FAQPageItem {
   id: string;
-  category: 'Booking' | 'Workstations' | 'Cancellation' | 'Payments';
+  category: 'Booking' | 'Workstations' | 'Cancellation' | 'Wi-Fi' | 'Hosting' | 'Payments';
   question: string;
   answer: string;
 }
@@ -10,8 +10,16 @@ export interface FAQPageItem {
 export const FAQ_PAGE_CONTENT = {
   title: 'Frequently Asked Questions',
   subtitle:
-    'Everything you need to know about monthly bookings, workstations, and cancellation policies.',
-  categories: ['All', 'Booking', 'Workstations', 'Cancellation', 'Payments'] as const,
+    'Everything you need to know about monthly bookings, workstations, verified Wi-Fi, cancellation policies, and hosting.',
+  categories: [
+    'All',
+    'Booking',
+    'Workstations',
+    'Cancellation',
+    'Wi-Fi',
+    'Hosting',
+    'Payments',
+  ] as const,
   items: [
     {
       id: 'faq-min-stay',
@@ -46,16 +54,22 @@ export const FAQ_PAGE_CONTENT = {
     },
     {
       id: 'faq-wifi',
-      category: 'Workstations',
+      category: 'Wi-Fi',
       question: 'What happens if the WiFi speed does not match the listing?',
       answer:
         'All listings feature verified WiFi speedtests. If your speed drops below 80% of the certified speed, NomadDesk provides backup 5G mobile hotspots or free cancellation.',
     },
     {
+      id: 'faq-hosting-apply',
+      category: 'Hosting',
+      question: 'How do property managers become an approved NomadDesk Host?',
+      answer: `Operators with furnished monthly apartments can apply through the Partner Network. Approved hosts pay a standard ${BOOKING_RULES.commissionPercent}% commission on monthly rent, respond to booking requests within ${BOOKING_RULES.respondHours} hours, and manage listings and availability from the Host Portal.`,
+    },
+    {
       id: 'faq-commission',
       category: 'Payments',
       question: 'Are there hidden service fees or commissions?',
-      answer: `NomadDesk charges a standard ${BOOKING_RULES.commissionPercent}% platform commission included in host payouts. Guests pay the listed monthly rate plus cleaning with no surprise tourist surcharges.`,
+      answer: `NomadDesk charges a standard ${BOOKING_RULES.commissionPercent}% platform commission included in host payouts. Guests pay the listed monthly rate with no surprise tourist surcharges.`,
     },
   ] as FAQPageItem[],
 };

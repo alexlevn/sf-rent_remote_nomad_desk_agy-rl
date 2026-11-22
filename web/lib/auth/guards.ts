@@ -86,6 +86,53 @@ export async function requireAdmin(): Promise<User> {
 }
 
 /**
+ * Strictly verifies authenticated active user via Auth.js HttpOnly JWT cookie + Postgres.
+ * Never falls back to globalForAuth or demo user.
+ */
+export async function requireStrictUser(): Promise<User> {
+  const user = await getStrictSessionUser();
+  if (!user || !user.isActive) {
+    throw new AuthError('Unauthorized: Authentication required', 401);
+  }
+  return user;
+}
+
+/**
+ * Allows approved AND suspended hosts to read their own Host Portal data (read-only when suspended).
+ */
+export async function requireHostReadOnly(): Promise<{
+  user: User;
+  hostId: number;
+  hostStatus: 'approved' | 'suspended';
+}> {
+  const user = await requireStrictUser();
+
+  if (user.role !== 'host') {
+    throw new AuthError('Forbidden: Host role required', 403);
+  }
+
+  const [profile] = await db
+    .select()
+    .from(hostProfiles)
+    .where(eq(hostProfiles.userId, user.id))
+    .limit(1);
+
+  if (!profile) {
+    throw new AuthError('Forbidden: No host profile found for user', 403);
+  }
+
+  if (profile.status !== 'approved' && profile.status !== 'suspended') {
+    throw new AuthError(`Forbidden: Host profile status is ${profile.status}`, 403);
+  }
+
+  return {
+    user,
+    hostId: profile.id,
+    hostStatus: profile.status,
+  };
+}
+
+/**
  * Verifies the caller via Auth.js HttpOnly JWT + fresh Postgres lookup only.
  * Allows active admins and active hosts with an approved host profile.
  */

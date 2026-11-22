@@ -3,7 +3,7 @@ import { BOOKING_RULES } from '@/content/booking-rules';
 export const TERMS_CONTENT = {
   title: 'Terms of Service',
   subtitle:
-    'These terms apply to guests, hosts and visitors of NomadDesk. Demo text for the design prototype.',
+    'These terms govern bookings, payments, cancellations, and host standards on NomadDesk.',
   sections: [
     {
       title: '1. Bookings',

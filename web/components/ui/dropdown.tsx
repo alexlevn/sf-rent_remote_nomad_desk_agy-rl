@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 
 export interface DropdownProps {
   trigger: React.ReactNode;
+  triggerLabel?: string;
   children: React.ReactNode;
   align?: 'left' | 'right';
   className?: string;
@@ -13,6 +14,7 @@ export interface DropdownProps {
 
 export const Dropdown: React.FC<DropdownProps> = ({
   trigger,
+  triggerLabel = 'Open menu',
   children,
   align = 'right',
   className,
@@ -21,15 +23,12 @@ export const Dropdown: React.FC<DropdownProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close when clicking outside
+  // Close when clicking outside or pressing Escape
   useEffect(() => {
     if (!isOpen) return;
 
     const handlePointerDown = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -51,12 +50,20 @@ export const Dropdown: React.FC<DropdownProps> = ({
 
   return (
     <div ref={containerRef} className={cn('relative inline-block text-left', className)}>
-      <div onClick={() => setIsOpen((prev) => !prev)} className="cursor-pointer">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-label={triggerLabel}
+        className="cursor-pointer bg-transparent border-0 p-0 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] rounded-full"
+      >
         {trigger}
-      </div>
+      </button>
 
       {isOpen && (
         <div
+          role="menu"
           className={cn(
             'absolute z-50 mt-2 min-w-[200px] rounded-xl border border-[var(--color-border-dark)] bg-[var(--color-bg-dark-surface)] p-2 shadow-xl backdrop-blur-md',
             align === 'right' ? 'right-0' : 'left-0',

@@ -30,15 +30,22 @@
   --color-brand-text: #ffffff;
 
   --color-bg-dark: #171717;
+  --color-bg-dark-hero: #1a1510;
+  --color-bg-dark-elevated: #1f1d1a;
   --color-bg-dark-surface: #262626;
   --color-bg-light: #fcfaf7;
+  --color-bg-light-subtle: #faf8f5;
+  --color-bg-light-hover: #f7f5f2;
   --color-bg-light-surface: #ffffff;
   --color-bg-light-alt: #f6f0e9;
+  --color-bg-light-alt-hover: #ede6dd;
   --color-header-glass: rgba(38, 38, 38, 0.92);
 
   --color-text-on-dark: #fafafa;
+  --color-text-on-dark-subtle: #d1c8be;
   --color-text-on-dark-muted: #a19b95;
   --color-text-on-light: #271d13;
+  --color-text-on-light-secondary: #4a3e33;
   --color-neutral-700: #404040;
   --color-surface-muted: #f0ede8;
   --color-text-on-light-muted: #6b635b;
@@ -52,14 +59,24 @@
   --color-success-bg: #f0fdf4;
   --color-success-border: #bbf7d0;
   --color-warning: #b45309;
+  --color-warning-text: #92400e;
   --color-warning-bg: #fffbeb;
   --color-warning-border: #fde68a;
   --color-error: #b91c1c;
+  --color-error-text: #991b1b;
   --color-error-bg: #fef2f2;
   --color-error-border: #fecaca;
   --color-info: #0369a1;
+  --color-info-light: #38bdf8;
+  --color-info-lighter: #7dd3fc;
   --color-info-bg: #f0f9ff;
   --color-info-border: #bae6fd;
+
+  --color-map-land: #e8ecef;
+  --color-map-grid: #d5dce2;
+  --color-map-water: #b8d5e5;
+  --color-map-park: #d1e7dd;
+  --color-map-park-text: #5b826b;
 
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-heading: 'Inter', system-ui, -apple-system, sans-serif;
@@ -85,15 +102,22 @@
   --color-brand-text: #ffffff;
 
   --color-bg-dark: #171717;
+  --color-bg-dark-hero: #1a1510;
+  --color-bg-dark-elevated: #1f1d1a;
   --color-bg-dark-surface: #262626;
   --color-bg-light: #fcfaf7;
+  --color-bg-light-subtle: #faf8f5;
+  --color-bg-light-hover: #f7f5f2;
   --color-bg-light-surface: #ffffff;
   --color-bg-light-alt: #f6f0e9;
+  --color-bg-light-alt-hover: #ede6dd;
   --color-header-glass: rgba(38, 38, 38, 0.92);
 
   --color-text-on-dark: #fafafa;
+  --color-text-on-dark-subtle: #d1c8be;
   --color-text-on-dark-muted: #a19b95;
   --color-text-on-light: #271d13;
+  --color-text-on-light-secondary: #4a3e33;
   --color-neutral-700: #404040;
   --color-surface-muted: #f0ede8;
   --color-text-on-light-muted: #6b635b;
@@ -107,14 +131,24 @@
   --color-success-bg: #f0fdf4;
   --color-success-border: #bbf7d0;
   --color-warning: #b45309;
+  --color-warning-text: #92400e;
   --color-warning-bg: #fffbeb;
   --color-warning-border: #fde68a;
   --color-error: #b91c1c;
+  --color-error-text: #991b1b;
   --color-error-bg: #fef2f2;
   --color-error-border: #fecaca;
   --color-info: #0369a1;
+  --color-info-light: #38bdf8;
+  --color-info-lighter: #7dd3fc;
   --color-info-bg: #f0f9ff;
   --color-info-border: #bae6fd;
+
+  --color-map-land: #e8ecef;
+  --color-map-grid: #d5dce2;
+  --color-map-water: #b8d5e5;
+  --color-map-park: #d1e7dd;
+  --color-map-park-text: #5b826b;
 
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-heading: 'Inter', system-ui, -apple-system, sans-serif;

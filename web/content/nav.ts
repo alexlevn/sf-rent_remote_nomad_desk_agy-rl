@@ -21,7 +21,7 @@ export const GUEST_NAV_ITEMS: NavItem[] = [
 ];
 
 export const HOST_NAV_ITEMS: NavItem[] = [
-  { label: 'Host Dashboard', href: '/host/dashboard' },
+  { label: 'Host Dashboard', href: '/host' },
   { label: 'My Listings', href: '/host/listings' },
   { label: 'Calendar Availability', href: '/host/calendar' },
   { label: 'Payouts & Earnings', href: '/host/payouts' },
@@ -29,7 +29,7 @@ export const HOST_NAV_ITEMS: NavItem[] = [
 ];
 
 export const ADMIN_NAV_ITEMS: NavItem[] = [
-  { label: 'Admin Dashboard', href: '/admin/dashboard' },
+  { label: 'Admin Dashboard', href: '/admin' },
   { label: 'Properties Approval', href: '/admin/properties' },
   { label: 'Host Applications', href: '/admin/hosts' },
   { label: 'Reservations Oversight', href: '/admin/reservations' },

@@ -1,3 +1,5 @@
+import { BOOKING_RULES } from '@/content/booking-rules';
+
 export interface StepGuide {
   step: string;
   title: string;
@@ -13,10 +15,9 @@ export const HOME_CONTENT = {
       'Pack one suitcase. Arrive, unpack, and sit down at a dual-monitor 4K desk with guaranteed fiber internet in top remote work hubs.',
     destinationLabel: 'DESTINATION',
     moveInLabel: 'MOVE-IN DATE',
-    moveOutLabel: 'MOVE-OUT DATE (MIN 30 DAYS)',
+    moveOutLabel: `MOVE-OUT DATE (MIN ${BOOKING_RULES.minimumStayNights} DAYS)`,
     searchButton: 'Browse apartments',
-    dateWarning:
-      'Minimum 30 Nights Required: NomadDesk caters to monthly stays. Please select at least 30 consecutive nights.',
+    dateWarning: `Minimum ${BOOKING_RULES.minimumStayNights} Nights Required: NomadDesk caters to monthly stays. Please select at least ${BOOKING_RULES.minimumStayNights} consecutive nights.`,
   },
   featured: {
     badge: 'Hand-Curated',
@@ -39,8 +40,7 @@ export const HOME_CONTENT = {
       {
         step: '01',
         title: 'Select & Request',
-        description:
-          'Choose your city, verify your workstation hardware, and submit instant reservation or 48-hour request.',
+        description: `Choose your city, verify your workstation hardware, and submit instant reservation or ${BOOKING_RULES.respondHours}-hour request.`,
       },
       {
         step: '02',

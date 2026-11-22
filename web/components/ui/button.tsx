@@ -51,17 +51,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       primary:
         'bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] border border-[var(--color-brand)] shadow-sm active:translate-y-px',
       secondary:
-        'bg-[var(--color-bg-light-alt)] text-[var(--color-text-on-light)] border border-[var(--color-border-light)] hover:bg-[#ede6dd] active:translate-y-px',
+        'bg-[var(--color-bg-light-alt)] text-[var(--color-text-on-light)] border border-[var(--color-border-light)] hover:bg-[var(--color-bg-light-alt-hover)] active:translate-y-px',
       outline:
         'bg-transparent text-[var(--color-text-on-light)] border border-[var(--color-border-light)] hover:bg-[var(--color-bg-light-alt)] active:translate-y-px',
       'outline-white':
         'bg-transparent text-white border border-white/20 hover:bg-white/10 active:translate-y-px',
       dark:
-        'bg-[var(--color-bg-dark)] text-white border border-[var(--color-border-dark)] hover:bg-[#333333] active:translate-y-px',
+        'bg-[var(--color-bg-dark)] text-white border border-[var(--color-border-dark)] hover:bg-[var(--color-border-dark)] active:translate-y-px',
       white:
-        'bg-white text-[var(--color-text-on-light)] border border-[var(--color-border-light)] hover:bg-[#f7f5f2] active:translate-y-px',
+        'bg-white text-[var(--color-text-on-light)] border border-[var(--color-border-light)] hover:bg-[var(--color-bg-light-hover)] active:translate-y-px',
       ghost:
-        'bg-transparent text-current hover:bg-black/5 dark:hover:bg-white/10 active:translate-y-px',
+        'bg-transparent text-current hover:bg-black/5 active:translate-y-px',
     }[variant];
 
     const combinedClassName = cn(
@@ -73,9 +73,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     );
 
     if (asChild && React.isValidElement(children)) {
-      const child = children as React.ReactElement<{ className?: string }>;
+      const child = children as React.ReactElement<Record<string, unknown>>;
       return React.cloneElement(child, {
-        className: cn(combinedClassName, child.props.className),
+        ...props,
+        className: cn(combinedClassName, child.props.className as string | undefined),
       });
     }
 

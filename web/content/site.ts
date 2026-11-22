@@ -1,3 +1,5 @@
+import { BOOKING_RULES } from '@/content/booking-rules';
+
 export interface FooterLinkItem {
   label: string;
   href: string;
@@ -5,15 +7,26 @@ export interface FooterLinkItem {
   highlight?: 'brand' | 'admin' | 'neutral';
 }
 
+export function getSiteUrl(): string {
+  const configured =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXTAUTH_URL ||
+    'http://localhost:3288';
+  return configured.replace(/\/+$/, '');
+}
+
 export const SITE_CONFIG = {
   name: 'NomadDesk',
   brandBadge: 'PRO',
   title: 'NomadDesk — Furnished Apartments & Remote Workspaces',
-  tagline: 'Curated furnished apartments equipped with ergonomic workstations and high-speed fiber internet for digital nomads and remote professionals worldwide.',
-  description: 'Book flexible furnished apartments with verified high-speed Wi-Fi and ergonomic workspaces designed for digital nomads.',
-  minStayNotice: 'Minimum 30-night stays.',
-  copyright: '© 2026 NomadDesk Inc. All rights reserved. Minimum 30-night stays.',
+  tagline:
+    'Curated furnished apartments equipped with ergonomic workstations and high-speed fiber internet for digital nomads and remote professionals worldwide.',
+  description:
+    'Book flexible furnished apartments with verified high-speed Wi-Fi and ergonomic workspaces designed for digital nomads.',
+  minStayNotice: `Minimum ${BOOKING_RULES.minimumStayNights}-night stays.`,
+  copyright: `© 2026 NomadDesk Inc. All rights reserved. Minimum ${BOOKING_RULES.minimumStayNights}-night stays.`,
   contactEmail: 'support@nomaddesk.com',
+  partnersEmail: 'partners@nomaddesk.com',
   links: {
     home: '/',
     browse: '/c/furnished-apartments-madrid',
@@ -32,8 +45,8 @@ export const SITE_CONFIG = {
     contact: '/contact-us',
     blog: '/blog',
     travelGuides: '/travel-guide',
-    hostDashboard: '/host/dashboard',
-    adminDashboard: '/admin/dashboard',
+    hostDashboard: '/host',
+    adminDashboard: '/admin',
     guestDashboard: '/guests/dashboard',
   },
   footerSections: [
@@ -44,7 +57,7 @@ export const SITE_CONFIG = {
         { label: 'Barcelona Apartments', href: '/c/furnished-apartments-barcelona' },
         { label: 'Buenos Aires Apartments', href: '/c/furnished-apartments-buenos-aires' },
         { label: 'Lima Apartments', href: '/c/furnished-apartments-lima' },
-        { label: 'All 34 Cities →', href: '/a/furnished-apartments' },
+        { label: 'All Destinations →', href: '/a/furnished-apartments' },
       ],
     },
     {
@@ -63,14 +76,14 @@ export const SITE_CONFIG = {
         { label: 'How It Works', href: '/how-it-works' },
         { label: 'About NomadDesk', href: '/about-us' },
         { label: 'FAQs & Support', href: '/faq' },
-        { label: 'Host Portal Demo', href: '/host/dashboard', highlight: 'brand' as const },
-        { label: 'Admin Portal Demo', href: '/admin/dashboard', highlight: 'admin' as const },
+        { label: 'Host Portal', href: '/host', highlight: 'brand' as const },
+        { label: 'Admin Portal', href: '/admin', highlight: 'admin' as const },
       ],
     },
   ],
   legalLinks: [
     { label: 'Privacy Policy', href: '/about-us' },
     { label: 'Terms of Service', href: '/terms' },
-    { label: 'Cookie Preferences', href: '#' },
+    { label: 'Contact Support', href: '/contact-us' },
   ],
 };

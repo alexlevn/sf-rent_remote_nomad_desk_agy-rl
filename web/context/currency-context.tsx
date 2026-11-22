@@ -30,41 +30,68 @@ interface CurrencyContextValue {
   currencies: CurrencyConfig[];
 }
 
+interface CurrencyProviderProps {
+  children: React.ReactNode;
+  initialRates?: ExchangeRates;
+}
+
 const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
 const STORAGE_KEY = 'nomaddesk_currency';
-const RATES_STORAGE_KEY = 'nomaddesk_exchange_rates';
 
-export function CurrencyProvider({ children }: { children: React.ReactNode }) {
+function sanitizeRates(
+  base: ExchangeRates,
+  incoming?: Partial<ExchangeRates> | null
+): ExchangeRates {
+  if (!incoming) return { ...base, USD_USD: 1.0 };
+  const eurUsd =
+    typeof incoming.EUR_USD === 'number' && Number.isFinite(incoming.EUR_USD) && incoming.EUR_USD > 0
+      ? incoming.EUR_USD
+      : base.EUR_USD;
+  const gbpUsd =
+    typeof incoming.GBP_USD === 'number' && Number.isFinite(incoming.GBP_USD) && incoming.GBP_USD > 0
+      ? incoming.GBP_USD
+      : base.GBP_USD;
+  return {
+    USD_USD: 1.0,
+    EUR_USD: eurUsd,
+    GBP_USD: gbpUsd,
+  };
+}
+
+export function CurrencyProvider({ children, initialRates }: CurrencyProviderProps) {
   const [currency, setCurrencyState] = useState<CurrencyCode>('USD');
-  const [rates, setRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
+  const [rates, setRates] = useState<ExchangeRates>(() =>
+    sanitizeRates(DEFAULT_EXCHANGE_RATES, initialRates)
+  );
   const [, startTransition] = useTransition();
 
-  // Synchronize with localStorage after mount to prevent SSR hydration mismatch
+  // Keep client rates synchronized when RootLayout delivers fresh DB rates
+  useEffect(() => {
+    if (!initialRates) return;
+    startTransition(() => {
+      setRates((prev) => sanitizeRates(prev, initialRates));
+    });
+  }, [initialRates]);
+
+  // Synchronize selected display currency with localStorage after mount to avoid hydration mismatch
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as CurrencyCode | null;
-      if (stored && (stored === 'USD' || stored === 'EUR' || stored === 'GBP')) {
+      if (stored === 'USD' || stored === 'EUR' || stored === 'GBP') {
         startTransition(() => {
           setCurrencyState(stored);
         });
       }
-      const storedRates = localStorage.getItem(RATES_STORAGE_KEY);
-      if (storedRates) {
-        const parsed = JSON.parse(storedRates);
-        startTransition(() => {
-          setRates((prev) => ({ ...prev, ...parsed, USD_USD: 1.0 }));
-        });
-      }
     } catch {
-      // Ignore localStorage read failures in sandboxed environments
+      // Ignore localStorage read failures in private/sandboxed browsers
     }
 
-    const handleRatesUpdate = (e: Event) => {
-      const customEvent = e as CustomEvent<ExchangeRates>;
+    const handleRatesUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<Partial<ExchangeRates>>;
       if (customEvent.detail) {
         startTransition(() => {
-          setRates((prev) => ({ ...prev, ...customEvent.detail, USD_USD: 1.0 }));
+          setRates((prev) => sanitizeRates(prev, customEvent.detail));
         });
       }
     };
@@ -76,20 +103,15 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateRates = (newRates: Partial<ExchangeRates>) => {
-    const updatedRates: ExchangeRates = {
-      ...rates,
-      ...newRates,
-      USD_USD: 1.0,
-    };
-    setRates(updatedRates);
-    try {
-      localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(updatedRates));
-      window.dispatchEvent(
-        new CustomEvent('nomaddesk_rates_updated', { detail: updatedRates })
-      );
-    } catch {
-      // Ignore localStorage write failures
-    }
+    setRates((prev) => {
+      const next = sanitizeRates(prev, newRates);
+      try {
+        window.dispatchEvent(new CustomEvent('nomaddesk_rates_updated', { detail: next }));
+      } catch {
+        // Ignore custom event errors
+      }
+      return next;
+    });
   };
 
   const setCurrency = (code: CurrencyCode) => {
@@ -113,10 +135,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const convertPrice = (
-    amountUSDCents: number,
-    targetCurrency?: CurrencyCode
-  ): number => {
+  const convertPrice = (amountUSDCents: number, targetCurrency?: CurrencyCode): number => {
     return convertUSDCents(amountUSDCents, targetCurrency ?? currency, rates);
   };
 
@@ -148,9 +167,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     currencies: SUPPORTED_CURRENCIES,
   };
 
-  return (
-    <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>
-  );
+  return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;
 }
 
 export function useCurrency(): CurrencyContextValue {

@@ -119,6 +119,13 @@ export async function getSession(): Promise<{ user: User; role: UserRole }> {
 }
 
 /**
+ * Clears the in-memory mock session user ID.
+ */
+export function clearCurrentUserId(): void {
+  globalForAuth.__nomaddeskCurrentUserId = null;
+}
+
+/**
  * Resets active mock session back to initial demo guest user.
  */
 export function resetSession(): void {

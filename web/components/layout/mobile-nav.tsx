@@ -1,73 +1,60 @@
 'use client';
 
-import React, { useEffect, useState, useTransition } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Menu, X, Globe, User as UserIcon, LogOut } from 'lucide-react';
 import { MAIN_NAV_ITEMS } from '@/content/nav';
 import { SITE_CONFIG } from '@/content/site';
 import { useCurrency } from '@/context/currency-context';
-import type { UserRole } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import type { HeaderUser } from './header';
 
-interface AuthUserState {
-  name: string;
-  email: string;
-  role: UserRole;
+interface MobileNavProps {
+  authUser: HeaderUser | null;
+  onSignOut: () => Promise<void> | void;
 }
 
-export const MobileNav: React.FC = () => {
+export const MobileNav: React.FC<MobileNavProps> = ({ authUser, onSignOut }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [authUser, setAuthUser] = useState<AuthUserState | null>(null);
-  const [, startTransition] = useTransition();
   const { currency, setCurrency, currencies } = useCurrency();
 
-  // Read auth user state from localStorage
+  // Lock body scroll and close on Escape when mobile drawer is open
   useEffect(() => {
-    const updateAuth = () => {
-      try {
-        const stored = localStorage.getItem('nomaddesk_user');
-        startTransition(() => {
-          setAuthUser(stored ? JSON.parse(stored) : null);
-        });
-      } catch {
-        // Ignore
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
       }
     };
 
-    updateAuth();
-    window.addEventListener('storage', updateAuth);
-    return () => window.removeEventListener('storage', updateAuth);
-  }, []);
-
-  // Lock body scroll when mobile drawer is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
     };
   }, [isOpen]);
 
-  const handleSignOut = () => {
-    try {
-      localStorage.removeItem('nomaddesk_user');
-    } catch {
-      // Ignore
-    }
-    setAuthUser(null);
+  const handleSignOutClick = async () => {
     setIsOpen(false);
+    await onSignOut();
   };
 
+  const displayName = authUser ? authUser.name || authUser.email || 'User' : '';
+  const initial = displayName ? displayName.charAt(0).toUpperCase() : 'U';
+
   return (
-    <div className="md:hidden">
+    <div className="lg:hidden">
       {/* Hamburger Toggle Button */}
       <button
         type="button"
         onClick={() => setIsOpen(true)}
         aria-label="Menu"
-        className="inline-flex items-center justify-center p-2 rounded-lg text-white hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+        aria-expanded={isOpen}
+        className="inline-flex items-center justify-center min-h-10 min-w-10 p-2 rounded-lg text-white hover:bg-white/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] cursor-pointer"
       >
         <Menu className="h-6 w-6" />
       </button>
@@ -83,9 +70,13 @@ export const MobileNav: React.FC = () => {
 
       {/* Slide-out Drawer Panel */}
       <div
-        className={`fixed top-0 right-0 bottom-0 w-[85%] max-w-xs bg-[var(--color-bg-dark)] border-l border-[var(--color-border-dark)] text-[var(--color-text-on-dark)] z-[70] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+        className={cn(
+          'fixed top-0 right-0 bottom-0 w-[85%] max-w-xs bg-[var(--color-bg-dark)] border-l border-[var(--color-border-dark)] text-[var(--color-text-on-dark)] z-[70] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out',
           isOpen ? 'translate-x-0' : 'translate-x-full invisible pointer-events-none'
-        }`}
+        )}
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between p-5 border-b border-[var(--color-border-dark)]">
@@ -103,7 +94,7 @@ export const MobileNav: React.FC = () => {
             type="button"
             onClick={() => setIsOpen(false)}
             aria-label="Close menu"
-            className="p-1.5 rounded-lg text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/10 transition-colors"
+            className="inline-flex items-center justify-center min-h-10 min-w-10 p-2 rounded-lg text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -112,7 +103,7 @@ export const MobileNav: React.FC = () => {
         {/* Drawer Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {/* Navigation Links */}
-          <nav className="space-y-1">
+          <nav aria-label="Mobile navigation" className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-on-dark-muted)] mb-2 px-3">
               Explore
             </p>
@@ -140,11 +131,12 @@ export const MobileNav: React.FC = () => {
                   key={curr.code}
                   type="button"
                   onClick={() => setCurrency(curr.code)}
-                  className={`py-2 px-2 text-xs font-semibold rounded-lg border transition-all ${
+                  className={cn(
+                    'min-h-10 py-2 px-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer',
                     currency === curr.code
                       ? 'bg-[var(--color-brand)] text-white border-[var(--color-brand)] shadow-sm'
                       : 'bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-dark-muted)] border-[var(--color-border-dark)] hover:text-white'
-                  }`}
+                  )}
                 >
                   {curr.symbol} {curr.code}
                 </button>
@@ -157,13 +149,11 @@ export const MobileNav: React.FC = () => {
             {authUser ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-dark)]">
-                  <div className="h-9 w-9 rounded-full bg-[var(--color-brand)] flex items-center justify-center font-bold text-sm text-white">
-                    {authUser.name.charAt(0).toUpperCase()}
+                  <div className="h-9 w-9 rounded-full bg-[var(--color-brand)] flex items-center justify-center font-bold text-sm text-white shrink-0">
+                    {initial}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white truncate">
-                      {authUser.name}
-                    </p>
+                    <p className="text-sm font-semibold text-white truncate">{displayName}</p>
                     <p className="text-xs text-[var(--color-text-on-dark-muted)] truncate">
                       Role: <span className="capitalize text-[var(--color-brand)]">{authUser.role}</span>
                     </p>
@@ -174,30 +164,43 @@ export const MobileNav: React.FC = () => {
                   <Link
                     href="/guests/dashboard"
                     onClick={() => setIsOpen(false)}
-                    className="block px-3 py-2 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                    className="block px-3 py-2.5 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                   >
-                    Guest Portal
+                    Guest Dashboard
                   </Link>
-                  <Link
-                    href="/host/dashboard"
-                    onClick={() => setIsOpen(false)}
-                    className="block px-3 py-2 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                  >
-                    Host Portal
-                  </Link>
-                  <Link
-                    href="/admin/dashboard"
-                    onClick={() => setIsOpen(false)}
-                    className="block px-3 py-2 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                  >
-                    Admin Portal
-                  </Link>
+                  {authUser.role === 'host' && (
+                    <Link
+                      href="/host"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-3 py-2.5 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      Switch to Hosting
+                    </Link>
+                  )}
+                  {authUser.role === 'guest' && (
+                    <Link
+                      href="/partner-network"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-3 py-2.5 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      Become a Host
+                    </Link>
+                  )}
+                  {authUser.role === 'admin' && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setIsOpen(false)}
+                      className="block px-3 py-2.5 text-sm text-[var(--color-text-on-dark-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                    >
+                      Admin Portal
+                    </Link>
+                  )}
                 </div>
 
                 <button
                   type="button"
-                  onClick={handleSignOut}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                  onClick={handleSignOutClick}
+                  className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                 >
                   <LogOut className="h-4 w-4" />
                   <span>Sign Out</span>
