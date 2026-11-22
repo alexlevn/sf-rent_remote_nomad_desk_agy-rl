@@ -14,7 +14,8 @@
     "db:seed": "tsx lib/db/seed.ts",
     "db:verify-seed": "tsx lib/db/verify-seed.ts",
     "verify": "eslint && tsc --noEmit && vitest run && next build",
-    "e2e:docker": "E2E_DOCKER=1 playwright test"
+    "e2e:docker": "E2E_DOCKER=1 playwright test",
+    "db:build-scripts": "esbuild lib/db/migrate.ts lib/db/seed.ts lib/db/verify-seed.ts --bundle --platform=node --target=node20 --format=cjs --outdir=dist/db --external:pg --external:drizzle-orm --external:bcryptjs --log-level=warning"
   },
   "dependencies": {
     "@tiptap/extension-image": "^3.35.0",
@@ -53,6 +54,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^18.0.10",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "postcss": "^8",
