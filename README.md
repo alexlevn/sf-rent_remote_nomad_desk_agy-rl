@@ -2,6 +2,8 @@
 
 **NomadDesk** là nền tảng marketplace chọn lọc cho thuê căn hộ trung & dài hạn (≥ 30 đêm) trang bị sẵn trạm làm việc công thái học (Workstation) dành cho Digital Nomads và Remote Workers. Hệ thống hỗ trợ trọn vẹn 3 vai trò **Guest / Host / Admin** (kèm trình soạn thảo trực quan Tiptap, thư viện upload ảnh lưu trên Docker volume, chống đặt trùng bằng Postgres `btree_gist`, Mailpit email và thanh toán mock) và chạy hoàn toàn local.
 
+Phạm vi chức năng, vai trò, quy tắc nghiệp vụ và tiêu chí nghiệm thu: xem [REQUIREMENTS.md](REQUIREMENTS.md).
+
 ---
 
 ## Chạy nhanh bằng 1 lệnh (Docker Compose)
