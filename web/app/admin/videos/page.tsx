@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, startTransition } from 'react';
+import Link from 'next/link';
 import type { CommunityVideo } from '@/lib/types';
 import {
   saveVideoAction,
@@ -19,30 +20,45 @@ import {
   EyeOff,
   CheckCircle,
   AlertCircle,
+  ExternalLink,
   X,
 } from 'lucide-react';
+
+function isSafeHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
 
 export default function AdminVideosPage() {
   const [videos, setVideos] = useState<CommunityVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [editingVideo, setEditingVideo] = useState<Partial<CommunityVideo> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const isActionRunningRef = useRef(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchVideos = async () => {
+    setActionError(null);
     try {
       const data = await fetchVideosAction();
       startTransition(() => {
         setVideos(data);
         setLoading(false);
       });
-    } catch {
+    } catch (err) {
       startTransition(() => {
+        setActionError(err instanceof Error ? err.message : 'Failed to load community reels.');
         setLoading(false);
       });
     }
@@ -50,23 +66,28 @@ export default function AdminVideosPage() {
 
   useEffect(() => {
     fetchVideos();
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
-  // Close reel modal on Escape key (skip if a nested dialog handled it or save is in flight)
+  // Close reel modal on Escape key (skip if media picker is open or save is in flight)
   useEffect(() => {
     if (!isModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && !isActionRunningRef.current) {
+      if (e.key === 'Escape' && !e.defaultPrevented && !isMediaPickerOpen && !isActionRunningRef.current) {
         setIsModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
+  }, [isModalOpen, isMediaPickerOpen]);
 
   const showToast = (msg: string) => {
+    setActionError(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
   const handleOpenAdd = () => {
@@ -79,19 +100,24 @@ export default function AdminVideosPage() {
       isActive: true,
       position: videos.length + 1,
     });
+    setIsMediaPickerOpen(false);
     setFormError(null);
+    setActionError(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (v: CommunityVideo) => {
     setEditingVideo({ ...v });
+    setIsMediaPickerOpen(false);
     setFormError(null);
+    setActionError(null);
     setIsModalOpen(true);
   };
 
   const handleToggleVisible = async (v: CommunityVideo) => {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setActionError(null);
 
     try {
       const nextActive = v.isActive === false;
@@ -99,7 +125,7 @@ export default function AdminVideosPage() {
       showToast(`Reel ${v.authorName} is now ${nextActive ? 'visible' : 'hidden'} on homepage.`);
       await fetchVideos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update visibility');
+      setActionError(err instanceof Error ? err.message : 'Failed to update visibility');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -109,13 +135,14 @@ export default function AdminVideosPage() {
     if (!confirm('Are you sure you want to remove this community reel?')) return;
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setActionError(null);
 
     try {
       await deleteVideoAction(id);
       showToast('Community reel removed.');
       await fetchVideos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to remove reel');
+      setActionError(err instanceof Error ? err.message : 'Failed to remove reel');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -126,6 +153,7 @@ export default function AdminVideosPage() {
     if (targetIndex < 0 || targetIndex >= videos.length) return;
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
+    setActionError(null);
 
     try {
       const copy = [...videos];
@@ -138,7 +166,7 @@ export default function AdminVideosPage() {
       showToast('Reel order updated on homepage.');
       await fetchVideos();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reorder reels');
+      setActionError(err instanceof Error ? err.message : 'Failed to reorder reels');
     } finally {
       isActionRunningRef.current = false;
     }
@@ -148,8 +176,16 @@ export default function AdminVideosPage() {
     e.preventDefault();
     if (!editingVideo || isSubmitting || isActionRunningRef.current) return;
 
-    if (!editingVideo.authorName || !editingVideo.url) {
+    const rawHandle = (editingVideo.authorName || '').trim();
+    const trimmedUrl = (editingVideo.url || '').trim();
+
+    if (!rawHandle || !trimmedUrl) {
       setFormError('Please enter creator handle and embed URL.');
+      return;
+    }
+
+    if (!isSafeHttpUrl(trimmedUrl)) {
+      setFormError('Embed URL must start with https:// or http://.');
       return;
     }
 
@@ -159,16 +195,23 @@ export default function AdminVideosPage() {
       return;
     }
 
+    const normalizedHandle = rawHandle.startsWith('@') ? rawHandle : `@${rawHandle}`;
+
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setFormError(null);
 
     try {
-      await saveVideoAction({ ...editingVideo, avatar: trimmedAvatar });
+      await saveVideoAction({
+        ...editingVideo,
+        authorName: normalizedHandle,
+        url: trimmedUrl,
+        avatar: trimmedAvatar,
+      });
       showToast(
         editingVideo.id
-          ? `Reel for ${editingVideo.authorName} updated successfully!`
-          : `New reel for ${editingVideo.authorName} added to homepage carousel!`
+          ? `Reel for ${normalizedHandle} updated successfully!`
+          : `New reel for ${normalizedHandle} added to homepage carousel!`
       );
       setIsModalOpen(false);
       setEditingVideo(null);
@@ -207,16 +250,47 @@ export default function AdminVideosPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenAdd}
-          data-testid="add-reel-btn"
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-2xs self-start sm:self-auto cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Reel</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <Link
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-neutral-700 text-xs font-semibold hover:bg-neutral-50 transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-[var(--color-brand)]" />
+            <span>View on Web</span>
+          </Link>
+          <button
+            type="button"
+            onClick={handleOpenAdd}
+            data-testid="add-reel-btn"
+            className="flex min-h-10 items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-2xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Reel</span>
+          </button>
+        </div>
       </div>
+
+      {actionError && (
+        <div
+          role="alert"
+          className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between gap-2"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error"
+            className="p-1 rounded hover:bg-red-100 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Videos Data Table */}
       <div className="bg-white border border-[var(--color-border-light)] rounded-2xl shadow-2xs overflow-hidden">
@@ -259,14 +333,18 @@ export default function AdminVideosPage() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs text-neutral-600 max-w-xs truncate">
-                        <a
-                          href={v.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-[var(--color-brand)] underline"
-                        >
-                          {v.url}
-                        </a>
+                        {isSafeHttpUrl(v.url) ? (
+                          <a
+                            href={v.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-[var(--color-brand)] underline"
+                          >
+                            {v.url}
+                          </a>
+                        ) : (
+                          <span className="text-neutral-400">{v.url}</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4">
                         {isHidden ? (
@@ -287,6 +365,7 @@ export default function AdminVideosPage() {
                               type="button"
                               disabled={index === 0}
                               onClick={() => handleMove(index, 'up')}
+                              aria-label={`Move ${v.authorName} up`}
                               className="p-0.5 rounded hover:bg-neutral-200 disabled:opacity-20 cursor-pointer"
                               title="Move Up"
                             >
@@ -296,6 +375,7 @@ export default function AdminVideosPage() {
                               type="button"
                               disabled={index === videos.length - 1}
                               onClick={() => handleMove(index, 'down')}
+                              aria-label={`Move ${v.authorName} down`}
                               className="p-0.5 rounded hover:bg-neutral-200 disabled:opacity-20 cursor-pointer"
                               title="Move Down"
                             >
@@ -309,23 +389,23 @@ export default function AdminVideosPage() {
                           <button
                             type="button"
                             onClick={() => handleToggleVisible(v)}
+                            aria-label={isHidden ? `Show ${v.authorName} on homepage` : `Hide ${v.authorName} from homepage`}
                             title={isHidden ? 'Show on homepage' : 'Hide from homepage'}
-                            className="p-1.5 rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+                            className="inline-flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                           >
                             {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(v)}
-                            className="px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] text-neutral-700 hover:bg-neutral-100 text-xs cursor-pointer"
+                            className="inline-flex min-h-10 sm:min-h-8 items-center px-2.5 py-1 rounded-lg border border-[var(--color-border-light)] text-neutral-700 hover:bg-neutral-100 text-xs cursor-pointer"
                           >
                             Edit
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDelete(v.id)}
-                            style={{ color: 'var(--color-brand)' }}
-                            className="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors cursor-pointer"
+                            className="inline-flex min-h-10 sm:min-h-8 items-center px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold transition-colors cursor-pointer"
                           >
                             Remove
                           </button>
@@ -342,8 +422,22 @@ export default function AdminVideosPage() {
 
       {/* Modal: Add / Edit Reel */}
       {isModalOpen && editingVideo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in ${
+            isMediaPickerOpen ? 'hidden' : ''
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setIsModalOpen(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingVideo.id ? 'Edit Reel' : 'Add Community Reel'}
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6"
+          >
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <Video className="w-5 h-5 text-[var(--color-brand)]" />
@@ -415,6 +509,7 @@ export default function AdminVideosPage() {
                 onChange={(url) =>
                   setEditingVideo((prev) => (prev ? { ...prev, avatar: url } : null))
                 }
+                onModalOpenChange={setIsMediaPickerOpen}
                 placeholder="/seed/location/madrid.jpg"
                 helperText="Shown as the circular creator avatar in the homepage community reels."
                 testIdPrefix="video-avatar-image"

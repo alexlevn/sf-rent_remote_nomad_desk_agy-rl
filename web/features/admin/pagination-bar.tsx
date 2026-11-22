@@ -78,7 +78,7 @@ export function PaginationBar({
           onClick={() => onPageChange(safePage - 1)}
           disabled={disabled || safePage <= 1}
           aria-label="Previous page"
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] font-medium hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex min-h-10 sm:min-h-8 items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] font-medium hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
           <span>Prev</span>
@@ -102,10 +102,10 @@ export function PaginationBar({
                 disabled={disabled || entry === safePage}
                 aria-label={`Page ${entry}`}
                 aria-current={entry === safePage ? 'page' : undefined}
-                className={`min-w-8 px-2.5 py-1.5 rounded-lg font-semibold transition-colors ${
+                className={`min-h-10 sm:min-h-8 min-w-10 sm:min-w-8 px-2.5 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                   entry === safePage
                     ? 'bg-[var(--color-brand)] text-white shadow-xs'
-                    : 'border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-40'
+                    : 'border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-40'
                 }`}
               >
                 {entry}
@@ -120,7 +120,7 @@ export function PaginationBar({
           onClick={() => onPageChange(safePage + 1)}
           disabled={disabled || safePage >= totalPages}
           aria-label="Next page"
-          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] font-medium hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex min-h-10 sm:min-h-8 items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] font-medium hover:bg-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
         >
           <span>Next</span>
           <ChevronRight className="w-3.5 h-3.5" />

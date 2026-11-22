@@ -6,6 +6,7 @@ import type { Location } from '@/lib/types';
 import {
   saveLocationAction,
   deleteLocationAction,
+  reorderTopCitiesAction,
   fetchAdminLocationsPaginatedAction,
 } from '@/app/admin/cms-actions';
 import { TiptapEditor } from '@/features/admin/tiptap-editor';
@@ -25,6 +26,8 @@ import {
   Globe,
   Sparkles,
   ExternalLink,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 const CONTINENTS = [
@@ -52,7 +55,10 @@ export default function AdminLocationsPage() {
 
   // Edit/Add modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [editingLocation, setEditingLocation] = useState<Partial<Location> | null>(null);
+  const [latDraft, setLatDraft] = useState('40.4168');
+  const [lngDraft, setLngDraft] = useState('-3.7038');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -87,6 +93,7 @@ export default function AdminLocationsPage() {
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setActionError(null);
       try {
         const res = await fetchAdminLocationsPaginatedAction({
           page: targetPage,
@@ -117,17 +124,17 @@ export default function AdminLocationsPage() {
     fetchLocationsPage(page);
   }, [fetchLocationsPage, page]);
 
-  // Close destination modal on Escape key (skip if a nested dialog handled it or save is in flight)
+  // Close destination modal on Escape key (skip if media picker is open or save is in flight)
   useEffect(() => {
     if (!isModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && !isActionRunningRef.current) {
+      if (e.key === 'Escape' && !e.defaultPrevented && !isMediaPickerOpen && !isActionRunningRef.current) {
         setIsModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
+  }, [isModalOpen, isMediaPickerOpen]);
 
   const handleOpenAdd = () => {
     setEditingLocation({
@@ -144,6 +151,9 @@ export default function AdminLocationsPage() {
       isActive: true,
       position: undefined,
     });
+    setLatDraft('40.4168');
+    setLngDraft('-3.7038');
+    setIsMediaPickerOpen(false);
     setFormError(null);
     setActionError(null);
     setIsModalOpen(true);
@@ -151,9 +161,38 @@ export default function AdminLocationsPage() {
 
   const handleOpenEdit = (loc: Location) => {
     setEditingLocation({ ...loc });
+    setLatDraft(String(loc.center?.[0] ?? 40.4168));
+    setLngDraft(String(loc.center?.[1] ?? -3.7038));
+    setIsMediaPickerOpen(false);
     setFormError(null);
     setActionError(null);
     setIsModalOpen(true);
+  };
+
+  const topCitiesOnPage = locations
+    .filter((l) => l.position != null && l.position <= 8)
+    .sort((a, b) => (a.position ?? 99) - (b.position ?? 99));
+
+  const handleReorderTopCity = async (locId: number, direction: -1 | 1) => {
+    if (isActionRunningRef.current) return;
+    const idx = topCitiesOnPage.findIndex((l) => l.id === locId);
+    const nextIdx = idx + direction;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= topCitiesOnPage.length) return;
+
+    isActionRunningRef.current = true;
+    setActionError(null);
+    try {
+      const reordered = [...topCitiesOnPage];
+      const [moved] = reordered.splice(idx, 1);
+      reordered.splice(nextIdx, 0, moved);
+      await reorderTopCitiesAction(reordered.map((l) => l.id));
+      showToast('Top Cities order updated on homepage.');
+      await fetchLocationsPage(page);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to reorder Top Cities.');
+    } finally {
+      isActionRunningRef.current = false;
+    }
   };
 
   const handleToggleActive = async (loc: Location) => {
@@ -183,8 +222,30 @@ export default function AdminLocationsPage() {
     e.preventDefault();
     if (!editingLocation || isSubmitting || isActionRunningRef.current) return;
 
-    if (!editingLocation.name || !editingLocation.country) {
+    if (!editingLocation.name?.trim() || !editingLocation.country?.trim()) {
       setFormError('Please enter city name and country.');
+      return;
+    }
+
+    const trimmedCountryCode = (editingLocation.countryCode || '').trim().toUpperCase();
+    if (!/^[A-Z]{2,3}$/.test(trimmedCountryCode)) {
+      setFormError('Please enter a valid 2–3 letter country code (e.g. ES, PT, US).');
+      return;
+    }
+
+    const parsedLat = Number(latDraft.trim());
+    const parsedLng = Number(lngDraft.trim());
+    if (
+      latDraft.trim() === '' ||
+      lngDraft.trim() === '' ||
+      !Number.isFinite(parsedLat) ||
+      !Number.isFinite(parsedLng) ||
+      parsedLat < -90 ||
+      parsedLat > 90 ||
+      parsedLng < -180 ||
+      parsedLng > 180
+    ) {
+      setFormError('Please enter valid map coordinates (lat -90..90, lng -180..180).');
       return;
     }
 
@@ -201,18 +262,26 @@ export default function AdminLocationsPage() {
     try {
       const payload: Partial<Location> = {
         ...editingLocation,
+        name: editingLocation.name.trim(),
+        country: editingLocation.country.trim(),
+        countryCode: trimmedCountryCode,
         image: trimmedImage,
-        city: editingLocation.city || editingLocation.name,
+        center: [parsedLat, parsedLng],
+        city: editingLocation.city?.trim() || editingLocation.name.trim(),
         slug:
-          editingLocation.slug ||
-          editingLocation.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          editingLocation.slug?.trim() ||
+          editingLocation.name
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, ''),
       };
 
       await saveLocationAction(payload);
       showToast(
         editingLocation.id
           ? `Destination ${payload.name} updated successfully!`
-          : `Destination ${payload.name} created and live everywhere (AC-CMS-1)!`
+          : `Destination ${payload.name} created and live everywhere!`
       );
       setIsModalOpen(false);
       setEditingLocation(null);
@@ -311,6 +380,7 @@ export default function AdminLocationsPage() {
             <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
+              aria-label="Filter destinations by city, country, or slug"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter by city, country, or slug..."
@@ -412,10 +482,34 @@ export default function AdminLocationsPage() {
                       </td>
                       <td className="py-3.5 px-4">
                         {isTop ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            <Sparkles className="w-3 h-3 text-amber-600" />
-                            #{loc.position}
-                          </span>
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                              <Sparkles className="w-3 h-3 text-amber-600" />
+                              #{loc.position}
+                            </span>
+                            {topCitiesOnPage.length > 1 && (
+                              <div className="inline-flex items-center gap-0.5">
+                                <button
+                                  type="button"
+                                  disabled={topCitiesOnPage[0]?.id === loc.id}
+                                  onClick={() => handleReorderTopCity(loc.id, -1)}
+                                  aria-label={`Move ${loc.name || loc.city} up in Top Cities`}
+                                  className="p-1 rounded border border-[var(--color-border-light)] text-neutral-500 hover:bg-neutral-100 disabled:opacity-30 cursor-pointer"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={topCitiesOnPage[topCitiesOnPage.length - 1]?.id === loc.id}
+                                  onClick={() => handleReorderTopCity(loc.id, 1)}
+                                  aria-label={`Move ${loc.name || loc.city} down in Top Cities`}
+                                  className="p-1 rounded border border-[var(--color-border-light)] text-neutral-500 hover:bg-neutral-100 disabled:opacity-30 cursor-pointer"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-neutral-400 text-xs">—</span>
                         )}
@@ -486,8 +580,22 @@ export default function AdminLocationsPage() {
 
       {/* Modal: Add / Edit Destination */}
       {isModalOpen && editingLocation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in ${
+            isMediaPickerOpen ? 'hidden' : ''
+          }`}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setIsModalOpen(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingLocation.id ? 'Edit Destination' : 'Add New Destination'}
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6"
+          >
             <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-lg font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-[var(--color-brand)]" />
@@ -565,9 +673,12 @@ export default function AdminLocationsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-neutral-700 mb-1">Country Code</label>
+                  <label className="block font-semibold text-neutral-700 mb-1">
+                    Country Code <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
+                    required
                     value={editingLocation.countryCode || ''}
                     onChange={(e) =>
                       setEditingLocation((prev) => ({ ...prev, countryCode: e.target.value.toUpperCase() }))
@@ -632,6 +743,7 @@ export default function AdminLocationsPage() {
                 onChange={(url) =>
                   setEditingLocation((prev) => (prev ? { ...prev, image: url } : null))
                 }
+                onModalOpenChange={setIsMediaPickerOpen}
                 placeholder="/seed/location/2077.jpg"
                 helperText="Choose from the Media Library, upload a new photo, or enter a /uploads/, /seed/, or https:// path."
                 testIdPrefix="location-cover-image"
@@ -642,32 +754,30 @@ export default function AdminLocationsPage() {
               {/* Coordinates */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-neutral-700 mb-1">Map Lat</label>
+                  <label htmlFor="location-map-lat" className="block font-semibold text-neutral-700 mb-1">
+                    Map Lat
+                  </label>
                   <input
-                    type="number"
-                    step="any"
-                    value={editingLocation.center?.[0] ?? 38.7223}
-                    onChange={(e) =>
-                      setEditingLocation((prev) => ({
-                        ...prev,
-                        center: [Number(e.target.value), prev?.center?.[1] ?? -9.1393],
-                      }))
-                    }
+                    id="location-map-lat"
+                    type="text"
+                    inputMode="decimal"
+                    value={latDraft}
+                    onChange={(e) => setLatDraft(e.target.value)}
+                    placeholder="e.g. 38.7223"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-neutral-700 mb-1">Map Lng</label>
+                  <label htmlFor="location-map-lng" className="block font-semibold text-neutral-700 mb-1">
+                    Map Lng
+                  </label>
                   <input
-                    type="number"
-                    step="any"
-                    value={editingLocation.center?.[1] ?? -9.1393}
-                    onChange={(e) =>
-                      setEditingLocation((prev) => ({
-                        ...prev,
-                        center: [prev?.center?.[0] ?? 38.7223, Number(e.target.value)],
-                      }))
-                    }
+                    id="location-map-lng"
+                    type="text"
+                    inputMode="decimal"
+                    value={lngDraft}
+                    onChange={(e) => setLngDraft(e.target.value)}
+                    placeholder="e.g. -9.1393"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                   />
                 </div>
@@ -686,13 +796,13 @@ export default function AdminLocationsPage() {
                     className="rounded border-neutral-300 text-[var(--color-brand)] focus:ring-[var(--color-brand)]"
                   />
                   <span className="font-semibold text-neutral-800">
-                    Visible on Platform (AC-CMS-1)
+                    Visible on Platform
                   </span>
                 </label>
 
                 <div>
                   <label className="block font-semibold text-neutral-700 mb-1">
-                    Top Cities Order (1 to 8, or leave blank)
+                    Top Cities Order (1 to 8, or leave blank to unfeature)
                   </label>
                   <input
                     type="number"
@@ -700,7 +810,11 @@ export default function AdminLocationsPage() {
                     max={8}
                     value={editingLocation.position && editingLocation.position <= 8 ? editingLocation.position : ''}
                     onChange={(e) => {
-                      const val = e.target.value ? Number(e.target.value) : undefined;
+                      const val = e.target.value
+                        ? Number(e.target.value)
+                        : editingLocation.id
+                          ? 99
+                          : undefined;
                       setEditingLocation((prev) => ({ ...prev, position: val }));
                     }}
                     placeholder="e.g. 8 for #8 in Top Cities"

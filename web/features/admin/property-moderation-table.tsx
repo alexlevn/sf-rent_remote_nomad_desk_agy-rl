@@ -111,6 +111,7 @@ export function PropertyModerationTable() {
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setErrorMessage(null);
       try {
         const result = await fetchAdminPropertiesPaginatedAction({
           page: targetPage,
@@ -147,6 +148,21 @@ export function PropertyModerationTable() {
       errorBannerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [errorMessage]);
+
+  useEffect(() => {
+    if (!selectedProperty && !rejectingProperty) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isActionRunningRef.current) {
+        if (rejectingProperty) {
+          setRejectingProperty(null);
+        } else {
+          setSelectedProperty(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedProperty, rejectingProperty]);
 
   const showToast = (msg: string) => {
     setErrorMessage(null);
@@ -295,19 +311,20 @@ export function PropertyModerationTable() {
   };
 
   const renderStatusBadge = (status: PropertyStatus) => {
+    const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
     switch (status) {
       case 'published':
-        return <span className="badge badge-success">Published</span>;
+        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Published</span>;
       case 'pending_review':
-        return <span className="badge badge-warning">Pending Review</span>;
+        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending Review</span>;
       case 'hidden':
-        return <span className="badge badge-neutral bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:text-neutral-200">Hidden</span>;
+        return <span className={`${base} bg-neutral-200 text-neutral-800 border-neutral-300`}>Hidden</span>;
       case 'draft':
-        return <span className="badge bg-neutral-100 text-neutral-600 border border-neutral-300">Draft</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-600 border-neutral-300`}>Draft</span>;
       case 'rejected':
-        return <span className="badge badge-error">Rejected</span>;
+        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
       default:
-        return <span className="badge">{status}</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
     }
   };
 
@@ -491,26 +508,30 @@ export function PropertyModerationTable() {
 
         {/* Keyword Search */}
         <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1">
+          <label
+            htmlFor="admin-properties-search"
+            className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1"
+          >
             Search Listings
           </label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
             <input
+              id="admin-properties-search"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Title, ND-PROP, neighborhood..."
-              className="w-full text-sm py-2 pl-9 pr-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+              className="w-full text-sm py-2 pl-9 pr-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
             />
           </div>
         </div>
       </div>
 
       {/* Main Table Container */}
-      <div className="data-table-container bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="data-table w-full text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
               <tr>
                 <th className="px-6 py-3.5">Property Title</th>
@@ -583,12 +604,12 @@ export function PropertyModerationTable() {
                               <span>{property.bedrooms} BR</span>
                               <span>·</span>
                               <span>{property.totalSurface} m²</span>
-                              {property.workstation?.wifiSpeed && (
+                              {Boolean(property.workstation?.wifiSpeed) && (
                                 <>
                                   <span>·</span>
                                   <span className="inline-flex items-center gap-0.5 text-emerald-600 font-medium">
                                     <Wifi className="w-3 h-3" />
-                                    {property.workstation.wifiSpeed} Mbps
+                                    {property.workstation?.wifiSpeed} Mbps
                                   </span>
                                 </>
                               )}
@@ -636,7 +657,7 @@ export function PropertyModerationTable() {
                           <button
                             type="button"
                             onClick={() => setSelectedProperty(property)}
-                            className="btn btn-outline btn-sm text-xs px-2.5 py-1"
+                            className="inline-flex items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-neutral-700 hover:bg-neutral-50 text-xs font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
                             title="Inspect listing details"
                           >
                             Inspect
@@ -649,18 +670,19 @@ export function PropertyModerationTable() {
                                 type="button"
                                 onClick={() => handleApprove(property)}
                                 disabled={isSubmitting}
-                                className="btn btn-primary btn-sm text-xs px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border-none"
+                                className="inline-flex items-center justify-center rounded-lg text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
                               >
                                 Approve
                               </button>
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setSelectedProperty(null);
                                   setRejectingProperty(property);
                                   setRejectionReason('Listing requires higher quality workstation photos');
                                 }}
                                 disabled={isSubmitting}
-                                className="btn btn-outline btn-sm text-xs px-2.5 py-1 text-red-600 border-red-200"
+                                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                               >
                                 Reject
                               </button>
@@ -672,7 +694,9 @@ export function PropertyModerationTable() {
                               <Link
                                 href={`/l/apartments/${property.slug}`}
                                 target="_blank"
-                                className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded-md hover:bg-neutral-100"
+                                rel="noopener noreferrer"
+                                aria-label={`View ${property.title} on public site`}
+                                className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-md hover:bg-neutral-100"
                                 title="View public page"
                               >
                                 <ExternalLink className="w-4 h-4" />
@@ -681,7 +705,7 @@ export function PropertyModerationTable() {
                                 type="button"
                                 onClick={() => handleHide(property)}
                                 disabled={isSubmitting}
-                                className="btn btn-outline btn-sm text-xs px-2.5 py-1 text-amber-600 border-amber-200"
+                                className="inline-flex items-center justify-center rounded-lg border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                                 title="Hide listing from public search"
                               >
                                 Hide
@@ -694,7 +718,7 @@ export function PropertyModerationTable() {
                               type="button"
                               onClick={() => handlePublish(property)}
                               disabled={isSubmitting}
-                              className="btn btn-primary btn-sm text-xs px-2.5 py-1"
+                              className="inline-flex items-center justify-center rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                               title="Publish listing"
                             >
                               Publish
@@ -704,7 +728,8 @@ export function PropertyModerationTable() {
                           {/* Edit / Delete */}
                           <Link
                             href={`/admin/properties/${property.id}/edit`}
-                            className="p-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 rounded-md hover:bg-neutral-100"
+                            aria-label={`Edit ${property.title}`}
+                            className="p-1.5 text-neutral-500 hover:text-neutral-800 rounded-md hover:bg-neutral-100"
                             title="Edit listing details"
                           >
                             <Edit className="w-4 h-4" />
@@ -714,7 +739,8 @@ export function PropertyModerationTable() {
                             type="button"
                             onClick={() => handleDelete(property)}
                             disabled={isSubmitting}
-                            className="p-1.5 text-neutral-400 hover:text-red-600 rounded-md hover:bg-red-50"
+                            aria-label={`Delete ${property.title}`}
+                            className="p-1.5 text-neutral-500 hover:text-red-600 rounded-md hover:bg-red-50 cursor-pointer disabled:opacity-50"
                             title="Delete listing"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -741,8 +767,20 @@ export function PropertyModerationTable() {
 
       {/* Modal: Property Detail Inspection */}
       {selectedProperty && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-2xl bg-white dark:bg-[var(--color-bg-dark)] max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] space-y-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setSelectedProperty(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Inspect ${selectedProperty.title}`}
+            className="w-full max-w-2xl bg-white max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] space-y-6"
+          >
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -803,8 +841,12 @@ export function PropertyModerationTable() {
                   <strong className="text-[var(--color-text-on-light)]">{selectedProperty.workstation?.monitors || 'Single Screen'}</strong>
                 </div>
                 <div>
-                  <span className="text-neutral-400 block">Verified Wi-Fi:</span>
-                  <strong className="text-emerald-600">{selectedProperty.workstation?.wifiSpeed || 200} Mbps</strong>
+                  <span className="text-neutral-500 block">Verified Wi-Fi:</span>
+                  <strong className="text-emerald-600">
+                    {selectedProperty.workstation?.wifiSpeed
+                      ? `${selectedProperty.workstation.wifiSpeed} Mbps`
+                      : 'Not verified'}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -861,11 +903,11 @@ export function PropertyModerationTable() {
             )}
 
             {/* Action Bar */}
-            <div className="pt-4 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex items-center justify-between">
+            <div className="pt-4 border-t border-[var(--color-border-light)] flex flex-wrap items-center justify-between gap-2">
               <div>
                 <Link
                   href={`/admin/properties/${selectedProperty.id}/edit`}
-                  className="btn btn-outline btn-sm text-xs inline-flex items-center gap-1.5"
+                  className="inline-flex min-h-10 sm:min-h-8 items-center gap-1.5 rounded-lg border border-[var(--color-border-light)] bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors"
                 >
                   <Edit className="w-3.5 h-3.5" />
                   Edit Full Form
@@ -876,7 +918,7 @@ export function PropertyModerationTable() {
                 <button
                   type="button"
                   onClick={() => setSelectedProperty(null)}
-                  className="btn btn-outline btn-sm text-xs"
+                  className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors cursor-pointer"
                 >
                   Close
                 </button>
@@ -886,11 +928,13 @@ export function PropertyModerationTable() {
                     <button
                       type="button"
                       onClick={() => {
-                        setRejectingProperty(selectedProperty);
+                        const prop = selectedProperty;
+                        setSelectedProperty(null);
+                        setRejectingProperty(prop);
                         setRejectionReason('Listing requires higher quality workstation photos');
                       }}
                       disabled={isSubmitting}
-                      className="btn btn-outline btn-sm text-xs text-red-600 border-red-200"
+                      className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       Reject
                     </button>
@@ -898,7 +942,7 @@ export function PropertyModerationTable() {
                       type="button"
                       onClick={() => handleApprove(selectedProperty)}
                       disabled={isSubmitting}
-                      className="btn btn-primary btn-sm text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors cursor-pointer"
                     >
                       Approve & Publish
                     </button>
@@ -910,7 +954,7 @@ export function PropertyModerationTable() {
                     type="button"
                     onClick={() => handleHide(selectedProperty)}
                     disabled={isSubmitting}
-                    className="btn btn-outline btn-sm text-xs text-amber-600 border-amber-200"
+                    className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors cursor-pointer"
                   >
                     Hide Listing
                   </button>
@@ -921,7 +965,7 @@ export function PropertyModerationTable() {
                     type="button"
                     onClick={() => handlePublish(selectedProperty)}
                     disabled={isSubmitting}
-                    className="btn btn-primary btn-sm text-xs"
+                    className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 transition-colors cursor-pointer"
                   >
                     Republish
                   </button>
@@ -934,10 +978,22 @@ export function PropertyModerationTable() {
 
       {/* Modal: Rejection Reason */}
       {rejectingProperty && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-[var(--color-bg-dark-surface)] rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setRejectingProperty(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Reject ${rejectingProperty.title}`}
+            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
@@ -950,15 +1006,16 @@ export function PropertyModerationTable() {
               </div>
             </div>
 
-            <p className="text-sm text-neutral-600 dark:text-neutral-300">
+            <p className="text-sm text-neutral-600">
               Please state why this listing is being rejected so the Host can correct the listing details.
             </p>
 
             <textarea
+              aria-label="Rejection reason"
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               rows={3}
-              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50 dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               placeholder="Enter rejection reason..."
             />
 
@@ -966,7 +1023,7 @@ export function PropertyModerationTable() {
               <button
                 type="button"
                 onClick={() => setRejectingProperty(null)}
-                className="btn btn-outline btn-sm"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -974,7 +1031,7 @@ export function PropertyModerationTable() {
                 type="button"
                 onClick={handleConfirmReject}
                 disabled={isSubmitting || !rejectionReason.trim()}
-                className="btn btn-primary btn-sm bg-red-600 hover:bg-red-700 text-white"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
               >
                 Confirm Rejection
               </button>

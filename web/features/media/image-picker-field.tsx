@@ -22,6 +22,7 @@ export interface ImagePickerFieldProps {
   previewAlt?: string;
   previewAspect?: 'landscape' | 'square';
   modalTitle?: string;
+  onModalOpenChange?: (open: boolean) => void;
 }
 
 export function ImagePickerField({
@@ -39,11 +40,17 @@ export function ImagePickerField({
   previewAlt,
   previewAspect = 'landscape',
   modalTitle = 'Choose or Upload Image',
+  onModalOpenChange,
 }: ImagePickerFieldProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [failedPreviewUrl, setFailedPreviewUrl] = useState<string | null>(null);
+
+  const setModalOpen = (open: boolean) => {
+    setIsModalOpen(open);
+    onModalOpenChange?.(open);
+  };
 
   const trimmed = value.trim();
   const isPathValid = trimmed.length === 0 || isSafeImagePath(trimmed);
@@ -101,7 +108,7 @@ export function ImagePickerField({
               type="button"
               disabled={disabled}
               data-testid={`${testIdPrefix}-open-btn`}
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => setModalOpen(true)}
               className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--color-border-light)] bg-[var(--color-bg-light-alt)] px-3.5 py-2 text-xs font-semibold text-[var(--color-text-on-light)] hover:bg-[var(--color-surface-muted)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Upload className="h-3.5 w-3.5 text-[var(--color-brand)]" />
@@ -157,7 +164,7 @@ export function ImagePickerField({
 
       <MediaLibraryModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => setModalOpen(false)}
         onSelect={(items) => {
           const first = items[0];
           if (first) {

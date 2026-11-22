@@ -107,6 +107,7 @@ export interface AdminUsersCounts {
   guest: number;
   host: number;
   admin: number;
+  activeAdmins: number;
   active: number;
   inactive: number;
 }
@@ -156,6 +157,7 @@ export async function listAdminUsersPaginated(
       guest: sql<number>`count(*) filter (where ${users.role} = 'guest')::int`,
       host: sql<number>`count(*) filter (where ${users.role} = 'host')::int`,
       admin: sql<number>`count(*) filter (where ${users.role} = 'admin')::int`,
+      activeAdmins: sql<number>`count(*) filter (where ${users.role} = 'admin' and ${users.isActive} = true)::int`,
       active: sql<number>`count(*) filter (where ${users.isActive} = true)::int`,
       inactive: sql<number>`count(*) filter (where ${users.isActive} = false)::int`,
     })
@@ -166,6 +168,7 @@ export async function listAdminUsersPaginated(
     guest: Number(aggRow?.guest ?? 0),
     host: Number(aggRow?.host ?? 0),
     admin: Number(aggRow?.admin ?? 0),
+    activeAdmins: Number(aggRow?.activeAdmins ?? 0),
     active: Number(aggRow?.active ?? 0),
     inactive: Number(aggRow?.inactive ?? 0),
   };

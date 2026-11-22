@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import {
   AlertCircle,
@@ -16,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatFileSize } from '@/lib/format';
 import type { MediaItem, MediaListResult } from '@/lib/types/media';
 import { isSafeImagePath } from '@/lib/validations/media';
 
@@ -37,13 +39,6 @@ export interface MediaLibraryModalProps {
   allowUrlTab?: boolean;
   initialTab?: MediaLibraryTab;
   title?: string;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 function resolveInitialTab(
@@ -116,9 +111,11 @@ function MediaLibraryModalContent({
 
   useEffect(() => {
     isMountedRef.current = true;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
     return () => {
       isMountedRef.current = false;
+      previouslyFocused?.focus?.();
     };
   }, []);
 
@@ -159,20 +156,22 @@ function MediaLibraryModalContent({
     const controller = new AbortController();
     let cancelled = false;
 
-    const params = new URLSearchParams({
-      page: String(libraryPage),
-      pageSize: String(LIBRARY_PAGE_SIZE),
-    });
-    if (debouncedSearch.length > 0) {
-      params.set('search', debouncedSearch);
-    }
+    const loadLibrary = async () => {
+      const params = new URLSearchParams({
+        page: String(libraryPage),
+        pageSize: String(LIBRARY_PAGE_SIZE),
+      });
+      if (debouncedSearch.length > 0) {
+        params.set('search', debouncedSearch);
+      }
 
-    fetch(`/api/media?${params.toString()}`, {
-      method: 'GET',
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-      .then(async (response) => {
+      try {
+        const response = await fetch(`/api/media?${params.toString()}`, {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+
         const data = (await response.json().catch(() => null)) as
           | MediaListResult
           | { error?: string }
@@ -201,13 +200,15 @@ function MediaLibraryModalContent({
         setLibraryTotal(data.total);
         setLibraryTotalPages(safeTotalPages);
         setSettledQueryKey(currentQueryKey);
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (cancelled) return;
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setLibraryError('Network error while loading media library.');
         setSettledQueryKey(currentQueryKey);
-      });
+      }
+    };
+
+    void loadLibrary();
 
     return () => {
       cancelled = true;
@@ -322,6 +323,7 @@ function MediaLibraryModalContent({
             return next;
           });
           setUploadSuccessCount((prev) => prev + uploadedItems.length);
+          setUploadAlt('');
           setRefreshNonce((n) => n + 1);
         }
       } finally {
@@ -404,6 +406,9 @@ function MediaLibraryModalContent({
 
       if (!response.ok) {
         setLibraryError(payload?.error || 'Failed to delete media item.');
+        if (response.status === 409) {
+          setRefreshNonce((n) => n + 1);
+        }
         return;
       }
 
@@ -449,12 +454,18 @@ function MediaLibraryModalContent({
     }
 
     const trimmedAlt = urlAlt.trim();
-    onSelect([
-      {
-        url: trimmedUrl,
-        alt: trimmedAlt.length > 0 ? trimmedAlt : undefined,
-      },
-    ]);
+    const insertedItem: SelectedMediaItem = {
+      url: trimmedUrl,
+      alt: trimmedAlt.length > 0 ? trimmedAlt : undefined,
+    };
+
+    if (multiple && selectedMap.size > 0) {
+      const merged = new Map(selectedMap);
+      merged.set(insertedItem.url, insertedItem);
+      onSelect(Array.from(merged.values()));
+    } else {
+      onSelect([insertedItem]);
+    }
     onClose();
   };
 
@@ -1072,6 +1083,6 @@ export function MediaLibraryModal({
   isOpen,
   ...rest
 }: MediaLibraryModalProps) {
-  if (!isOpen) return null;
-  return <MediaLibraryModalContent {...rest} />;
+  if (!isOpen || typeof document === 'undefined') return null;
+  return createPortal(<MediaLibraryModalContent {...rest} />, document.body);
 }

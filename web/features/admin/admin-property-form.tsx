@@ -29,6 +29,8 @@ import {
 } from 'lucide-react';
 import type { HostProfile, Location, Property, PropertyStatus } from '@/lib/types';
 import { isSafeImagePath } from '@/lib/validations/media';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { INT4_MAX, formatLastSaved } from '@/lib/format';
 import {
   createAdminPropertyAction,
   updateAdminPropertyAction,
@@ -53,22 +55,6 @@ const SEED_GALLERY_OPTIONS = [
 ];
 
 const MAX_IMAGES = 50;
-const INT4_MAX = 2_147_483_647;
-
-function formatLastSaved(iso?: string): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  }).format(date)} UTC`;
-}
 
 interface AdminPropertyFormProps {
   initialData?: Property;
@@ -134,7 +120,7 @@ export function AdminPropertyForm({
       : 2800,
   );
   const [minimumStayNights, setMinimumStayNights] = useState<string>(
-    String(initialData?.minimumStayNights ?? 30),
+    String(initialData?.minimumStayNights ?? BOOKING_RULES.minimumStayNights),
   );
   const [checkInStart, setCheckInStart] = useState<string>(
     initialData?.checkInStart ?? '15:00',
@@ -215,6 +201,7 @@ export function AdminPropertyForm({
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const isSubmittingRef = useRef<boolean>(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   // Track dirty state against initial snapshot for unsaved-changes warnings
   const currentSnapshot = JSON.stringify({
@@ -263,6 +250,7 @@ export function AdminPropertyForm({
     isEditMode && initialData?.status === 'published' && initialData.slug,
   );
   const coverImage = images[0] ?? null;
+  const selectedHost = hosts.find((h) => String(h.id) === hostId) ?? null;
 
   const clearImagesFieldError = () => {
     setErrors((prev) => {
@@ -398,11 +386,10 @@ export function AdminPropertyForm({
     if (
       minimumStayNights.trim() === '' ||
       !Number.isInteger(minStayNum) ||
-      minStayNum < 30 ||
+      minStayNum < BOOKING_RULES.minimumStayNights ||
       minStayNum > 3650
     ) {
-      nextErrors.minimumStayNights =
-        'Minimum stay must be an integer between 30 and 3650 nights.';
+      nextErrors.minimumStayNights = `Minimum stay must be an integer between ${BOOKING_RULES.minimumStayNights} and 3650 nights.`;
     }
 
     const bedroomsNum = Number(bedrooms);
@@ -480,6 +467,13 @@ export function AdminPropertyForm({
     setServerError(null);
 
     if (!validate()) {
+      requestAnimationFrame(() => {
+        const firstInvalid = formRef.current?.querySelector<HTMLElement>(
+          '[aria-invalid="true"], [data-field-error="true"]'
+        );
+        firstInvalid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstInvalid?.focus?.();
+      });
       return;
     }
 
@@ -557,15 +551,15 @@ export function AdminPropertyForm({
   };
 
   const inputClass =
-    'w-full min-h-10 text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/25';
+    'w-full min-h-10 text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/25';
   const labelClass =
     'block text-xs font-semibold text-[var(--color-text-on-light)] mb-1';
   const cardClass =
-    'bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] rounded-xl p-5 sm:p-6 space-y-5 shadow-2xs';
+    'bg-white border border-[var(--color-border-light)] rounded-xl p-5 sm:p-6 space-y-5 shadow-2xs';
 
   return (
     <>
-      <form onSubmit={handleSubmit} noValidate className="space-y-6 pb-8">
+      <form ref={formRef} onSubmit={handleSubmit} noValidate className="space-y-6 pb-8">
         {/* Top Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
@@ -630,6 +624,7 @@ export function AdminPropertyForm({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="e.g. Sunlit 2BR Penthouse with Dual-Monitor Desk"
+                    aria-invalid={Boolean(errors.title) || undefined}
                     className={inputClass}
                     required
                   />
@@ -1141,6 +1136,7 @@ export function AdminPropertyForm({
                     data-testid="property-host-select"
                     value={hostId}
                     onChange={(e) => setHostId(e.target.value)}
+                    aria-invalid={Boolean(errors.hostId) || undefined}
                     className={inputClass}
                     required
                   >
@@ -1151,6 +1147,11 @@ export function AdminPropertyForm({
                       </option>
                     ))}
                   </select>
+                  {selectedHost && selectedHost.status !== 'approved' && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-1.5">
+                      This host is currently <strong>{selectedHost.status}</strong>. Listings owned by non-approved hosts will not be publicly bookable until the host is approved.
+                    </p>
+                  )}
                   {errors.hostId && (
                     <p className="text-xs text-red-600 mt-1">{errors.hostId}</p>
                   )}
@@ -1163,12 +1164,12 @@ export function AdminPropertyForm({
                   </div>
                 )}
 
-                <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
+                <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--color-border-light)]">
                   <button
                     type="submit"
                     disabled={isSubmitting}
                     data-testid="property-submit-btn"
-                    className="btn btn-primary w-full min-h-10 text-sm px-4 py-2.5 inline-flex items-center justify-center gap-2"
+                    className="w-full min-h-10 rounded-xl bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-sm font-semibold px-4 py-2.5 inline-flex items-center justify-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
                   >
                     {isSubmitting ? (
                       <>
@@ -1195,7 +1196,7 @@ export function AdminPropertyForm({
                       target="_blank"
                       rel="noopener noreferrer"
                       data-testid="property-view-on-web-link"
-                      className="btn btn-outline w-full min-h-10 text-xs px-4 py-2 inline-flex items-center justify-center gap-1.5"
+                      className="w-full min-h-10 rounded-xl border border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-4 py-2 inline-flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       <span>View on Web</span>
@@ -1282,7 +1283,7 @@ export function AdminPropertyForm({
                     type="button"
                     onClick={handleAddImage}
                     data-testid="property-add-image-btn"
-                    className="btn btn-primary btn-sm min-h-10 shrink-0 inline-flex items-center gap-1 text-xs px-3 py-2"
+                    className="min-h-10 shrink-0 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white font-semibold inline-flex items-center gap-1 text-xs px-3 py-2 transition-colors cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Photo</span>
@@ -1292,7 +1293,7 @@ export function AdminPropertyForm({
                 <button
                   type="button"
                   onClick={() => setShowSeedPicker((prev) => !prev)}
-                  className="btn btn-outline btn-sm w-full min-h-10 text-xs px-3 py-1.5"
+                  className="w-full min-h-10 rounded-lg border border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-neutral-700 font-semibold text-xs px-3 py-1.5 transition-colors cursor-pointer"
                 >
                   {showSeedPicker
                     ? 'Hide Seed Gallery'
@@ -1305,7 +1306,7 @@ export function AdminPropertyForm({
                   </p>
                 )}
                 {errors.images && (
-                  <p className="text-xs text-red-600" role="alert">
+                  <p data-field-error="true" className="text-xs text-red-600" role="alert">
                     {errors.images}
                   </p>
                 )}
@@ -1543,7 +1544,7 @@ export function AdminPropertyForm({
               type="button"
               onClick={handleCancel}
               data-testid="property-cancel-btn"
-              className="btn btn-outline min-h-10 text-sm px-4 py-2"
+              className="min-h-10 rounded-xl border border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-neutral-700 font-semibold text-sm px-4 py-2 transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -1551,7 +1552,7 @@ export function AdminPropertyForm({
               type="submit"
               disabled={isSubmitting}
               data-testid="property-sticky-submit-btn"
-              className="btn btn-primary min-h-10 text-sm px-5 py-2 inline-flex items-center gap-2"
+              className="min-h-10 rounded-xl bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white font-semibold text-sm px-5 py-2 inline-flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
             >
               {isSubmitting ? (
                 <>

@@ -11,6 +11,8 @@ import {
   fetchAdminReservationsPaginatedAction,
   cancelReservationAdminAction,
 } from '@/app/admin/admin-actions';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { formatUtcDate } from '@/lib/format';
 import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   Search,
@@ -110,10 +112,26 @@ export function AllReservationsTable() {
     return () => clearTimeout(timer);
   }, [searchQuery, debouncedSearch]);
 
+  useEffect(() => {
+    if (!selectedReservation && !voidingReservation) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isActionRunningRef.current) {
+        if (voidingReservation) {
+          setVoidingReservation(null);
+        } else {
+          setSelectedReservation(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedReservation, voidingReservation]);
+
   const fetchPage = useCallback(
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setErrorMessage(null);
       try {
         const result = await fetchAdminReservationsPaginatedAction({
           page: targetPage,
@@ -229,21 +247,22 @@ export function AllReservationsTable() {
   };
 
   const renderStatusBadge = (status: ReservationStatus) => {
+    const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
     switch (status) {
       case 'confirmed':
-        return <span className="badge badge-success">Confirmed</span>;
+        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Confirmed</span>;
       case 'pending':
-        return <span className="badge badge-warning">Pending</span>;
+        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending</span>;
       case 'completed':
-        return <span className="badge bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300">Completed</span>;
+        return <span className={`${base} bg-blue-100 text-blue-800 border-blue-200`}>Completed</span>;
       case 'cancelled':
-        return <span className="badge badge-error">Cancelled</span>;
+        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Cancelled</span>;
       case 'rejected':
-        return <span className="badge badge-error">Rejected</span>;
+        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
       case 'expired':
-        return <span className="badge bg-neutral-100 text-neutral-600 border border-neutral-300">Expired</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-600 border-neutral-300`}>Expired</span>;
       default:
-        return <span className="badge">{status}</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
     }
   };
 
@@ -408,18 +427,19 @@ export function AllReservationsTable() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="text"
+            aria-label="Search reservations by booking code, guest, or city"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Booking code, guest, city..."
-            className="w-full text-sm py-1.5 pl-9 pr-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+            className="w-full text-sm py-1.5 pl-9 pr-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           />
         </div>
       </div>
 
       {/* Main Table */}
-      <div className="data-table-container bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="data-table w-full text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
               <tr>
                 <th className="px-6 py-3.5">Booking ID</th>
@@ -463,26 +483,27 @@ export function AllReservationsTable() {
                   const prop = getProperty(res.propertyId);
                   const hostName = getHostName(res.propertyId);
                   const totalUSD = Math.round((res.totalAmount || 0) / 100);
-                  const commissionItemUSD = Math.round(
-                    (res.commissionAmount || (res.totalAmount || 0) * 0.1) / 100
-                  );
+                  const commissionCents =
+                    res.commissionAmount ??
+                    Math.round((res.rentAmount || 0) * BOOKING_RULES.commissionRate);
+                  const commissionItemUSD = Math.round(commissionCents / 100);
 
                   return (
                     <tr
                       key={res.id}
-                      className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40 transition-colors"
+                      className="hover:bg-neutral-50/70 transition-colors"
                     >
                       {/* Booking Code */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => setSelectedReservation(res)}
-                          className="font-bold text-[var(--color-brand)] hover:underline text-left block"
+                          className="font-bold text-[var(--color-brand)] hover:underline text-left block cursor-pointer"
                         >
                           #{res.code}
                         </button>
-                        <span className="text-[11px] text-neutral-400">
-                          {new Date(res.createdAt).toLocaleDateString()}
+                        <span className="text-[11px] text-neutral-500">
+                          {formatUtcDate(res.createdAt)}
                         </span>
                       </td>
 
@@ -537,21 +558,22 @@ export function AllReservationsTable() {
                           <button
                             type="button"
                             onClick={() => setSelectedReservation(res)}
-                            className="btn btn-outline btn-sm text-xs px-2.5 py-1"
+                            className="inline-flex items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-neutral-700 hover:bg-neutral-50 text-xs font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
                           >
                             Details
                           </button>
 
-                          {/* Admin Void button on confirmed reservations (AC-ADMIN-4) */}
+                          {/* Admin Void button on confirmed reservations */}
                           {res.status === 'confirmed' && (
                             <button
                               type="button"
                               onClick={() => {
+                                setSelectedReservation(null);
                                 setVoidingReservation(res);
                                 setCancellationReason('Cancelled by Platform Administrator due to compliance review');
                               }}
                               disabled={isSubmitting}
-                              className="btn btn-outline btn-sm text-xs px-2.5 py-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200"
+                              className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                               title="Admin Intervention Void & Refund"
                             >
                               Admin Void
@@ -559,7 +581,7 @@ export function AllReservationsTable() {
                           )}
 
                           {res.status === 'cancelled' && res.cancelledBy === 'admin' && (
-                            <span className="text-[11px] font-semibold text-red-600 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded">
+                            <span className="text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded">
                               Admin Voided
                             </span>
                           )}
@@ -585,8 +607,20 @@ export function AllReservationsTable() {
 
       {/* Modal: Reservation Details Drawer */}
       {selectedReservation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-xl bg-white dark:bg-[var(--color-bg-dark)] max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] space-y-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setSelectedReservation(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Reservation audit details for #${selectedReservation.code}`}
+            className="w-full max-w-xl bg-white max-h-[90vh] rounded-2xl shadow-2xl p-6 overflow-y-auto border border-[var(--color-border-light)] space-y-6"
+          >
             <div className="flex items-start justify-between pb-4 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
               <div>
                 <div className="flex items-center gap-2 mb-1">
@@ -663,13 +697,13 @@ export function AllReservationsTable() {
                   <div className="flex justify-between text-xs">
                     <span className="text-neutral-500">NomadDesk 10% Cut:</span>
                     <strong className="text-emerald-600">
-                      ${Math.round((selectedReservation.commissionAmount || (selectedReservation.totalAmount || 0) * 0.1) / 100).toLocaleString()}
+                      ${Math.round((selectedReservation.commissionAmount ?? Math.round((selectedReservation.rentAmount || 0) * BOOKING_RULES.commissionRate)) / 100).toLocaleString()}
                     </strong>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-neutral-500">Host Net Payout:</span>
                     <strong className="text-[var(--color-text-on-light)]">
-                      ${Math.round((selectedReservation.hostPayout || (selectedReservation.totalAmount || 0) * 0.9) / 100).toLocaleString()}
+                      ${Math.round((selectedReservation.hostPayout ?? Math.round((selectedReservation.rentAmount || 0) * (1 - BOOKING_RULES.commissionRate))) / 100).toLocaleString()}
                     </strong>
                   </div>
                   {selectedReservation.paymentRef && (
@@ -701,24 +735,26 @@ export function AllReservationsTable() {
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-4 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex items-center justify-end gap-3">
+            <div className="pt-4 border-t border-[var(--color-border-light)] flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setSelectedReservation(null)}
-                className="btn btn-outline btn-sm text-xs"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
               >
                 Close
               </button>
 
-              {/* Admin Void action from details (AC-ADMIN-4) */}
+              {/* Admin Void action from details */}
               {selectedReservation.status === 'confirmed' && (
                 <button
                   type="button"
                   onClick={() => {
-                    setVoidingReservation(selectedReservation);
+                    const target = selectedReservation;
+                    setSelectedReservation(null);
+                    setVoidingReservation(target);
                     setCancellationReason('Cancelled by Platform Administrator due to compliance review');
                   }}
-                  className="btn btn-primary btn-sm text-xs bg-red-600 hover:bg-red-700 text-white"
+                  className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white cursor-pointer"
                 >
                   Admin Void & Refund
                 </button>
@@ -728,12 +764,24 @@ export function AllReservationsTable() {
         </div>
       )}
 
-      {/* Modal: Admin Intervention Void Confirmation (AC-ADMIN-4) */}
+      {/* Modal: Admin Intervention Void Confirmation */}
       {voidingReservation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-[var(--color-bg-dark-surface)] rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setVoidingReservation(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Cancel booking #${voidingReservation.code}`}
+            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                 <ShieldAlert className="w-5 h-5" />
               </div>
               <div>
@@ -746,22 +794,26 @@ export function AllReservationsTable() {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 text-xs text-red-800 dark:text-red-300 space-y-1">
-              <p className="font-semibold">Platform Intervention Warning (AC-ADMIN-4):</p>
+            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 space-y-1">
+              <p className="font-semibold">Platform Intervention Warning:</p>
               <p>
                 This action will immediately cancel this confirmed booking, release the property dates on the calendar, and mark the transaction payment status as <strong>Refunded</strong>.
               </p>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1">
+              <label
+                htmlFor="admin-void-reason"
+                className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1"
+              >
                 Reason for Admin Intervention:
               </label>
               <textarea
+                id="admin-void-reason"
                 value={cancellationReason}
                 onChange={(e) => setCancellationReason(e.target.value)}
                 rows={3}
-                className="w-full p-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50 dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
                 placeholder="Reason for intervention..."
               />
             </div>
@@ -770,7 +822,7 @@ export function AllReservationsTable() {
               <button
                 type="button"
                 onClick={() => setVoidingReservation(null)}
-                className="btn btn-outline btn-sm text-xs"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
               >
                 Back
               </button>
@@ -778,7 +830,7 @@ export function AllReservationsTable() {
                 type="button"
                 onClick={handleConfirmAdminCancel}
                 disabled={isSubmitting || !cancellationReason.trim()}
-                className="btn btn-primary btn-sm text-xs bg-red-600 hover:bg-red-700 text-white"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
               >
                 Execute Admin Void
               </button>

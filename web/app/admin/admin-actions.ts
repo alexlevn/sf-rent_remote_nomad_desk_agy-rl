@@ -35,9 +35,9 @@ import {
   type AdminReservationsPaginatedParams,
 } from '@/lib/api/reservations';
 import { notifyListingModeration } from '@/lib/email/notifications';
+import { INT4_MAX } from '@/lib/format';
 import type { PropertyStatus, HostStatus, Property, User } from '@/lib/types';
 
-const INT4_MAX = 2_147_483_647;
 const adminUserIdSchema = z.number().int().positive().max(INT4_MAX);
 const adminUpdateUserSchema = z.object({
   role: z.enum(['guest', 'host', 'admin']).optional(),
@@ -227,7 +227,7 @@ export async function cancelReservationAdminAction(
   revalidatePath('/');
   revalidatePath('/admin/reservations');
   revalidatePath('/guests/reservations');
-  revalidatePath('/host/requests');
+  revalidatePath('/host/reservations');
   return updated;
 }
 

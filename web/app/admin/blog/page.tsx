@@ -12,6 +12,7 @@ import { TiptapEditor } from '@/features/admin/tiptap-editor';
 import { PaginationBar } from '@/features/admin/pagination-bar';
 import { ImagePickerField } from '@/features/media/image-picker-field';
 import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { formatLastSaved } from '@/lib/format';
 import { isSafeImagePath } from '@/lib/validations/media';
 import {
   FileText,
@@ -37,21 +38,6 @@ const BLOG_CATEGORIES = [
   'Digital Nomad Lifestyle',
 ];
 const PAGE_SIZE = 20;
-
-function formatLastSaved(iso?: string): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  }).format(date)} UTC`;
-}
 
 function serializePostSnapshot(post: Partial<BlogPost> | null): string {
   if (!post) return '';
@@ -127,6 +113,7 @@ export default function AdminBlogPage() {
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setActionError(null);
       try {
         const res = await fetchAdminBlogPostsPaginatedAction({
           page: targetPage,
@@ -165,7 +152,7 @@ export default function AdminBlogPage() {
       readTime: '5 min read',
       publishDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       author: 'NomadDesk Editorial Team',
-      image: '/seed/blog/blog-nomad-gear.webp',
+      image: '/seed/blog/blog-1.webp',
       excerpt: '',
       seoTitle: '',
       seoDescription: '',
@@ -387,6 +374,7 @@ export default function AdminBlogPage() {
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
+                  aria-label="Search blog posts by title or author"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search articles by title or author..."
@@ -481,7 +469,7 @@ export default function AdminBlogPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             {post.status === 'published' && (
                               <Link
-                                href={`/blog/${post.slug}`}
+                                href={`/blog/${encodeURIComponent(post.slug)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label={`View ${post.title} on live site`}
@@ -664,11 +652,15 @@ export default function AdminBlogPage() {
                     <button
                       type="button"
                       disabled={isSubmitting}
-                      onClick={() => handleSave('published')}
+                      onClick={() => handleSave()}
                       data-testid="publish-post-btn"
                       className="w-full min-h-10 py-2.5 px-4 rounded-xl bg-[var(--color-brand)] text-white font-semibold text-xs hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
                     >
-                      {isSubmitting ? 'Saving...' : 'Publish Post'}
+                      {isSubmitting
+                        ? 'Saving...'
+                        : currentPost?.status === 'draft'
+                          ? 'Save as Draft'
+                          : 'Publish Post'}
                     </button>
                     <button
                       type="button"
@@ -712,8 +704,9 @@ export default function AdminBlogPage() {
                   <label className="block font-semibold text-neutral-700 mb-1">Author</label>
                   <input
                     type="text"
-                    value={currentPost?.author || 'NomadDesk Editorial Team'}
+                    value={currentPost?.author ?? ''}
                     onChange={(e) => setCurrentPost((prev) => (prev ? { ...prev, author: e.target.value } : null))}
+                    placeholder="NomadDesk Editorial Team"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
                   />
                 </div>
@@ -722,7 +715,7 @@ export default function AdminBlogPage() {
                   <label className="block font-semibold text-neutral-700 mb-1">Read Time</label>
                   <input
                     type="text"
-                    value={currentPost?.readTime || '5 min read'}
+                    value={currentPost?.readTime ?? ''}
                     onChange={(e) => setCurrentPost((prev) => (prev ? { ...prev, readTime: e.target.value } : null))}
                     placeholder="e.g. 5 min read"
                     className="w-full p-2.5 rounded-xl border border-[var(--color-border-light)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
@@ -736,7 +729,7 @@ export default function AdminBlogPage() {
                   onChange={(url) =>
                     setCurrentPost((prev) => (prev ? { ...prev, image: url } : null))
                   }
-                  placeholder="/seed/blog/blog-nomad-gear.webp"
+                  placeholder="/seed/blog/blog-1.webp"
                   helperText="Upload, pick from Media Library, or enter a /seed/, /uploads/, or https:// URL."
                   testIdPrefix="blog-cover-image"
                   previewAlt={currentPost?.title || 'Blog post cover preview'}
@@ -852,7 +845,7 @@ export default function AdminBlogPage() {
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => handleSave('published')}
+                onClick={() => handleSave()}
                 data-testid="post-sticky-publish-btn"
                 className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
               >
@@ -864,7 +857,7 @@ export default function AdminBlogPage() {
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Publish Post</span>
+                    <span>{currentPost?.status === 'draft' ? 'Save as Draft' : 'Publish Post'}</span>
                   </>
                 )}
               </button>

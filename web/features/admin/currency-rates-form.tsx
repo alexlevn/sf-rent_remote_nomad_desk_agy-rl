@@ -6,6 +6,7 @@ import {
   fetchExchangeRatesAction,
   updateExchangeRatesAction,
 } from '@/app/admin/cms-actions';
+import { BOOKING_RULES } from '@/content/booking-rules';
 import type { ExchangeRates } from '@/lib/types';
 import {
   Coins,
@@ -16,15 +17,20 @@ import {
   Sparkles,
 } from 'lucide-react';
 
+const FALLBACK_EUR_USD = 1.08;
+const FALLBACK_GBP_USD = 1.26;
+
 export function CurrencyRatesForm() {
   const { rates: currentContextRates, updateRates } = useCurrency();
-  const [eurRate, setEurRate] = useState('1.08');
-  const [gbpRate, setGbpRate] = useState('1.26');
+  const [eurRate, setEurRate] = useState(String(currentContextRates.EUR_USD || FALLBACK_EUR_USD));
+  const [gbpRate, setGbpRate] = useState(String(currentContextRates.GBP_USD || FALLBACK_GBP_USD));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const hasEditedRef = useRef(false);
+  const isSavingRef = useRef(false);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load existing rates once on mount without clobbering user edits in flight
   useEffect(() => {
@@ -54,13 +60,14 @@ export function CurrencyRatesForm() {
     loadRates();
     return () => {
       cancelled = true;
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (saving) return;
+    if (saving || isSavingRef.current) return;
 
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -77,6 +84,7 @@ export function CurrencyRatesForm() {
       return;
     }
 
+    isSavingRef.current = true;
     setSaving(true);
     try {
       const updated: Partial<ExchangeRates> = {
@@ -84,7 +92,7 @@ export function CurrencyRatesForm() {
         GBP_USD: gbpNum,
       };
 
-      // 1. Update mock store via server action
+      // 1. Update database via server action
       await updateExchangeRatesAction(updated);
 
       // 2. Update client CurrencyContext and trigger storage event
@@ -105,19 +113,22 @@ export function CurrencyRatesForm() {
       setSuccessMessage(
         'Currency exchange rates updated successfully! Updated rates take effect immediately across property listings and booking checkout without altering base USD amounts of existing reservations.'
       );
-      setTimeout(() => setSuccessMessage(null), 6000);
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setSuccessMessage(null), 6000);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to update rates');
     } finally {
+      isSavingRef.current = false;
       setSaving(false);
     }
   };
 
-  const parsedEur = parseFloat(eurRate) || 1.08;
-  const parsedGbp = parseFloat(gbpRate) || 1.26;
+  const parsedEur = parseFloat(eurRate) || FALLBACK_EUR_USD;
+  const parsedGbp = parseFloat(gbpRate) || FALLBACK_GBP_USD;
   const sampleUSD = 1000;
   const sampleEUR = Math.round(sampleUSD / parsedEur);
   const sampleGBP = Math.round(sampleUSD / parsedGbp);
+  const commissionPercent = BOOKING_RULES.commissionPercent;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -154,18 +165,19 @@ export function CurrencyRatesForm() {
         <form onSubmit={handleSubmit} className="space-y-5 mt-6">
           {/* EUR to USD input */}
           <div>
-            <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+            <label htmlFor="fx-eur-rate" className="block text-xs font-semibold text-neutral-800 mb-1.5">
               EUR (€) to USD ($) Rate
             </label>
             <div className="relative">
               <input
+                id="fx-eur-rate"
                 type="text"
                 value={eurRate}
                 onChange={(e) => {
                   hasEditedRef.current = true;
                   setEurRate(e.target.value);
                 }}
-                placeholder="1.08"
+                placeholder={String(FALLBACK_EUR_USD)}
                 data-testid="eur-rate-input"
                 className="w-full px-4 py-2.5 bg-neutral-50 border border-[var(--color-border-light)] rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-brand)] focus:bg-white transition-all font-mono"
               />
@@ -174,24 +186,25 @@ export function CurrencyRatesForm() {
               </span>
             </div>
             <p className="text-[11px] text-neutral-500 mt-1">
-              Specifies how many US Dollars equal 1 Euro (default: 1.08).
+              Specifies how many US Dollars equal 1 Euro (default: {FALLBACK_EUR_USD}).
             </p>
           </div>
 
           {/* GBP to USD input */}
           <div>
-            <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+            <label htmlFor="fx-gbp-rate" className="block text-xs font-semibold text-neutral-800 mb-1.5">
               GBP (£) to USD ($) Rate
             </label>
             <div className="relative">
               <input
+                id="fx-gbp-rate"
                 type="text"
                 value={gbpRate}
                 onChange={(e) => {
                   hasEditedRef.current = true;
                   setGbpRate(e.target.value);
                 }}
-                placeholder="1.26"
+                placeholder={String(FALLBACK_GBP_USD)}
                 className="w-full px-4 py-2.5 bg-neutral-50 border border-[var(--color-border-light)] rounded-xl text-sm font-medium focus:outline-none focus:border-[var(--color-brand)] focus:bg-white transition-all font-mono"
               />
               <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400">
@@ -199,23 +212,24 @@ export function CurrencyRatesForm() {
               </span>
             </div>
             <p className="text-[11px] text-neutral-500 mt-1">
-              Specifies how many US Dollars equal 1 British Pound (default: 1.26).
+              Specifies how many US Dollars equal 1 British Pound (default: {FALLBACK_GBP_USD}).
             </p>
           </div>
 
           {/* Platform Commission Rate (Readonly) */}
           <div>
-            <label className="block text-xs font-semibold text-neutral-800 mb-1.5">
+            <label htmlFor="fx-commission-rate" className="block text-xs font-semibold text-neutral-800 mb-1.5">
               Platform Host Commission Rate (%)
             </label>
             <input
+              id="fx-commission-rate"
               type="number"
-              value={10}
+              value={commissionPercent}
               readOnly
               className="w-full px-4 py-2.5 bg-neutral-100 border border-[var(--color-border-light)] rounded-xl text-sm font-semibold text-neutral-600 cursor-not-allowed font-mono"
             />
             <span className="block text-[11px] text-neutral-500 mt-1">
-              Governed by business policy. Platform retains 10% commission on rental volume.
+              Governed by platform policy. The platform retains {commissionPercent}% commission on rental volume.
             </span>
           </div>
 
@@ -270,7 +284,7 @@ export function CurrencyRatesForm() {
           </div>
 
           <div className="mt-4 pt-4 border-t border-[var(--color-border-light)] text-[11px] text-neutral-500">
-            * Integer USD cents remain the invariant base for all database pricing and Stripe payouts (D18).
+            * Integer USD cents remain the invariant base for all database pricing and host payouts.
           </div>
         </div>
 
@@ -283,15 +297,15 @@ export function CurrencyRatesForm() {
           <ul className="space-y-2 text-xs text-neutral-600">
             <li className="flex items-start gap-2">
               <span className="text-emerald-600 font-bold">•</span>
-              <span><strong>10% Platform fee:</strong> Deducted at source upon monthly host disbursement (D13).</span>
+              <span><strong>{commissionPercent}% Platform fee:</strong> Deducted at source upon monthly host disbursement.</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-emerald-600 font-bold">•</span>
-              <span><strong>14-Day cancellation:</strong> Full guest refund until 14 days before move-in date (D12).</span>
+              <span><strong>{BOOKING_RULES.freeCancelDays}-Day cancellation:</strong> Full guest refund until {BOOKING_RULES.freeCancelDays} days before move-in date.</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-emerald-600 font-bold">•</span>
-              <span><strong>48h Response SLA:</strong> Hosts must accept or decline pending booking requests within 48h (D21).</span>
+              <span><strong>{BOOKING_RULES.respondHours}h Response SLA:</strong> Hosts must accept or decline pending booking requests within {BOOKING_RULES.respondHours}h.</span>
             </li>
           </ul>
         </div>

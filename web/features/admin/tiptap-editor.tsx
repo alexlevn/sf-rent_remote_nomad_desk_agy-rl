@@ -72,8 +72,6 @@ export function TiptapEditor({
   const [dialogInput, setDialogInput] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
 
-  // Track user edits so untouched seed HTML is preserved verbatim (AC-CMS-3)
-  const hasUserEditedRef = useRef(false);
   const isSyncingFromPropRef = useRef(false);
   const lastEmittedHtmlRef = useRef<string | null>(null);
   const onChangeRef = useRef(onChange);
@@ -129,7 +127,6 @@ export function TiptapEditor({
     },
     onUpdate: ({ editor: currentEditor }) => {
       if (isSyncingFromPropRef.current) return;
-      hasUserEditedRef.current = true;
       const html = currentEditor.getHTML();
       lastEmittedHtmlRef.current = html;
       onChangeRef.current(html);
@@ -145,7 +142,6 @@ export function TiptapEditor({
       isSyncingFromPropRef.current = true;
       editor.commands.setContent(value || '', { emitUpdate: false });
       isSyncingFromPropRef.current = false;
-      hasUserEditedRef.current = false;
     }
   }, [editor, value, mode]);
 
@@ -217,7 +213,6 @@ export function TiptapEditor({
   };
 
   const handleRawHtmlChange = (nextHtml: string) => {
-    hasUserEditedRef.current = true;
     lastEmittedHtmlRef.current = null;
     onChange(nextHtml);
   };

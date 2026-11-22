@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, startTransition } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { signOutAction } from '@/app/actions/auth-actions';
+import { SITE_CONFIG } from '@/content/site';
 import {
   LayoutDashboard,
   UserCheck,
@@ -20,6 +22,7 @@ import {
   X,
   ExternalLink,
   CheckCircle,
+  LogOut,
 } from 'lucide-react';
 
 export interface AdminShellUser {
@@ -88,7 +91,9 @@ function getInitials(user: AdminShellUser): string {
 
 export function AdminShell({ currentUser, children }: AdminShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -96,6 +101,31 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
       setIsMobileOpen(false);
     });
   }, [pathname]);
+
+  // Close mobile drawer on Escape
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsMobileOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileOpen]);
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await signOutAction();
+      localStorage.removeItem('nomaddesk_user');
+      router.push('/');
+      router.refresh();
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
 
   const pageTitle = resolvePageTitle(pathname);
   const adminName =
@@ -117,7 +147,10 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
 
       {/* Admin Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[80] w-[264px] bg-[var(--color-bg-dark)] text-[var(--color-text-on-dark)] flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0 ${
+        role={isMobileOpen ? 'dialog' : undefined}
+        aria-modal={isMobileOpen ? true : undefined}
+        aria-label="Admin Portal navigation"
+        className={`fixed inset-y-0 left-0 z-[80] w-[var(--sidebar-admin-w)] bg-[var(--color-bg-dark)] text-[var(--color-text-on-dark)] flex flex-col transition-transform duration-200 ease-in-out md:static md:translate-x-0 ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -127,7 +160,7 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
             href="/"
             className="flex items-center gap-2 font-bold text-lg text-white hover:opacity-90 transition-opacity"
           >
-            <span>NomadDesk</span>
+            <span>{SITE_CONFIG.name}</span>
           </Link>
           <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white">
             Platform Admin
@@ -209,42 +242,55 @@ export function AdminShell({ currentUser, children }: AdminShellProps) {
         </nav>
 
         {/* User Footer */}
-        <div className="p-4 border-t border-[var(--color-border-dark)] flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center font-bold text-xs text-[var(--color-text-on-dark)] shrink-0">
-            {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-white truncate">
-              {adminName}
+        <div className="p-4 border-t border-[var(--color-border-dark)] space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-neutral-700 flex items-center justify-center font-bold text-xs text-[var(--color-text-on-dark)] shrink-0">
+              {initials}
             </div>
-            <div className="text-[11px] text-[var(--color-text-on-dark-muted)] truncate">
-              {currentUser.email}
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-white truncate">
+                {adminName}
+              </div>
+              <div className="text-[11px] text-[var(--color-text-on-dark-muted)] truncate">
+                {currentUser.email}
+              </div>
             </div>
           </div>
-          <Link
-            href="/"
-            title="Back to Public Site"
-            className="text-[11px] text-[var(--color-text-on-dark-muted)] hover:text-white hover:underline shrink-0"
-          >
-            Exit
-          </Link>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-[var(--color-border-dark)]">
+            <Link
+              href="/"
+              title="Back to Public Site"
+              className="text-[11px] text-[var(--color-text-on-dark-muted)] hover:text-white hover:underline"
+            >
+              Public Site
+            </Link>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--color-text-on-dark-muted)] hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{isSigningOut ? 'Signing out...' : 'Sign Out'}</span>
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
         {/* Admin Topbar */}
         <header className="h-14 border-b border-[var(--color-border-light)] bg-white px-5 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setIsMobileOpen(!isMobileOpen)}
-              className="p-1.5 -ml-1.5 rounded-lg text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 md:hidden"
+              className="inline-flex items-center justify-center min-h-10 min-w-10 -ml-2 rounded-lg text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 md:hidden cursor-pointer"
               aria-label="Toggle Navigation Menu"
             >
               {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <div className="text-sm md:text-base font-semibold text-[var(--color-text-on-light)]">
+            <div className="text-sm md:text-base font-semibold text-[var(--color-text-on-light)] truncate">
               {pageTitle}
             </div>
           </div>

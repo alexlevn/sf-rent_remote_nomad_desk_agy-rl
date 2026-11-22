@@ -16,17 +16,11 @@ import {
   Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatFileSize } from '@/lib/format';
 import type { MediaItem, MediaListResult } from '@/lib/types/media';
 
 const MAX_CLIENT_UPLOAD_BYTES = 5 * 1024 * 1024;
 const PAGE_SIZE = 24;
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
 
 function formatUploadedDate(iso: string): string {
   const date = new Date(iso);

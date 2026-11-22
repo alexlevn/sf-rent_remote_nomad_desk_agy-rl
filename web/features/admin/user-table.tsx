@@ -38,6 +38,7 @@ const EMPTY_COUNTS: AdminUsersCounts = {
   guest: 0,
   host: 0,
   admin: 0,
+  activeAdmins: 0,
   active: 0,
   inactive: 0,
 };
@@ -115,6 +116,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setErrorMessage(null);
       try {
         const result = await fetchAdminUsersPaginatedAction({
           page: targetPage,
@@ -195,8 +197,8 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
     }
   };
 
-  // Global admin count from SQL counts (server also enforces active-admin protection)
-  const adminCount = counts.admin;
+  // Global active admin count from SQL counts (server also enforces active-admin protection)
+  const activeAdminCount = counts.activeAdmins;
 
   const reloadAfterMutation = async () => {
     const nextPage =
@@ -213,7 +215,12 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
   // Handle Role Change (Promote / Demote)
   const handleRoleChange = async (targetUser: User, newRole: UserRole) => {
     if (isActionRunningRef.current) return;
-    if (targetUser.role === 'admin' && newRole !== 'admin' && adminCount <= 1) {
+    if (
+      targetUser.role === 'admin' &&
+      targetUser.isActive !== false &&
+      newRole !== 'admin' &&
+      activeAdminCount <= 1
+    ) {
       setErrorMessage('Cannot demote the last remaining active administrator account.');
       return;
     }
@@ -244,7 +251,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
       setErrorMessage('You cannot suspend your own active administrator account.');
       return;
     }
-    if (targetUser.role === 'admin' && targetUser.isActive && adminCount <= 1) {
+    if (targetUser.role === 'admin' && targetUser.isActive && activeAdminCount <= 1) {
       setErrorMessage('Cannot suspend the last remaining active administrator account.');
       return;
     }
@@ -270,21 +277,22 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
   };
 
   const renderReservationStatusBadge = (status: ReservationStatus) => {
+    const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border';
     switch (status) {
       case 'confirmed':
-        return <span className="badge badge-success">Confirmed</span>;
+        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Confirmed</span>;
       case 'pending':
-        return <span className="badge badge-warning">Pending</span>;
+        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending</span>;
       case 'completed':
-        return <span className="badge bg-blue-100 text-blue-800 border border-blue-200">Completed</span>;
+        return <span className={`${base} bg-blue-100 text-blue-800 border-blue-200`}>Completed</span>;
       case 'cancelled':
-        return <span className="badge badge-error">Cancelled</span>;
+        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Cancelled</span>;
       case 'rejected':
-        return <span className="badge badge-error">Rejected</span>;
+        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
       case 'expired':
-        return <span className="badge bg-neutral-100 text-neutral-600 border border-neutral-300">Expired</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-600 border-neutral-300`}>Expired</span>;
       default:
-        return <span className="badge">{status}</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
     }
   };
 
@@ -339,6 +347,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
+            aria-label="Search users by email or name"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by email or name..."
@@ -423,7 +432,8 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
               ) : (
                 users.map((user) => {
                   const isCurrentAdmin = isSameAdmin(user);
-                  const isLastAdmin = user.role === 'admin' && adminCount <= 1;
+                  const isLastAdmin =
+                    user.role === 'admin' && user.isActive !== false && activeAdminCount <= 1;
 
                   return (
                     <tr
@@ -587,8 +597,8 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
           itemLabel="users"
         />
 
-        <div className="px-4 py-2.5 border-t border-[var(--color-border-light)] bg-neutral-50/40 text-[11px] text-neutral-400">
-          * Host roles are managed strictly via Host Approvals queue (§4.3 Screen #29).
+        <div className="px-4 py-2.5 border-t border-[var(--color-border-light)] bg-neutral-50/40 text-[11px] text-neutral-500">
+          * Host roles are managed via the Host Approvals queue.
         </div>
       </div>
 
@@ -711,7 +721,7 @@ export function UserTable({ currentAdminId = null, currentAdminEmail = '' }: Use
               <button
                 type="button"
                 onClick={closeDrawer}
-                className="btn btn-outline btn-sm text-xs"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
               >
                 Close
               </button>

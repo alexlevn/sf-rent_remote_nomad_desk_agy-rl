@@ -13,6 +13,7 @@ import { TiptapEditor } from '@/features/admin/tiptap-editor';
 import { PaginationBar } from '@/features/admin/pagination-bar';
 import { ImagePickerField } from '@/features/media/image-picker-field';
 import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { formatLastSaved, getTravelGuideHref } from '@/lib/format';
 import { isSafeImagePath } from '@/lib/validations/media';
 import {
   BookOpen,
@@ -33,21 +34,6 @@ import {
 
 const CATEGORIES = ['Activities', 'Coworking', 'Neighborhoods', 'Cost of Living', 'City Guide'];
 const PAGE_SIZE = 20;
-
-function formatLastSaved(iso?: string): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'UTC',
-  }).format(date)} UTC`;
-}
 
 function serializeGuideSnapshot(guide: Partial<TravelGuide> | null): string {
   if (!guide) return '';
@@ -112,14 +98,18 @@ export default function AdminGuidesPage() {
   // Load locations once for filter and editor city dropdown
   useEffect(() => {
     let active = true;
-    fetchLocationsAction()
-      .then((locsData) => {
+    const loadLocations = async () => {
+      try {
+        const locsData = await fetchLocationsAction();
         if (!active) return;
         startTransition(() => {
           setLocations(locsData);
         });
-      })
-      .catch(() => {});
+      } catch {
+        // Non-blocking: city filter keeps All Cities option
+      }
+    };
+    void loadLocations();
     return () => {
       active = false;
     };
@@ -140,6 +130,7 @@ export default function AdminGuidesPage() {
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setActionError(null);
       try {
         const res = await fetchAdminGuidesPaginatedAction({
           page: targetPage,
@@ -259,8 +250,8 @@ export default function AdminGuidesPage() {
         isNew
           ? finalStatus === 'draft'
             ? `Travel Guide "${payload.title}" saved as draft!`
-            : `Travel Guide "${payload.title}" published to /travel-guide (AC-CMS-3)!`
-          : `Travel Guide "${payload.title}" updated successfully (AC-CMS-3)!`
+            : `Travel Guide "${payload.title}" published to /travel-guide!`
+          : `Travel Guide "${payload.title}" updated successfully!`
       );
       setBaselineSnapshot('');
       setIsEditing(false);
@@ -312,7 +303,11 @@ export default function AdminGuidesPage() {
   );
   const viewOnWebHref =
     canViewOnWeb && liveGuide?.city && liveGuide?.category && liveGuide?.slug
-      ? `/travel-guide/${encodeURIComponent(liveGuide.city.toLowerCase())}/${encodeURIComponent(liveGuide.category.toLowerCase())}/${encodeURIComponent(liveGuide.slug)}`
+      ? getTravelGuideHref({
+          city: liveGuide.city,
+          category: liveGuide.category,
+          slug: liveGuide.slug,
+        })
       : null;
 
   const sessionSavedAt = currentGuide?.id ? lastSavedById[currentGuide.id] : undefined;
@@ -404,6 +399,7 @@ export default function AdminGuidesPage() {
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
+                  aria-label="Search travel guides by title, city, or category"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search articles by title, city or category..."
@@ -508,7 +504,11 @@ export default function AdminGuidesPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             {guide.status === 'published' && (
                               <Link
-                                href={`/travel-guide/${guide.city.toLowerCase()}/${guide.category.toLowerCase()}/${guide.slug}`}
+                                href={getTravelGuideHref({
+                                  city: guide.city,
+                                  category: guide.category,
+                                  slug: guide.slug,
+                                })}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 aria-label={`View ${guide.title} on live site`}
@@ -692,11 +692,15 @@ export default function AdminGuidesPage() {
                     <button
                       type="button"
                       disabled={isSubmitting}
-                      onClick={() => handleSave('published')}
+                      onClick={() => handleSave()}
                       data-testid="publish-guide-btn"
                       className="w-full min-h-10 py-2.5 px-4 rounded-xl bg-[var(--color-brand)] text-white font-semibold text-xs hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
                     >
-                      {isSubmitting ? 'Saving...' : 'Publish Article'}
+                      {isSubmitting
+                        ? 'Saving...'
+                        : currentGuide?.status === 'draft'
+                          ? 'Save as Draft'
+                          : 'Publish Article'}
                     </button>
                     <button
                       type="button"
@@ -769,7 +773,7 @@ export default function AdminGuidesPage() {
                     />
                     <span className="font-semibold text-amber-900 text-xs flex items-center gap-1">
                       <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                      Feature on Homepage Highlights (AC-CMS-3)
+                      Feature on Homepage Highlights
                     </span>
                   </label>
                 </div>
@@ -897,7 +901,7 @@ export default function AdminGuidesPage() {
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => handleSave('published')}
+                onClick={() => handleSave()}
                 data-testid="guide-sticky-publish-btn"
                 className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
               >
@@ -909,7 +913,7 @@ export default function AdminGuidesPage() {
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Publish Article</span>
+                    <span>{currentGuide?.status === 'draft' ? 'Save as Draft' : 'Publish Article'}</span>
                   </>
                 )}
               </button>

@@ -85,7 +85,7 @@ export function HostInfoBlock({ host, property }: HostInfoBlockProps) {
           type="button"
           disabled
           aria-disabled="true"
-          className="btn btn-outline btn-sm opacity-50 cursor-not-allowed inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-md border border-[var(--color-border-light)] text-[var(--color-text-on-light)] bg-white"
+          className="opacity-50 cursor-not-allowed inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium rounded-md border border-[var(--color-border-light)] text-[var(--color-text-on-light)] bg-white"
           title="Messaging available upon confirmation"
         >
           Message Host (Soon)

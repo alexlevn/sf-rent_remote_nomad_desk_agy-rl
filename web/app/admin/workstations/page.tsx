@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
+import Link from 'next/link';
 import type {
   WorkstationData,
   WorkstationPackage,
@@ -17,6 +18,7 @@ import {
   reorderWorkstationItemsAction,
   fetchAdminWorkstationsAction,
 } from '@/app/admin/cms-actions';
+import { INT4_MAX } from '@/lib/format';
 import { CurrencyInput } from '@/features/media/currency-input';
 import {
   Monitor,
@@ -31,11 +33,12 @@ import {
   EyeOff,
   ArrowUp,
   ArrowDown,
+  ExternalLink,
 } from 'lucide-react';
 
 const MAX_FEATURE_LENGTH = 80;
 const MAX_FEATURES_COUNT = 12;
-const MAX_EUR_PRICE = 21_474_836; // Keeps cents (price * 100) within Postgres INT4_MAX
+const MAX_EUR_PRICE = Math.floor(INT4_MAX / 100); // Keeps cents (price * 100) within Postgres INT4_MAX
 
 export default function AdminWorkstationsPage() {
   const [data, setData] = useState<WorkstationData | null>(null);
@@ -53,11 +56,13 @@ export default function AdminWorkstationsPage() {
   const [featureError, setFeatureError] = useState<string | null>(null);
 
   const [isCompModalOpen, setIsCompModalOpen] = useState(false);
+  const [isNewComp, setIsNewComp] = useState(false);
   const [editingComp, setEditingComp] = useState<Partial<WorkstationComponentOption> | null>(null);
   const [compCategory, setCompCategory] = useState<keyof WorkstationComponents>('monitor');
   const [compPriceEUR, setCompPriceEUR] = useState<number | ''>(0);
 
   const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
+  const [isNewAddon, setIsNewAddon] = useState(false);
   const [editingAddon, setEditingAddon] = useState<Partial<WorkstationAddon> | null>(null);
   const [addonPriceEUR, setAddonPriceEUR] = useState<number | ''>(0);
 
@@ -199,7 +204,7 @@ export default function AdminWorkstationsPage() {
         isActive: editingPkg.isActive !== false,
       });
 
-      showToast(`Workstation package "${editingPkg.name}" updated to €${pkgPriceEUR}/mo (AC-CMS-2)!`);
+      showToast(`Workstation package "${editingPkg.name}" updated to €${pkgPriceEUR}/mo!`);
       setIsPkgModalOpen(false);
       setEditingPkg(null);
       setFeatureDraft('');
@@ -259,6 +264,7 @@ export default function AdminWorkstationsPage() {
 
   // 2. Component Add/Edit/Toggle/Reorder/Delete Handlers
   const handleOpenAddComp = (cat: keyof WorkstationComponents = 'monitor') => {
+    setIsNewComp(true);
     setCompCategory(cat);
     setEditingComp({
       id: `comp-${Date.now()}`,
@@ -275,6 +281,7 @@ export default function AdminWorkstationsPage() {
   };
 
   const handleOpenEditComp = (cat: keyof WorkstationComponents, comp: WorkstationComponentOption) => {
+    setIsNewComp(false);
     setCompCategory(cat);
     setEditingComp({ ...comp });
     setCompPriceEUR(Math.round(comp.pricePerMonth / 100));
@@ -399,6 +406,7 @@ export default function AdminWorkstationsPage() {
 
   // 3. Addon Add/Edit/Toggle/Reorder/Delete Handlers
   const handleOpenAddAddon = () => {
+    setIsNewAddon(true);
     setEditingAddon({
       id: `addon-${Date.now()}`,
       name: '',
@@ -413,6 +421,7 @@ export default function AdminWorkstationsPage() {
   };
 
   const handleOpenEditAddon = (addon: WorkstationAddon) => {
+    setIsNewAddon(false);
     setEditingAddon({ ...addon });
     setAddonPriceEUR(Math.round(addon.pricePerMonth / 100));
     setFormError(null);
@@ -587,29 +596,41 @@ export default function AdminWorkstationsPage() {
           </p>
         </div>
 
-        {activeTab === 'components' && (
-          <button
-            type="button"
-            onClick={() => handleOpenAddComp('monitor')}
-            data-testid="add-component-btn"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-2xs self-start sm:self-auto cursor-pointer"
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <Link
+            href={activeTab === 'packages' ? '/workstations' : '/workstations/build'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[var(--color-border-light)] bg-white text-neutral-700 text-xs font-semibold hover:bg-neutral-50 transition-colors"
           >
-            <Plus className="w-4 h-4" />
-            <span>Add Component</span>
-          </button>
-        )}
+            <ExternalLink className="w-3.5 h-3.5 text-[var(--color-brand)]" />
+            <span>View on Web</span>
+          </Link>
 
-        {activeTab === 'addons' && (
-          <button
-            type="button"
-            onClick={handleOpenAddAddon}
-            data-testid="add-addon-btn"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-2xs self-start sm:self-auto cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Accessory</span>
-          </button>
-        )}
+          {activeTab === 'components' && (
+            <button
+              type="button"
+              onClick={() => handleOpenAddComp('monitor')}
+              data-testid="add-component-btn"
+              className="flex min-h-10 items-center gap-2 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Component</span>
+            </button>
+          )}
+
+          {activeTab === 'addons' && (
+            <button
+              type="button"
+              onClick={handleOpenAddAddon}
+              data-testid="add-addon-btn"
+              className="flex min-h-10 items-center gap-2 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] transition-colors shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Accessory</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Inline Action Error Banner (e.g., reservation reference delete guard) */}
@@ -695,7 +716,15 @@ export default function AdminWorkstationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-light)]">
-                {data?.packages.map((pkg, idx) => {
+                {(!data?.packages || data.packages.length === 0) ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 px-4 text-center text-neutral-500">
+                      <Package className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                      <p className="font-semibold text-neutral-700">No workstation packages configured</p>
+                    </td>
+                  </tr>
+                ) : (
+                  data.packages.map((pkg, idx) => {
                   const priceEUR = Math.round(pkg.pricePerMonth / 100);
                   const isIncluded = pkg.isIncluded || priceEUR === 0;
                   const isHidden = pkg.isActive === false;
@@ -795,7 +824,7 @@ export default function AdminWorkstationsPage() {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>
@@ -842,7 +871,15 @@ export default function AdminWorkstationsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border-light)]">
-                  {allComponentsList.map(({ category, categoryLabel, item, catIndex, catLength }) => {
+                  {allComponentsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 px-4 text-center text-neutral-500">
+                        <Monitor className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                        <p className="font-semibold text-neutral-700">No hardware components found</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    allComponentsList.map(({ category, categoryLabel, item, catIndex, catLength }) => {
                     const isHidden = item.isActive === false;
                     return (
                       <tr
@@ -943,7 +980,7 @@ export default function AdminWorkstationsPage() {
                         </td>
                       </tr>
                     );
-                  })}
+                  }))}
                 </tbody>
               </table>
             </div>
@@ -965,7 +1002,15 @@ export default function AdminWorkstationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-light)]">
-                {data?.addons.map((addon, idx) => {
+                {(!data?.addons || data.addons.length === 0) ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 px-4 text-center text-neutral-500">
+                      <Sliders className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                      <p className="font-semibold text-neutral-700">No peripheral add-ons configured</p>
+                    </td>
+                  </tr>
+                ) : (
+                  data.addons.map((addon, idx) => {
                   const isHidden = addon.isActive === false;
                   return (
                     <tr
@@ -1052,17 +1097,29 @@ export default function AdminWorkstationsPage() {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Modal: Edit Package (AC-CMS-2) */}
+      {/* Modal: Edit Package */}
       {isPkgModalOpen && editingPkg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setIsPkgModalOpen(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit Package: ${editingPkg.name}`}
+            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6"
+          >
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
                 <Package className="w-5 h-5 text-[var(--color-brand)]" />
@@ -1102,7 +1159,7 @@ export default function AdminWorkstationsPage() {
                   htmlFor="pkg-price-input"
                   className="block font-semibold text-neutral-700 mb-1"
                 >
-                  Monthly Price (€ / month) — AC-CMS-2
+                  Monthly Price (€ / month)
                 </label>
                 <CurrencyInput
                   id="pkg-price-input"
@@ -1250,11 +1307,23 @@ export default function AdminWorkstationsPage() {
 
       {/* Modal: Add / Edit Component */}
       {isCompModalOpen && editingComp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setIsCompModalOpen(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={isNewComp ? 'Add Hardware Component' : `Edit Component: ${editingComp.name || ''}`}
+            className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6"
+          >
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                {editingComp.name ? `Edit Component: ${editingComp.name}` : 'Add Hardware Component'}
+                {isNewComp ? 'Add Hardware Component' : `Edit Component${editingComp.name ? `: ${editingComp.name}` : ''}`}
               </h2>
               <button
                 type="button"
@@ -1369,11 +1438,23 @@ export default function AdminWorkstationsPage() {
 
       {/* Modal: Add / Edit Addon */}
       {isAddonModalOpen && editingAddon && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setIsAddonModalOpen(false);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={isNewAddon ? 'Add Accessory Add-on' : `Edit Add-on: ${editingAddon.name || ''}`}
+            className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-[var(--color-border-light)] shadow-2xl p-6"
+          >
             <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-light)] mb-4">
               <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                {editingAddon.name ? `Edit Add-on: ${editingAddon.name}` : 'Add Accessory Add-on'}
+                {isNewAddon ? 'Add Accessory Add-on' : `Edit Add-on${editingAddon.name ? `: ${editingAddon.name}` : ''}`}
               </h2>
               <button
                 type="button"

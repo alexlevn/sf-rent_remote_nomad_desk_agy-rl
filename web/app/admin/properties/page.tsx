@@ -32,38 +32,38 @@ export default function AdminPropertiesPage() {
           <Link
             href="/admin/properties/new"
             data-testid="admin-add-property-btn"
-            className="btn btn-primary btn-sm inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl"
+            className="inline-flex min-h-10 items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add New Property
           </Link>
 
-          <div className="flex items-center gap-1.5 p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
-          <button
-            type="button"
-            onClick={() => setViewMode('moderation')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === 'moderation'
-                ? 'bg-white dark:bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-light)] shadow-xs'
-                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
-            }`}
-          >
-            <Building className="w-4 h-4" />
-            Inventory & Moderation
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('featured')}
-            data-testid="featured-tab-btn"
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              viewMode === 'featured'
-                ? 'bg-white dark:bg-[var(--color-bg-dark-surface)] text-[var(--color-text-on-light)] shadow-xs'
-                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            Featured on Homepage
-          </button>
+          <div className="flex items-center gap-1.5 p-1 bg-neutral-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setViewMode('moderation')}
+              className={`flex min-h-10 sm:min-h-8 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'moderation'
+                  ? 'bg-white text-[var(--color-text-on-light)] shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <Building className="w-4 h-4" />
+              Inventory & Moderation
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('featured')}
+              data-testid="featured-tab-btn"
+              className={`flex min-h-10 sm:min-h-8 items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === 'featured'
+                  ? 'bg-white text-[var(--color-text-on-light)] shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              Featured on Homepage
+            </button>
           </div>
         </div>
       </div>

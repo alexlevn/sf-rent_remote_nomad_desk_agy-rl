@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
-import type { HostProfile, HostStatus, User } from '@/lib/types';
+import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
+import type { HostProfile, HostStatus } from '@/lib/types';
 import type { AdminHostsStatusCounts } from '@/lib/api/hosts';
 import {
   fetchAdminHostsPaginatedAction,
-  fetchAdminUsersAction,
   reviewHostAction,
 } from '@/app/admin/admin-actions';
+import { formatUtcDate } from '@/lib/format';
 import { PaginationBar } from '@/features/admin/pagination-bar';
 import {
   Search,
@@ -38,7 +38,6 @@ const EMPTY_COUNTS: AdminHostsStatusCounts = {
 
 export function HostApplicationsTable() {
   const [hosts, setHosts] = useState<HostProfile[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [counts, setCounts] = useState<AdminHostsStatusCounts>(EMPTY_COUNTS);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -60,28 +59,28 @@ export function HostApplicationsTable() {
   const requestIdRef = useRef(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load user emails once on mount for host contact display
   useEffect(() => {
-    let active = true;
-    const loadUsers = async () => {
-      try {
-        const userList = await fetchAdminUsersAction();
-        if (!active) return;
-        startTransition(() => {
-          setUsers(userList);
-        });
-      } catch {
-        // Non-blocking: falls back to host slug/id placeholder email
-      }
-    };
-    loadUsers();
     return () => {
-      active = false;
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedHost && !rejectingHost) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isActionRunningRef.current) {
+        if (rejectingHost) {
+          setRejectingHost(null);
+        } else {
+          setSelectedHost(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedHost, rejectingHost]);
 
   // Debounce search (250ms) and reset page to 1 only when the trimmed query changes
   useEffect(() => {
@@ -98,6 +97,7 @@ export function HostApplicationsTable() {
     async (targetPage: number) => {
       const reqId = ++requestIdRef.current;
       setLoading(true);
+      setErrorMessage(null);
       try {
         const result = await fetchAdminHostsPaginatedAction({
           page: targetPage,
@@ -136,25 +136,7 @@ export function HostApplicationsTable() {
     toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const userEmailById = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const u of users) {
-      map.set(u.id, u.email);
-    }
-    return map;
-  }, [users]);
-
-  // Helper to find host's associated user email
-  const getHostEmail = useCallback(
-    (host: HostProfile) => {
-      const email = userEmailById.get(host.userId);
-      if (email) return email;
-      if (host.slug.includes('nordic') || host.id === 3) return 'applicant@example.com';
-      if (host.slug.includes('urbana') || host.id === 1) return 'host@example.com';
-      return `host-${host.id}@example.com`;
-    },
-    [userEmailById]
-  );
+  const getHostEmail = (host: HostProfile) => host.userEmail || '—';
 
   const reloadAfterMutation = async () => {
     const nextPage = hosts.length <= 1 && page > 1 ? page - 1 : page;
@@ -256,17 +238,18 @@ export function HostApplicationsTable() {
   };
 
   const renderStatusBadge = (status: HostStatus) => {
+    const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border';
     switch (status) {
       case 'pending':
-        return <span className="badge badge-warning">Pending Review</span>;
+        return <span className={`${base} bg-amber-50 text-amber-800 border-amber-200`}>Pending Review</span>;
       case 'approved':
-        return <span className="badge badge-success">Approved</span>;
+        return <span className={`${base} bg-emerald-50 text-emerald-700 border-emerald-200`}>Approved</span>;
       case 'suspended':
-        return <span className="badge badge-neutral bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:text-neutral-200">Suspended</span>;
+        return <span className={`${base} bg-neutral-200 text-neutral-800 border-neutral-300`}>Suspended</span>;
       case 'rejected':
-        return <span className="badge badge-error">Rejected</span>;
+        return <span className={`${base} bg-red-50 text-red-700 border-red-200`}>Rejected</span>;
       default:
-        return <span className="badge">{status}</span>;
+        return <span className={`${base} bg-neutral-100 text-neutral-700 border-neutral-200`}>{status}</span>;
     }
   };
 
@@ -378,18 +361,19 @@ export function HostApplicationsTable() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="text"
+            aria-label="Search hosts by name, email, or city"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search host, email, city..."
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-[var(--color-border-light)] bg-white dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20 focus:border-[var(--color-brand)]"
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20 focus:border-[var(--color-brand)]"
           />
         </div>
       </div>
 
       {/* Main Table */}
-      <div className="data-table-container bg-white dark:bg-[var(--color-bg-dark-surface)] border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-white border border-[var(--color-border-light)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="data-table w-full text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs font-semibold text-[var(--color-text-on-light-muted)] uppercase tracking-wider border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
               <tr>
                 <th className="px-6 py-3.5">Host Name</th>
@@ -473,7 +457,7 @@ export function HostApplicationsTable() {
                           <button
                             type="button"
                             onClick={() => setSelectedHost(host)}
-                            className="btn btn-outline btn-sm text-xs"
+                            className="inline-flex items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-neutral-700 hover:bg-neutral-50 text-xs font-semibold px-2.5 py-1.5 transition-colors cursor-pointer"
                             title="View full application"
                           >
                             Details
@@ -485,18 +469,19 @@ export function HostApplicationsTable() {
                                 type="button"
                                 onClick={() => handleApprove(host)}
                                 disabled={isSubmitting}
-                                className="btn btn-primary btn-sm text-xs bg-emerald-600 hover:bg-emerald-700 border-none text-white"
+                                className="inline-flex items-center justify-center rounded-lg text-xs font-semibold px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors cursor-pointer"
                               >
                                 Approve
                               </button>
                               <button
                                 type="button"
                                 onClick={() => {
+                                  setSelectedHost(null);
                                   setRejectingHost(host);
                                   setRejectionReason('Portfolio does not meet NomadDesk remote standards');
                                 }}
                                 disabled={isSubmitting}
-                                className="btn btn-outline btn-sm text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200"
+                                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                               >
                                 Reject
                               </button>
@@ -508,7 +493,7 @@ export function HostApplicationsTable() {
                               type="button"
                               onClick={() => handleSuspend(host)}
                               disabled={isSubmitting}
-                              className="btn btn-outline btn-sm text-xs text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200"
+                              className="inline-flex items-center justify-center rounded-lg border border-amber-200 bg-white text-amber-700 hover:bg-amber-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                             >
                               Suspend
                             </button>
@@ -519,7 +504,7 @@ export function HostApplicationsTable() {
                               type="button"
                               onClick={() => handleReactivate(host)}
                               disabled={isSubmitting}
-                              className="btn btn-primary btn-sm text-xs"
+                              className="inline-flex items-center justify-center rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                             >
                               Reactivate
                             </button>
@@ -530,7 +515,7 @@ export function HostApplicationsTable() {
                               type="button"
                               onClick={() => handleApprove(host)}
                               disabled={isSubmitting}
-                              className="btn btn-outline btn-sm text-xs text-emerald-600 border-emerald-200"
+                              className="inline-flex items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 text-xs font-semibold px-2.5 py-1.5 disabled:opacity-50 transition-colors cursor-pointer"
                             >
                               Re-Approve
                             </button>
@@ -557,8 +542,20 @@ export function HostApplicationsTable() {
 
       {/* Drawer: Host Application Detail */}
       {selectedHost && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in">
-          <div className="w-full max-w-lg bg-white dark:bg-[var(--color-bg-dark)] h-full shadow-2xl p-6 overflow-y-auto border-l border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex flex-col justify-between">
+        <div
+          className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setSelectedHost(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Host application details for ${selectedHost.displayName}`}
+            className="w-full max-w-lg bg-white h-full shadow-2xl p-6 overflow-y-auto border-l border-[var(--color-border-light)] flex flex-col justify-between"
+          >
             <div className="space-y-6">
               {/* Header */}
               <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-light)] dark:border-[var(--color-border-dark)]">
@@ -640,15 +637,15 @@ export function HostApplicationsTable() {
                 )}
 
                 {/* Timestamps */}
-                <div className="text-xs text-neutral-400 space-y-1 pt-2">
+                <div className="text-xs text-neutral-500 space-y-1 pt-2">
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5" />
-                    <span>Applied: {selectedHost.createdAt ? new Date(selectedHost.createdAt).toLocaleString() : 'N/A'}</span>
+                    <span>Applied: {formatUtcDate(selectedHost.createdAt)}</span>
                   </div>
                   {selectedHost.approvedAt && (
-                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5 text-emerald-600">
                       <CheckCircle className="w-3.5 h-3.5" />
-                      <span>Approved: {new Date(selectedHost.approvedAt).toLocaleString()}</span>
+                      <span>Approved: {formatUtcDate(selectedHost.approvedAt)}</span>
                     </div>
                   )}
                 </div>
@@ -656,11 +653,11 @@ export function HostApplicationsTable() {
             </div>
 
             {/* Actions Bar */}
-            <div className="pt-6 border-t border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] flex items-center justify-end gap-3">
+            <div className="pt-6 border-t border-[var(--color-border-light)] flex flex-wrap items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setSelectedHost(null)}
-                className="btn btn-outline btn-sm text-sm"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
               >
                 Close
               </button>
@@ -670,11 +667,13 @@ export function HostApplicationsTable() {
                   <button
                     type="button"
                     onClick={() => {
-                      setRejectingHost(selectedHost);
+                      const target = selectedHost;
+                      setSelectedHost(null);
+                      setRejectingHost(target);
                       setRejectionReason('Portfolio does not meet NomadDesk remote standards');
                     }}
                     disabled={isSubmitting}
-                    className="btn btn-outline btn-sm text-sm text-red-600 border-red-200"
+                    className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-red-200 bg-white px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 cursor-pointer"
                   >
                     Reject Application
                   </button>
@@ -682,7 +681,7 @@ export function HostApplicationsTable() {
                     type="button"
                     onClick={() => handleApprove(selectedHost)}
                     disabled={isSubmitting}
-                    className="btn btn-primary btn-sm text-sm bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
                   >
                     Approve Host
                   </button>
@@ -694,7 +693,7 @@ export function HostApplicationsTable() {
                   type="button"
                   onClick={() => handleSuspend(selectedHost)}
                   disabled={isSubmitting}
-                  className="btn btn-outline btn-sm text-sm text-amber-600 border-amber-200"
+                  className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-amber-200 bg-white px-4 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50 cursor-pointer"
                 >
                   Suspend Host
                 </button>
@@ -705,7 +704,7 @@ export function HostApplicationsTable() {
                   type="button"
                   onClick={() => handleReactivate(selectedHost)}
                   disabled={isSubmitting}
-                  className="btn btn-primary btn-sm text-sm"
+                  className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
                 >
                   Reactivate Host
                 </button>
@@ -717,10 +716,22 @@ export function HostApplicationsTable() {
 
       {/* Modal: Rejection Reason */}
       {rejectingHost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
-          <div className="w-full max-w-md bg-white dark:bg-[var(--color-bg-dark-surface)] rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setRejectingHost(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Reject host application for ${rejectingHost.displayName}`}
+            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 shrink-0">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
                 <ShieldAlert className="w-5 h-5" />
               </div>
               <div>
@@ -733,15 +744,16 @@ export function HostApplicationsTable() {
               </div>
             </div>
 
-            <p className="text-sm text-neutral-600 dark:text-neutral-300">
+            <p className="text-sm text-neutral-600">
               Please specify the reason for rejection. This feedback helps the applicant improve their portfolio or re-apply.
             </p>
 
             <textarea
+              aria-label="Rejection reason"
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               rows={3}
-              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50 dark:bg-neutral-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
               placeholder="Enter rejection reason..."
             />
 
@@ -749,7 +761,7 @@ export function HostApplicationsTable() {
               <button
                 type="button"
                 onClick={() => setRejectingHost(null)}
-                className="btn btn-outline btn-sm"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white px-4 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
               >
                 Cancel
               </button>
@@ -757,7 +769,7 @@ export function HostApplicationsTable() {
                 type="button"
                 onClick={handleConfirmReject}
                 disabled={isSubmitting || !rejectionReason.trim()}
-                className="btn btn-primary btn-sm bg-red-600 hover:bg-red-700 text-white"
+                className="inline-flex min-h-10 sm:min-h-8 items-center justify-center rounded-lg bg-red-600 hover:bg-red-700 px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
               >
                 Confirm Rejection
               </button>

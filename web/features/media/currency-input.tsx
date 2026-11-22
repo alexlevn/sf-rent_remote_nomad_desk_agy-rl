@@ -30,8 +30,14 @@ function formatCurrencyInteger(value: number | ''): string {
   return INTEGER_FORMATTER.format(Math.trunc(value));
 }
 
+function stripDecimalPart(raw: string): string {
+  // Drop fractional decimals on paste (e.g. "$2,800.00" -> "$2,800") so cents aren't multiplied by 100
+  const dotIndex = raw.indexOf('.');
+  return dotIndex >= 0 ? raw.slice(0, dotIndex) : raw;
+}
+
 function parseCurrencyDraft(raw: string): number | '' {
-  const digits = raw.replace(/[,\s]/g, '');
+  const digits = stripDecimalPart(raw).replace(/[,\s]/g, '');
   if (digits.length === 0) return '';
   if (!/^\d+$/.test(digits)) return '';
   const parsed = Number.parseInt(digits, 10);
@@ -80,7 +86,7 @@ export function CurrencyInput({
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = event.target.value;
+    const raw = stripDecimalPart(event.target.value);
     // Allow digits, commas, and spaces during typing or paste/Playwright fill
     const sanitized = raw.replace(/[^0-9,\s]/g, '');
     const digitsOnly = sanitized.replace(/[,\s]/g, '');

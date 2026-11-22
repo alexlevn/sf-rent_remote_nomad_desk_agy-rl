@@ -10,11 +10,12 @@ import {
   fetchAdminDashboardStatsAction,
   fetchAdminHostsPaginatedAction,
   fetchAdminPropertiesPaginatedAction,
-  fetchAdminUsersAction,
   reviewHostAction,
 } from '@/app/admin/admin-actions';
+import { formatUtcDate } from '@/lib/format';
+import { SITE_CONFIG } from '@/content/site';
 import type { AdminDashboardPeriod, AdminDashboardStats } from '@/lib/api/reservations';
-import type { HostProfile, Property, User } from '@/lib/types';
+import type { HostProfile, Property } from '@/lib/types';
 import {
   UserCheck,
   Building,
@@ -27,6 +28,7 @@ import {
   Sparkles,
   AlertTriangle,
   Calendar,
+  ShieldAlert,
 } from 'lucide-react';
 
 const PERIOD_OPTIONS: Array<{ value: AdminDashboardPeriod; label: string }> = [
@@ -46,24 +48,17 @@ const EMPTY_STATS: AdminKpiStats = {
   netCommissionUSD: 0,
 };
 
-function formatSubmittedDate(iso?: string): string {
-  if (!iso) return '—';
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
 export default function AdminDashboardPage() {
   const [period, setPeriod] = useState<AdminDashboardPeriod>('all');
   const [dashboardStats, setDashboardStats] = useState<AdminDashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingQueues, setLoadingQueues] = useState(true);
   const [pendingHosts, setPendingHosts] = useState<HostProfile[]>([]);
   const [pendingProperties, setPendingProperties] = useState<Property[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [rejectingHost, setRejectingHost] = useState<HostProfile | null>(null);
+  const [rejectionReason, setRejectionReason] = useState(
+    'Portfolio does not meet remote work housing standards'
+  );
   const [notification, setNotification] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +71,7 @@ export default function AdminDashboardPage() {
   const loadStats = useCallback(async (selectedPeriod: AdminDashboardPeriod) => {
     const reqId = ++statsRequestIdRef.current;
     setLoadingStats(true);
+    setErrorMessage(null);
     try {
       const data = await fetchAdminDashboardStatsAction(selectedPeriod);
       if (reqId !== statsRequestIdRef.current) return;
@@ -94,25 +90,38 @@ export default function AdminDashboardPage() {
 
   const loadQueues = useCallback(async () => {
     const reqId = ++queuesRequestIdRef.current;
+    setLoadingQueues(true);
+    setErrorMessage(null);
     try {
-      const [hostsPage, propsPage, allUsers] = await Promise.all([
+      const [hostsPage, propsPage] = await Promise.all([
         fetchAdminHostsPaginatedAction({ status: 'pending', page: 1, pageSize: 10 }),
         fetchAdminPropertiesPaginatedAction({ status: 'pending_review', page: 1, pageSize: 10 }),
-        fetchAdminUsersAction(),
       ]);
       if (reqId !== queuesRequestIdRef.current) return;
       startTransition(() => {
         setPendingHosts(hostsPage.items);
         setPendingProperties(propsPage.items);
-        setUsers(allUsers);
+        setLoadingQueues(false);
       });
     } catch (err) {
       if (reqId !== queuesRequestIdRef.current) return;
       startTransition(() => {
         setErrorMessage(err instanceof Error ? err.message : 'Failed to load approval queues');
+        setLoadingQueues(false);
       });
     }
   }, []);
+
+  useEffect(() => {
+    if (!rejectingHost) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isActionRunningRef.current) {
+        setRejectingHost(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [rejectingHost]);
 
   useEffect(() => {
     loadStats(period);
@@ -154,15 +163,16 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleRejectHost = async (hostId: number, displayName: string) => {
-    if (isActionRunningRef.current) return;
+  const handleConfirmRejectHost = async () => {
+    if (!rejectingHost || !rejectionReason.trim() || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
     try {
-      await reviewHostAction(hostId, 'rejected', 'Portfolio does not meet NomadDesk remote standards');
-      showNotification(`Host application for "${displayName}" was rejected.`);
+      await reviewHostAction(rejectingHost.id, 'rejected', rejectionReason.trim());
+      showNotification(`Host application for "${rejectingHost.displayName}" was rejected.`);
+      setRejectingHost(null);
       await Promise.all([loadStats(period), loadQueues()]);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to reject host');
@@ -337,7 +347,12 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="overflow-x-auto">
-            {pendingHosts.length > 0 ? (
+            {loadingQueues ? (
+              <div className="p-8 flex items-center justify-center gap-2 text-xs text-neutral-500">
+                <div className="w-4 h-4 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin" />
+                <span>Loading pending host applications...</span>
+              </div>
+            ) : pendingHosts.length > 0 ? (
               <table className="w-full text-left border-collapse text-xs md:text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-border-light)] bg-neutral-50/70 text-[var(--color-text-on-light-muted)] font-medium">
@@ -351,8 +366,7 @@ export default function AdminDashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border-light)]">
                   {pendingHosts.map((host) => {
-                    const hostUser = users.find((u) => u.id === host.userId);
-                    const email = hostUser?.email || 'applicant@example.com';
+                    const email = host.userEmail || '—';
 
                     return (
                       <tr key={host.id} className="hover:bg-neutral-50/60 transition-colors">
@@ -368,7 +382,7 @@ export default function AdminDashboardPage() {
                           {host.portfolioSize} units
                         </td>
                         <td className="py-3.5 px-4 text-neutral-500 whitespace-nowrap">
-                          {formatSubmittedDate(host.createdAt)}
+                          {formatUtcDate(host.createdAt)}
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -376,7 +390,7 @@ export default function AdminDashboardPage() {
                               type="button"
                               disabled={isSubmitting}
                               onClick={() => handleApproveHost(host.id, host.displayName)}
-                              className="px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-1 cursor-pointer"
                             >
                               <Check className="w-3.5 h-3.5" />
                               <span>Approve</span>
@@ -384,8 +398,11 @@ export default function AdminDashboardPage() {
                             <button
                               type="button"
                               disabled={isSubmitting}
-                              onClick={() => handleRejectHost(host.id, host.displayName)}
-                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors inline-flex items-center gap-1"
+                              onClick={() => {
+                                setRejectingHost(host);
+                                setRejectionReason('Portfolio does not meet remote work housing standards');
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors inline-flex items-center gap-1 cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
                               <span>Reject</span>
@@ -437,7 +454,12 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="p-5 flex-1">
-              {pendingProperties.length > 0 ? (
+              {loadingQueues ? (
+                <div className="h-full flex items-center justify-center gap-2 p-6 text-xs text-neutral-500">
+                  <div className="w-4 h-4 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin" />
+                  <span>Loading moderation queue...</span>
+                </div>
+              ) : pendingProperties.length > 0 ? (
                 <div className="divide-y divide-[var(--color-border-light)]">
                   {pendingProperties.map((prop) => (
                     <div key={prop.id} className="py-3 flex items-center justify-between gap-3">
@@ -525,12 +547,80 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="pt-4 border-t border-[var(--color-border-light)] mt-4 flex items-center justify-between text-xs text-neutral-500">
-              <span>NomadDesk Platform v1.0</span>
-              <span className="font-mono text-[11px]">Next.js 16 · Turbopack</span>
+              <span>{SITE_CONFIG.name} Operations Console</span>
+              <span className="font-mono text-[11px]">Admin v1.0</span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Reject Host Modal */}
+      {rejectingHost && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              setRejectingHost(null);
+            }
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Reject host application for ${rejectingHost.displayName}`}
+            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-lg text-[var(--color-text-on-light)]">
+                  Reject Host Application
+                </h4>
+                <p className="text-xs text-[var(--color-text-on-light-muted)]">
+                  {rejectingHost.displayName} ({rejectingHost.userEmail || '—'})
+                </p>
+              </div>
+            </div>
+
+            <label
+              htmlFor="dashboard-reject-host-reason"
+              className="block text-sm text-neutral-600"
+            >
+              Specify the rejection reason so the applicant can address any gaps before re-applying.
+            </label>
+
+            <textarea
+              id="dashboard-reject-host-reason"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              rows={3}
+              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+              placeholder="Enter rejection reason..."
+            />
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectingHost(null)}
+                disabled={isSubmitting}
+                className="px-4 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectHost}
+                disabled={isSubmitting || !rejectionReason.trim()}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmitting ? 'Rejecting...' : 'Confirm Rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

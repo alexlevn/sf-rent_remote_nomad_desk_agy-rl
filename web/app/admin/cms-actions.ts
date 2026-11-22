@@ -84,6 +84,7 @@ export async function saveLocationAction(data: Partial<Location>) {
   const location = await saveLocation(data);
   revalidatePath('/');
   revalidatePath('/a/furnished-apartments');
+  revalidatePath('/c/[city]', 'page');
   revalidatePath('/admin/locations');
   revalidatePath('/host/listings/new');
   return { success: true, location };
@@ -94,6 +95,7 @@ export async function deleteLocationAction(id: number) {
   const deleted = await deleteLocation(id);
   revalidatePath('/');
   revalidatePath('/a/furnished-apartments');
+  revalidatePath('/c/[city]', 'page');
   revalidatePath('/admin/locations');
   return { success: deleted };
 }
@@ -194,6 +196,7 @@ export async function saveTravelGuideAction(data: Partial<TravelGuide>) {
 
   revalidatePath('/');
   revalidatePath('/travel-guide');
+  revalidatePath('/travel-guide/[city]/[category]/[slug]', 'page');
   revalidatePath('/admin/guides');
   return { success: true, guide };
 }
@@ -203,6 +206,7 @@ export async function deleteTravelGuideAction(id: number) {
   const deleted = await deleteTravelGuide(id);
   revalidatePath('/');
   revalidatePath('/travel-guide');
+  revalidatePath('/travel-guide/[city]/[category]/[slug]', 'page');
   revalidatePath('/admin/guides');
   return { success: deleted };
 }
@@ -221,6 +225,7 @@ export async function saveBlogPostAction(data: Partial<BlogPost>) {
   const post = await saveBlogPost(payload);
 
   revalidatePath('/blog');
+  revalidatePath('/blog/[slug]', 'page');
   revalidatePath('/admin/blog');
   return { success: true, post };
 }
@@ -229,6 +234,7 @@ export async function deleteBlogPostAction(id: number) {
   await assertAdminRole();
   const deleted = await deleteBlogPost(id);
   revalidatePath('/blog');
+  revalidatePath('/blog/[slug]', 'page');
   revalidatePath('/admin/blog');
   return { success: deleted };
 }

@@ -12,6 +12,7 @@ import {
   Trash2,
   Plus,
   CheckCircle,
+  AlertTriangle,
   X,
   Building,
   MapPin,
@@ -23,10 +24,13 @@ export function FeaturedPropertiesManager() {
   const [loading, setLoading] = useState(true);
   const [selectedToAddId, setSelectedToAddId] = useState<number | ''>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isActionRunningRef = useRef(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchData = async () => {
+    setErrorMessage(null);
     try {
       const { propList } = await fetchAdminPropertiesAction();
       // Filter published only for featured selection
@@ -46,8 +50,9 @@ export function FeaturedPropertiesManager() {
         setFeaturedProperties(featured);
         setLoading(false);
       });
-    } catch {
+    } catch (err) {
       startTransition(() => {
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to load featured properties.');
         setLoading(false);
       });
     }
@@ -55,11 +60,16 @@ export function FeaturedPropertiesManager() {
 
   useEffect(() => {
     fetchData();
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
   // Candidates that can be added to featured (published and not currently featured)
@@ -68,11 +78,12 @@ export function FeaturedPropertiesManager() {
     return allProperties.filter((p) => !featuredIds.has(p.id));
   }, [allProperties, featuredProperties]);
 
-  // Save current order to store (AC-CMS-4, D20)
+  // Save current order to store
   const syncOrder = async (newList: Property[]) => {
     if (isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
+    setErrorMessage(null);
 
     try {
       const orderedIds = newList.map((p) => p.id);
@@ -82,7 +93,7 @@ export function FeaturedPropertiesManager() {
       });
       showToast('Featured properties and 3D Showcase updated successfully!');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update featured order');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update featured order');
       await fetchData();
     } finally {
       setIsSubmitting(false);
@@ -147,12 +158,33 @@ export function FeaturedPropertiesManager() {
         </div>
       )}
 
-      {/* Explanatory Banner (D20 & AC-CMS-4) */}
-      <div className="p-4 rounded-xl bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50 flex items-start gap-3">
+      {/* Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-red-500 hover:text-red-700 p-0.5 cursor-pointer"
+            aria-label="Dismiss error"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Explanatory Banner */}
+      <div className="p-4 rounded-xl bg-orange-50/70 border border-orange-200 flex items-start gap-3">
         <Sparkles className="w-5 h-5 text-[var(--color-brand)] shrink-0 mt-0.5" />
         <div className="text-sm space-y-1">
           <div className="font-semibold text-[var(--color-text-on-light)]">
-            Homepage Featured Grid & 3D Showcase Order (D20)
+            Homepage Featured Grid &amp; 3D Showcase Order
           </div>
           <p className="text-xs text-[var(--color-text-on-light-muted)] leading-relaxed">
             These properties appear in the &ldquo;Featured Apartments&rdquo; section of the homepage.
@@ -163,16 +195,20 @@ export function FeaturedPropertiesManager() {
       </div>
 
       {/* Add to Featured Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 bg-white dark:bg-[var(--color-bg-dark-surface)] rounded-xl border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] shadow-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4 bg-white rounded-xl border border-[var(--color-border-light)] shadow-sm">
         <div className="flex-1 min-w-0">
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1">
+          <label
+            htmlFor="featured-property-select"
+            className="block text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-1"
+          >
             Add Published Property to Featured List:
           </label>
           <select
+            id="featured-property-select"
             value={selectedToAddId}
             onChange={(e) => setSelectedToAddId(e.target.value ? Number(e.target.value) : '')}
             data-testid="select-featured-property"
-            className="w-full text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] dark:border-[var(--color-border-dark)] bg-neutral-50 dark:bg-neutral-800 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
+            className="w-full min-h-10 text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/20"
           >
             <option value="">-- Select a property to feature ({availableToAdd.length} eligible) --</option>
             {availableToAdd.map((p) => (
@@ -188,7 +224,7 @@ export function FeaturedPropertiesManager() {
             onClick={handleAdd}
             disabled={!selectedToAddId || isSubmitting}
             data-testid="add-to-featured-btn"
-            className="w-full sm:w-auto btn btn-primary btn-sm flex items-center justify-center gap-1.5"
+            className="w-full sm:w-auto min-h-10 px-4 py-2 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center justify-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
             Add to Featured
@@ -257,7 +293,7 @@ export function FeaturedPropertiesManager() {
                         {property.title}
                       </h4>
                       {isFirst && (
-                        <span className="badge badge-warning text-[10px] font-bold tracking-wider uppercase py-0.5 px-2 bg-amber-500 text-white">
+                        <span className="inline-flex items-center rounded-full text-[10px] font-bold tracking-wider uppercase py-0.5 px-2 bg-amber-500 text-white">
                           ★ 3D Showcase Hero
                         </span>
                       )}
@@ -280,14 +316,15 @@ export function FeaturedPropertiesManager() {
                 </div>
 
                 {/* Right: Actions (Move Up, Down, Remove) */}
-                <div className="flex items-center justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-neutral-100 dark:border-neutral-800">
-                  <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 rounded-lg p-1">
+                <div className="flex items-center justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-neutral-100">
+                  <div className="flex items-center gap-1 bg-neutral-100 rounded-lg p-1">
                     <button
                       type="button"
                       onClick={() => handleMoveUp(index)}
                       disabled={isFirst || isSubmitting}
                       data-testid={`move-up-${property.id}`}
-                      className="p-1.5 rounded-md hover:bg-white dark:hover:bg-neutral-700 disabled:opacity-30 disabled:hover:bg-transparent text-neutral-700 dark:text-neutral-200"
+                      aria-label={`Move ${property.title} up`}
+                      className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-md hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent text-neutral-700 cursor-pointer"
                       title="Move up"
                     >
                       <ArrowUp className="w-4 h-4" />
@@ -297,7 +334,8 @@ export function FeaturedPropertiesManager() {
                       onClick={() => handleMoveDown(index)}
                       disabled={isLast || isSubmitting}
                       data-testid={`move-down-${property.id}`}
-                      className="p-1.5 rounded-md hover:bg-white dark:hover:bg-neutral-700 disabled:opacity-30 disabled:hover:bg-transparent text-neutral-700 dark:text-neutral-200"
+                      aria-label={`Move ${property.title} down`}
+                      className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-md hover:bg-white disabled:opacity-30 disabled:hover:bg-transparent text-neutral-700 cursor-pointer"
                       title="Move down"
                     >
                       <ArrowDown className="w-4 h-4" />
@@ -309,7 +347,8 @@ export function FeaturedPropertiesManager() {
                     onClick={() => handleRemove(property.id)}
                     disabled={isSubmitting}
                     data-testid={`remove-featured-${property.id}`}
-                    className="p-2 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                    aria-label={`Remove ${property.title} from featured`}
+                    className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
                     title="Remove from featured"
                   >
                     <Trash2 className="w-4 h-4" />
