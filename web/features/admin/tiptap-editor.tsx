@@ -13,29 +13,11 @@ import TableCell from '@tiptap/extension-table-cell';
 import Youtube, { isValidYoutubeUrl } from '@tiptap/extension-youtube';
 import Placeholder from '@tiptap/extension-placeholder';
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Bold,
-  Columns2,
-  Eye,
-  FileCode,
-  Heading2,
-  Heading3,
-  Image as ImageIcon,
-  Italic,
-  Link as LinkIcon,
-  List,
-  ListOrdered,
-  Quote,
-  Redo2,
-  Rows2,
-  Table as TableIcon,
-  Trash2,
-  Undo2,
-  Video as YoutubeIcon,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+  EditorModeSwitcher,
+  TiptapToolbar,
+  type EditorMode,
+  type InlineDialogType,
+} from '@/features/admin/tiptap/tiptap-toolbar';
 import { MediaLibraryModal } from '@/features/media/media-library-modal';
 
 export interface TiptapEditorProps {
@@ -47,9 +29,6 @@ export interface TiptapEditorProps {
   testIdPrefix?: string;
   editorId?: string;
 }
-
-type EditorMode = 'visual' | 'html';
-type InlineDialogType = 'link' | 'youtube' | null;
 
 function isSafeLinkUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -217,231 +196,22 @@ export function TiptapEditor({
     onChange(nextHtml);
   };
 
-  const toolbarBtnClass = (isActive = false, disabled = false) =>
-    cn(
-      'flex items-center justify-center min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 p-2 sm:p-1.5 rounded transition-colors cursor-pointer',
-      isActive
-        ? 'bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-        : 'text-[var(--color-text-on-light)] hover:bg-[var(--color-surface-muted)]',
-      disabled && 'opacity-40 cursor-not-allowed'
-    );
-
-  const isInTable = editor?.isActive('table') ?? false;
-
   return (
     <div className="border border-[var(--color-border-light)] rounded-xl overflow-hidden bg-[var(--color-bg-light-surface)] shadow-2xs">
       {/* Header & Toolbar */}
       <div className="bg-[var(--color-bg-light-alt)] border-b border-[var(--color-border-light)] p-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">
           {mode === 'visual' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={toolbarBtnClass(editor?.isActive('heading', { level: 2 }))}
-                title="Heading 2"
-                aria-label="Heading 2"
-              >
-                <Heading2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-                className={toolbarBtnClass(editor?.isActive('heading', { level: 3 }))}
-                title="Heading 3"
-                aria-label="Heading 3"
-              >
-                <Heading3 className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleBold().run()}
-                className={toolbarBtnClass(editor?.isActive('bold'))}
-                title="Bold"
-                aria-label="Bold"
-              >
-                <Bold className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleItalic().run()}
-                className={toolbarBtnClass(editor?.isActive('italic'))}
-                title="Italic"
-                aria-label="Italic"
-              >
-                <Italic className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                className={toolbarBtnClass(editor?.isActive('bulletList'))}
-                title="Bullet List"
-                aria-label="Bullet List"
-              >
-                <List className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-                className={toolbarBtnClass(editor?.isActive('orderedList'))}
-                title="Numbered List"
-                aria-label="Numbered List"
-              >
-                <ListOrdered className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() => openDialog('link')}
-                className={toolbarBtnClass(editor?.isActive('link') || activeDialog === 'link')}
-                title="Link"
-                aria-label="Link"
-              >
-                <LinkIcon className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-                className={toolbarBtnClass(editor?.isActive('blockquote'))}
-                title="Blockquote"
-                aria-label="Blockquote"
-              >
-                <Quote className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().setTextAlign('left').run()}
-                className={toolbarBtnClass(editor?.isActive({ textAlign: 'left' }))}
-                title="Align Left"
-                aria-label="Align Left"
-              >
-                <AlignLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().setTextAlign('center').run()}
-                className={toolbarBtnClass(editor?.isActive({ textAlign: 'center' }))}
-                title="Align Center"
-                aria-label="Align Center"
-              >
-                <AlignCenter className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().setTextAlign('right').run()}
-                className={toolbarBtnClass(editor?.isActive({ textAlign: 'right' }))}
-                title="Align Right"
-                aria-label="Align Right"
-              >
-                <AlignRight className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() =>
-                  editor
-                    ?.chain()
-                    .focus()
-                    .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                    .run()
-                }
-                className={toolbarBtnClass(isInTable)}
-                title="Insert Table"
-                aria-label="Insert Table"
-              >
-                <TableIcon className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().addRowAfter().run()}
-                disabled={!isInTable}
-                className={toolbarBtnClass(false, !isInTable)}
-                title="Add Row"
-                aria-label="Add Row"
-              >
-                <Rows2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().addColumnAfter().run()}
-                disabled={!isInTable}
-                className={toolbarBtnClass(false, !isInTable)}
-                title="Add Column"
-                aria-label="Add Column"
-              >
-                <Columns2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().deleteTable().run()}
-                disabled={!isInTable}
-                className={toolbarBtnClass(false, !isInTable)}
-                title="Delete Table"
-                aria-label="Delete Table"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() => {
-                  closeDialog();
-                  setIsMediaModalOpen(true);
-                }}
-                className={toolbarBtnClass(isMediaModalOpen)}
-                title="Insert Image"
-                aria-label="Insert Image"
-              >
-                <ImageIcon className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => openDialog('youtube')}
-                className={toolbarBtnClass(activeDialog === 'youtube')}
-                title="Embed YouTube"
-                aria-label="Embed YouTube"
-              >
-                <YoutubeIcon className="w-4 h-4" />
-              </button>
-
-              <div className="h-4 w-px bg-[var(--color-border-light)] mx-1" />
-
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().undo().run()}
-                disabled={!editor?.can().undo()}
-                className={toolbarBtnClass(false, !editor?.can().undo())}
-                title="Undo"
-                aria-label="Undo"
-              >
-                <Undo2 className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => editor?.chain().focus().redo().run()}
-                disabled={!editor?.can().redo()}
-                className={toolbarBtnClass(false, !editor?.can().redo())}
-                title="Redo"
-                aria-label="Redo"
-              >
-                <Redo2 className="w-4 h-4" />
-              </button>
-            </>
+            <TiptapToolbar
+              editor={editor}
+              activeDialog={activeDialog}
+              isMediaModalOpen={isMediaModalOpen}
+              onOpenDialog={openDialog}
+              onOpenMedia={() => {
+                closeDialog();
+                setIsMediaModalOpen(true);
+              }}
+            />
           ) : (
             <span className="text-xs font-medium text-[var(--color-text-on-light-muted)] px-2">
               Raw HTML Source Mode
@@ -449,43 +219,7 @@ export function TiptapEditor({
           )}
         </div>
 
-        {/* Mode Switcher (Editor vs HTML) */}
-        <div
-          className="flex items-center gap-1 bg-[var(--color-surface-muted)] p-0.5 rounded-lg text-xs font-semibold"
-          role="tablist"
-          aria-label="Editor mode"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'visual'}
-            onClick={() => handleModeSwitch('visual')}
-            className={cn(
-              'flex items-center gap-1 px-2.5 py-1 rounded transition-colors cursor-pointer',
-              mode === 'visual'
-                ? 'bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] shadow-2xs'
-                : 'text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)]'
-            )}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Editor</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'html'}
-            onClick={() => handleModeSwitch('html')}
-            className={cn(
-              'flex items-center gap-1 px-2.5 py-1 rounded transition-colors cursor-pointer',
-              mode === 'html'
-                ? 'bg-[var(--color-bg-light-surface)] text-[var(--color-text-on-light)] shadow-2xs'
-                : 'text-[var(--color-text-on-light-muted)] hover:text-[var(--color-text-on-light)]'
-            )}
-          >
-            <FileCode className="w-3.5 h-3.5" />
-            <span>HTML</span>
-          </button>
-        </div>
+        <EditorModeSwitcher mode={mode} onChange={handleModeSwitch} />
       </div>
 
       {/* Inline Dialog Panel (Link / YouTube) — one dialog at a time, no window.prompt */}

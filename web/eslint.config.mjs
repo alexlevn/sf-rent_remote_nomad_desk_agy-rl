@@ -7,6 +7,8 @@ const eslintConfig = defineConfig([
   ...nextTs,
   globalIgnores([
     '.next/**',
+    // esbuild output of lib/db scripts (npm run db:build-scripts)
+    'dist/**',
     'out/**',
     'build/**',
     'next-env.d.ts',

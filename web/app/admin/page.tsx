@@ -12,25 +12,14 @@ import {
   fetchAdminPropertiesPaginatedAction,
   reviewHostAction,
 } from '@/app/admin/admin-actions';
-import { formatUtcDate } from '@/lib/format';
-import { SITE_CONFIG } from '@/content/site';
 import type { AdminDashboardPeriod, AdminDashboardStats } from '@/lib/api/reservations';
 import type { HostProfile, Property } from '@/lib/types';
-import {
-  UserCheck,
-  Building,
-  BookmarkCheck,
-  Users,
-  Settings,
-  ArrowRight,
-  Check,
-  X,
-  Sparkles,
-  AlertTriangle,
-  Calendar,
-  ShieldAlert,
-} from 'lucide-react';
+import { Users, Settings, X, Sparkles, AlertTriangle, Calendar, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ReasonPromptModal } from '@/features/admin/reason-prompt-modal';
+import { HostApplicationsQueue } from '@/features/admin/dashboard/host-applications-queue';
+import { PropertyModerationQueue } from '@/features/admin/dashboard/property-moderation-queue';
+import { AdminShortcuts } from '@/features/admin/dashboard/admin-shortcuts';
 
 const PERIOD_OPTIONS: Array<{ value: AdminDashboardPeriod; label: string }> = [
   { value: 'today', label: 'Today' },
@@ -57,9 +46,6 @@ export default function AdminDashboardPage() {
   const [pendingHosts, setPendingHosts] = useState<HostProfile[]>([]);
   const [pendingProperties, setPendingProperties] = useState<Property[]>([]);
   const [rejectingHost, setRejectingHost] = useState<HostProfile | null>(null);
-  const [rejectionReason, setRejectionReason] = useState(
-    'Portfolio does not meet remote work housing standards'
-  );
   const [notification, setNotification] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -164,7 +150,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleConfirmRejectHost = async () => {
+  const handleConfirmRejectHost = async (rejectionReason: string) => {
     if (!rejectingHost || !rejectionReason.trim() || isActionRunningRef.current) return;
     isActionRunningRef.current = true;
     setIsSubmitting(true);
@@ -323,305 +309,38 @@ export default function AdminDashboardPage() {
 
       {/* Action Queues Section */}
       <div className="space-y-6">
-        {/* Queue: Host Applications */}
-        <div className="bg-white rounded-2xl border border-[var(--color-border-light)] shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-[var(--color-border-light)] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h2 className="text-base md:text-lg font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
-                <span>Queue: Host Membership Applications Awaiting Approval</span>
-                {(dashboardStats?.pendingHosts ?? pendingHosts.length) > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-[var(--color-brand)]">
-                    {dashboardStats?.pendingHosts ?? pendingHosts.length} pending
-                  </span>
-                )}
-              </h2>
-              <p className="text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
-                Review host property portfolios and approve access to the Host Partner portal.
-              </p>
-            </div>
-            <Link
-              href="/admin/hosts"
-              className="text-xs font-semibold text-[var(--color-brand)] hover:underline inline-flex items-center gap-1 shrink-0"
-            >
-              <span>View all hosts</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
+        <HostApplicationsQueue
+          pendingHosts={pendingHosts}
+          pendingCount={dashboardStats?.pendingHosts ?? pendingHosts.length}
+          loading={loadingQueues}
+          isSubmitting={isSubmitting}
+          onApprove={(host) => handleApproveHost(host.id, host.displayName)}
+          onReject={setRejectingHost}
+        />
 
-          <div className="overflow-x-auto">
-            {loadingQueues ? (
-              <div className="p-8 flex items-center justify-center gap-2 text-xs text-neutral-500">
-                <div className="w-4 h-4 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin" />
-                <span>Loading pending host applications...</span>
-              </div>
-            ) : pendingHosts.length > 0 ? (
-              <table className="w-full text-left border-collapse text-xs md:text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--color-border-light)] bg-neutral-50/70 text-[var(--color-text-on-light-muted)] font-medium">
-                    <th className="py-3 px-4">Company</th>
-                    <th className="py-3 px-4">Contact</th>
-                    <th className="py-3 px-4">Cities</th>
-                    <th className="py-3 px-4">Portfolio</th>
-                    <th className="py-3 px-4">Submitted</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-border-light)]">
-                  {pendingHosts.map((host) => {
-                    const email = host.userEmail || '—';
-
-                    return (
-                      <tr key={host.id} className="hover:bg-neutral-50/60 transition-colors">
-                        <td className="py-3.5 px-4 font-semibold text-neutral-900">
-                          {host.displayName}
-                        </td>
-                        <td className="py-3.5 px-4 text-neutral-600 font-mono text-xs">
-                          <div>{email}</div>
-                          {host.phone && <div className="text-neutral-400 text-[11px]">{host.phone}</div>}
-                        </td>
-                        <td className="py-3.5 px-4 text-neutral-700">{host.cities}</td>
-                        <td className="py-3.5 px-4 text-neutral-700">
-                          {host.portfolioSize} units
-                        </td>
-                        <td className="py-3.5 px-4 text-neutral-500 whitespace-nowrap">
-                          {formatUtcDate(host.createdAt)}
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => handleApproveHost(host.id, host.displayName)}
-                              className="px-3 py-1.5 rounded-lg bg-[var(--color-brand)] text-white text-xs font-semibold hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-sm inline-flex items-center gap-1 cursor-pointer"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Approve</span>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isSubmitting}
-                              onClick={() => {
-                                setRejectingHost(host);
-                                setRejectionReason('Portfolio does not meet remote work housing standards');
-                              }}
-                              className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              <span>Reject</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-8 text-center text-sm text-[var(--color-text-on-light-muted)]">
-                <Check className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
-                <p className="font-semibold text-neutral-800">No pending host applications</p>
-                <p className="text-xs text-neutral-500 mt-1">
-                  All applicant onboarding submissions have been reviewed and approved.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Two-column layout for Property Moderation and Quick Platform Shortcuts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Queue: Property Moderations */}
-          <div className="bg-white rounded-2xl border border-[var(--color-border-light)] shadow-sm overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-[var(--color-border-light)] flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-[var(--color-text-on-light)] flex items-center gap-2">
-                  <span>Property Moderation Queue</span>
-                  {(dashboardStats?.pendingProperties ?? pendingProperties.length) > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                      {dashboardStats?.pendingProperties ?? pendingProperties.length} pending
-                    </span>
-                  )}
-                </h3>
-                <p className="text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
-                  Newly submitted apartment listings awaiting administrative review.
-                </p>
-              </div>
-              <Link
-                href="/admin/properties"
-                className="text-xs font-semibold text-[var(--color-brand)] hover:underline inline-flex items-center gap-1"
-              >
-                <span>Moderate</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            <div className="p-5 flex-1">
-              {loadingQueues ? (
-                <div className="h-full flex items-center justify-center gap-2 p-6 text-xs text-neutral-500">
-                  <div className="w-4 h-4 border-2 border-[var(--color-brand)] border-t-transparent rounded-full animate-spin" />
-                  <span>Loading moderation queue...</span>
-                </div>
-              ) : pendingProperties.length > 0 ? (
-                <div className="divide-y divide-[var(--color-border-light)]">
-                  {pendingProperties.map((prop) => (
-                    <div key={prop.id} className="py-3 flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-neutral-900">{prop.title}</div>
-                        <div className="text-xs text-neutral-500">
-                          {prop.city} · ${Math.round(prop.pricePerMonth / 100).toLocaleString('en-US')}/mo
-                        </div>
-                      </div>
-                      <Link
-                        href="/admin/properties"
-                        className="px-3 py-1 rounded-lg border border-[var(--color-border-light)] text-xs font-semibold hover:bg-neutral-50"
-                      >
-                        Review
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center p-6 text-center text-xs text-[var(--color-text-on-light-muted)]">
-                  <Building className="w-8 h-8 text-neutral-300 mb-2" />
-                  <p className="font-semibold text-neutral-700">No properties awaiting moderation</p>
-                  <p className="text-neutral-400 mt-0.5">
-                    All partner listings are currently published or in draft mode.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Quick Platform Navigation & Shortcuts */}
-          <div className="bg-white rounded-2xl border border-[var(--color-border-light)] shadow-sm p-5 flex flex-col justify-between">
-            <div>
-              <h3 className="text-base font-bold text-[var(--color-text-on-light)] mb-1">
-                Admin Platform Shortcuts
-              </h3>
-              <p className="text-xs text-[var(--color-text-on-light-muted)] mb-4">
-                Fast navigation to core marketplace administration sectors.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <Link
-                  href="/admin/users"
-                  className="p-3.5 rounded-xl border border-[var(--color-border-light)] hover:border-[var(--color-brand)] hover:bg-neutral-50/80 transition-all group"
-                >
-                  <div className="p-2 w-fit rounded-lg bg-blue-50 text-blue-600 mb-2 group-hover:scale-105 transition-transform">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div className="text-xs font-bold text-neutral-900">User Directory</div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">Manage roles & access</div>
-                </Link>
-
-                <Link
-                  href="/admin/settings"
-                  className="p-3.5 rounded-xl border border-[var(--color-border-light)] hover:border-[var(--color-brand)] hover:bg-neutral-50/80 transition-all group"
-                >
-                  <div className="p-2 w-fit rounded-lg bg-emerald-50 text-emerald-600 mb-2 group-hover:scale-105 transition-transform">
-                    <Settings className="w-4 h-4" />
-                  </div>
-                  <div className="text-xs font-bold text-neutral-900">FX & Settings</div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">Rates & commissions</div>
-                </Link>
-
-                <Link
-                  href="/admin/reservations"
-                  className="p-3.5 rounded-xl border border-[var(--color-border-light)] hover:border-[var(--color-brand)] hover:bg-neutral-50/80 transition-all group"
-                >
-                  <div className="p-2 w-fit rounded-lg bg-purple-50 text-purple-600 mb-2 group-hover:scale-105 transition-transform">
-                    <BookmarkCheck className="w-4 h-4" />
-                  </div>
-                  <div className="text-xs font-bold text-neutral-900">Booking Monitor</div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">Stays & cancellations</div>
-                </Link>
-
-                <Link
-                  href="/admin/hosts"
-                  className="p-3.5 rounded-xl border border-[var(--color-border-light)] hover:border-[var(--color-brand)] hover:bg-neutral-50/80 transition-all group"
-                >
-                  <div className="p-2 w-fit rounded-lg bg-orange-50 text-[var(--color-brand)] mb-2 group-hover:scale-105 transition-transform">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <div className="text-xs font-bold text-neutral-900">Host Partners</div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">Active & suspended hosts</div>
-                </Link>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-[var(--color-border-light)] mt-4 flex items-center justify-between text-xs text-neutral-500">
-              <span>{SITE_CONFIG.name} Operations Console</span>
-              <span className="font-mono text-[11px]">Admin v1.0</span>
-            </div>
-          </div>
+          <PropertyModerationQueue
+            pendingProperties={pendingProperties}
+            pendingCount={dashboardStats?.pendingProperties ?? pendingProperties.length}
+            loading={loadingQueues}
+          />
+          <AdminShortcuts />
         </div>
       </div>
 
-      {/* Reject Host Modal */}
       {rejectingHost && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isSubmitting) {
-              setRejectingHost(null);
-            }
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Reject host application for ${rejectingHost.displayName}`}
-            className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-[var(--color-border-light)] space-y-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-bold text-lg text-[var(--color-text-on-light)]">
-                  Reject Host Application
-                </h4>
-                <p className="text-xs text-[var(--color-text-on-light-muted)]">
-                  {rejectingHost.displayName} ({rejectingHost.userEmail || '—'})
-                </p>
-              </div>
-            </div>
-
-            <label
-              htmlFor="dashboard-reject-host-reason"
-              className="block text-sm text-neutral-600"
-            >
-              Specify the rejection reason so the applicant can address any gaps before re-applying.
-            </label>
-
-            <textarea
-              id="dashboard-reject-host-reason"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              rows={3}
-              className="w-full p-3 rounded-lg border border-[var(--color-border-light)] bg-neutral-50 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
-              placeholder="Enter rejection reason..."
-            />
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setRejectingHost(null)}
-                disabled={isSubmitting}
-                className="px-4 py-2 rounded-lg border border-[var(--color-border-light)] bg-white text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRejectHost}
-                disabled={isSubmitting || !rejectionReason.trim()}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
-              >
-                {isSubmitting ? 'Rejecting...' : 'Confirm Rejection'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReasonPromptModal
+          ariaLabel={`Reject host application for ${rejectingHost.displayName}`}
+          icon={ShieldAlert}
+          title="Reject Host Application"
+          subtitle={`${rejectingHost.displayName} (${rejectingHost.userEmail || '—'})`}
+          description="Specify the rejection reason so the applicant can address any gaps before re-applying."
+          defaultReason="Portfolio does not meet remote work housing standards"
+          confirmLabel={isSubmitting ? 'Rejecting...' : 'Confirm Rejection'}
+          isSubmitting={isSubmitting}
+          onCancel={() => setRejectingHost(null)}
+          onConfirm={handleConfirmRejectHost}
+        />
       )}
     </div>
   );
