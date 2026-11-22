@@ -373,16 +373,25 @@ export function passwordResetTemplate(email: string, resetUrl: string): EmailTem
 export function contactFormTemplate(input: {
   name: string;
   email: string;
+  subject?: string;
   message: string;
 }): EmailTemplate {
-  const subject = `Contact form inquiry from ${input.name}`;
+  const customSubject = input.subject?.trim();
+  const subject = customSubject
+    ? `Contact form inquiry: ${customSubject}`
+    : `Contact form inquiry from ${input.name}`;
   const html = wrapHtmlLayout(
     'New contact inquiry',
-    `<p style="margin:0 0 8px;font-size:14px;"><strong>From:</strong> ${escapeHtml(input.name)} (${escapeHtml(input.email)})</p>
+    `<p style="margin:0 0 8px;font-size:14px;"><strong>From:</strong> ${escapeHtml(input.name)} (${escapeHtml(input.email)})</p>${
+      customSubject
+        ? `\n<p style="margin:0 0 8px;font-size:14px;"><strong>Subject:</strong> ${escapeHtml(customSubject)}</p>`
+        : ''
+    }
 <p style="margin:12px 0 0;font-size:14px;line-height:1.6;white-space:pre-line;">${escapeHtml(input.message)}</p>`,
   );
   const text = [
     `From: ${input.name} <${input.email}>`,
+    ...(customSubject ? [`Subject: ${customSubject}`] : []),
     '',
     input.message,
   ].join('\n');

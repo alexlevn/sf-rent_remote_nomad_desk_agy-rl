@@ -2,13 +2,18 @@ import React, { Suspense } from 'react';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+import { z } from 'zod';
 import { getUserByEmail } from '@/lib/api/users';
 import { signIn } from '@/lib/auth/config';
-import { setCurrentUserId } from '@/lib/auth/session';
 import { verifyPassword } from '@/lib/auth/password';
 import { SITE_CONFIG } from '@/content/site';
 import { LoginForm, type LoginResult } from '@/features/auth/login-form';
 import { Badge } from '@/components/ui/badge';
+
+const loginInputSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Please enter a valid email address.').max(255),
+  password: z.string().min(1, 'Please enter your password.').max(128),
+});
 
 export const metadata: Metadata = {
   title: 'Sign In | NomadDesk',
@@ -32,8 +37,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }): Promise<LoginResult> {
     'use server';
 
-    const email = credentials.email.trim().toLowerCase();
-    const password = credentials.password;
+    const parsed = loginInputSchema.safeParse(credentials);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: 'Invalid email or password. Please try again.',
+      };
+    }
+
+    const { email, password } = parsed.data;
     const user = await getUserByEmail(email);
 
     if (!user) {
@@ -71,8 +83,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         error: 'Unable to establish an authenticated session. Please try again.',
       };
     }
-
-    await setCurrentUserId(user.id);
 
     return {
       success: true,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { eq, gt, inArray, notInArray } from 'drizzle-orm';
+import { eq, gt, inArray, notInArray, sql } from 'drizzle-orm';
 import { resetMockData } from '@/lib/api/mock/seed-data';
 import { resetSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
@@ -19,30 +19,33 @@ import {
   workstationComponents,
   workstationPackages,
 } from '@/lib/db/schema';
+import { isMockResetAllowed } from '@/lib/env';
+import { getUtcOffsetDateString } from '@/lib/format';
 import { DEFAULT_EXCHANGE_RATES } from '@/lib/pricing';
 import { deleteUploadFile } from '@/lib/storage/upload';
 
 const SEED_PROPERTY_IDS = [16060, 16061, 17001, 17002, 18001, 18002, 19001, 19002];
 const SEED_TRAVEL_GUIDE_IDS = [361, 362, 363, 364, 365, 366, 367, 368];
 const SEED_LOCATION_MAX_ID = 4360;
-const SEED_FEATURED_POSITIONS: Record<number, number | null> = {
-  16060: 1,
-  16061: 2,
-  17001: 3,
-  17002: null,
-  18001: 5,
-  18002: null,
-  19001: 7,
-  19002: null,
-};
-
-function getRelativeDateStr(offsetDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
-}
+const SEED_FEATURED_POSITIONS: ReadonlyArray<[number, number | null]> = [
+  [16060, 1],
+  [16061, 2],
+  [17001, 3],
+  [17002, null],
+  [18001, 5],
+  [18002, null],
+  [19001, 7],
+  [19002, null],
+];
 
 export async function POST(request?: Request) {
+  if (!isMockResetAllowed()) {
+    return NextResponse.json(
+      { error: 'Forbidden: Reset endpoint is disabled in this environment.' },
+      { status: 403 }
+    );
+  }
+
   resetMockData();
   resetSession();
 
@@ -81,17 +84,26 @@ export async function POST(request?: Request) {
     await db.delete(locations).where(gt(locations.id, SEED_LOCATION_MAX_ID));
     await db.update(locations).set({ isActive: true });
 
-    for (const propId of SEED_PROPERTY_IDS) {
-      await db
-        .update(properties)
-        .set({
-          status: 'published',
-          rejectionReason: null,
-          featuredPosition: SEED_FEATURED_POSITIONS[propId] ?? null,
-          updatedAt: new Date(),
-        })
-        .where(eq(properties.id, propId));
-    }
+    // Restore all 8 seeded properties in a single batched SQL UPDATE instead of a loop
+    const now = new Date();
+    const featuredValues = sql.join(
+      SEED_FEATURED_POSITIONS.map(
+        ([propId, pos]) =>
+          pos === null
+            ? sql`(${propId}::int, NULL::int)`
+            : sql`(${propId}::int, ${pos}::int)`
+      ),
+      sql`, `
+    );
+    await db.execute(sql`
+      UPDATE ${properties} AS p
+      SET status = 'published',
+          rejection_reason = NULL,
+          featured_position = v.pos,
+          updated_at = ${now}
+      FROM (VALUES ${featuredValues}) AS v(id, pos)
+      WHERE p.id = v.id
+    `);
 
     await db.update(workstationPackages).set({ isActive: true });
     await db.update(workstationComponents).set({ isActive: true });
@@ -107,13 +119,13 @@ export async function POST(request?: Request) {
       .values({
         key: 'currency_rates',
         value: { ...DEFAULT_EXCHANGE_RATES },
-        updatedAt: new Date(),
+        updatedAt: now,
       })
       .onConflictDoUpdate({
         target: settings.key,
         set: {
           value: { ...DEFAULT_EXCHANGE_RATES },
-          updatedAt: new Date(),
+          updatedAt: now,
         },
       });
 
@@ -140,7 +152,6 @@ export async function POST(request?: Request) {
       .set({ role: 'admin', isActive: true })
       .where(eq(users.id, 2));
 
-    const now = new Date();
     await db
       .update(reservations)
       .set({
@@ -148,8 +159,8 @@ export async function POST(request?: Request) {
         paymentStatus: 'authorized',
         rejectionReason: null,
         cancelledBy: null,
-        moveInDate: getRelativeDateStr(40),
-        moveOutDate: getRelativeDateStr(70),
+        moveInDate: getUtcOffsetDateString(40, now),
+        moveOutDate: getUtcOffsetDateString(70, now),
         respondBy: new Date(now.getTime() + 48 * 3600 * 1000),
         updatedAt: now,
       })
@@ -162,13 +173,17 @@ export async function POST(request?: Request) {
         paymentStatus: 'captured',
         rejectionReason: null,
         cancelledBy: null,
-        moveInDate: getRelativeDateStr(20),
-        moveOutDate: getRelativeDateStr(50),
+        moveInDate: getUtcOffsetDateString(20, now),
+        moveOutDate: getUtcOffsetDateString(50, now),
         updatedAt: now,
       })
       .where(eq(reservations.code, 'ND-SEED2'));
   } catch (err) {
-    console.error('[mock/reset] DB seed reset skipped:', err);
+    console.error('[mock/reset] DB seed reset failed:', err);
+    return NextResponse.json(
+      { ok: false, error: 'Database reset failed.' },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({

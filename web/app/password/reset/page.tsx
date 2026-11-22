@@ -13,7 +13,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const resetEmailSchema = z.string().trim().toLowerCase().email('Please enter a valid email address.');
+const resetEmailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email('Please enter a valid email address.')
+  .max(255);
 
 export default function PasswordResetPage() {
   async function requestPasswordResetAction(email: string): Promise<ResetPasswordResult> {

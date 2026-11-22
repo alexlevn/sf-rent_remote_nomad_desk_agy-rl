@@ -1,14 +1,12 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { auth } from '@/lib/auth/config';
-import { getUserById } from '@/lib/api/users';
+import { getStrictSessionUser } from '@/lib/auth/session';
 import { getPropertyById } from '@/lib/api/properties';
 import { listHosts } from '@/lib/api/hosts';
 import { listLocations } from '@/lib/api/locations';
+import { INT4_MAX } from '@/lib/format';
 import { AdminPropertyForm } from '@/features/admin/admin-property-form';
-
-const INT4_MAX = 2_147_483_647;
 
 interface AdminEditPropertyPageProps {
   params: Promise<{
@@ -24,15 +22,10 @@ export const metadata: Metadata = {
 export default async function AdminEditPropertyPage({
   params,
 }: AdminEditPropertyPageProps) {
-  const session = await auth();
-  const rawUserId = session?.user?.id ? Number(session.user.id) : NaN;
-  const freshUser =
-    Number.isInteger(rawUserId) && rawUserId > 0 && rawUserId <= INT4_MAX
-      ? await getUserById(rawUserId)
-      : null;
+  const freshUser = await getStrictSessionUser();
 
   // Layout renders 403 for unauthorized users; guard here too since layouts and pages render in parallel.
-  if (!freshUser || !freshUser.isActive || freshUser.role !== 'admin') {
+  if (!freshUser || freshUser.role !== 'admin') {
     return null;
   }
 

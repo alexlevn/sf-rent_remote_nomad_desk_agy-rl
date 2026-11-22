@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { AuthError, requireAdmin } from '@/lib/auth/guards';
+import { getPgErrorCode } from '@/lib/db/query-helpers';
 import { saveLocationAction, saveTravelGuideAction } from '@/app/admin/cms-actions';
 
 /**
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
-    throw error;
+    console.error('[api/admin/cms] Auth check failed:', error);
+    return NextResponse.json({ error: 'Authentication check failed.' }, { status: 500 });
   }
 
   let body: unknown;
@@ -34,7 +36,10 @@ export async function POST(request: Request) {
   try {
     const { action, payload } = body as { action?: unknown; payload?: unknown };
 
-    if (payload !== undefined && (!payload || typeof payload !== 'object' || Array.isArray(payload))) {
+    if (
+      payload !== undefined &&
+      (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    ) {
       return NextResponse.json({ error: 'Payload must be an object' }, { status: 400 });
     }
 
@@ -60,10 +65,38 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const status = (error as { status?: number }).status || 500;
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal Server Error' },
-      { status }
-    );
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: 'Forbidden: Administrator privileges required.' }, { status: 403 });
+    }
+    const pgCode = getPgErrorCode(error);
+    if (pgCode === '23505') {
+      return NextResponse.json(
+        { error: 'A record with the same unique identifier or slug already exists.' },
+        { status: 409 }
+      );
+    }
+    if (pgCode === '22P02' || pgCode === '22003' || pgCode === '22001') {
+      return NextResponse.json({ error: 'Invalid field value or length.' }, { status: 400 });
+    }
+
+    const rawStatus =
+      typeof error === 'object' && error !== null
+        ? (error as { status?: unknown }).status
+        : undefined;
+    const isClientErrorStatus =
+      typeof rawStatus === 'number' &&
+      Number.isInteger(rawStatus) &&
+      rawStatus >= 400 &&
+      rawStatus < 500;
+
+    if (isClientErrorStatus) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Request rejected' },
+        { status: rawStatus }
+      );
+    }
+
+    console.error('[api/admin/cms] Unexpected error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

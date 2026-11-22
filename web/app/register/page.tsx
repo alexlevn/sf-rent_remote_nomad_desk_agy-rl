@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { z } from 'zod';
 import { getUserByEmail, createUser } from '@/lib/api/users';
 import { signIn } from '@/lib/auth/config';
-import { setCurrentUserId } from '@/lib/auth/session';
 import { hashPassword } from '@/lib/auth/password';
 import { RegisterForm, type RegisterResult } from '@/features/auth/register-form';
 
@@ -74,8 +73,6 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         password,
         redirect: false,
       });
-
-      await setCurrentUserId(newUser.id);
 
       return {
         success: true,

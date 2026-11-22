@@ -1,16 +1,30 @@
 import type { User, UserRole } from '@/lib/types';
 import { getUserById, getUserByEmail } from '@/lib/api/users';
 import { auth } from '@/lib/auth/config';
-
-const INT4_MAX = 2_147_483_647;
+import { INT4_MAX } from '@/lib/format';
 
 const globalForAuth = globalThis as unknown as {
   __nomaddeskCurrentUserId?: number | null;
 };
 
+function parseSessionUserId(rawId: unknown): number | null {
+  if (rawId === undefined || rawId === null) {
+    return null;
+  }
+  const normalizedId = typeof rawId === 'string' ? rawId.trim() : String(rawId);
+  if (!/^\d+$/.test(normalizedId)) {
+    return null;
+  }
+  const userId = Number(normalizedId);
+  if (!Number.isInteger(userId) || userId <= 0 || userId > INT4_MAX) {
+    return null;
+  }
+  return userId;
+}
+
 /**
- * Returns the authenticated user strictly from the Auth.js HttpOnly JWT cookie
- * refreshed from Postgres. Never reads globalForAuth or falls back to demo user.
+ * Returns the authenticated active user strictly from the Auth.js HttpOnly JWT cookie
+ * refreshed from Postgres. Returns null if unauthenticated, deleted, or suspended.
  */
 export async function getStrictSessionUser(): Promise<User | null> {
   let rawId: unknown;
@@ -22,76 +36,63 @@ export async function getStrictSessionUser(): Promise<User | null> {
     return null;
   }
 
-  if (rawId === undefined || rawId === null) {
+  const userId = parseSessionUserId(rawId);
+  if (userId === null) {
     return null;
   }
 
-  const normalizedId = typeof rawId === 'string' ? rawId.trim() : String(rawId);
-  if (!/^\d+$/.test(normalizedId)) {
+  const user = await getUserById(userId);
+  if (!user || !user.isActive) {
     return null;
   }
 
-  const userId = Number(normalizedId);
-  if (!Number.isInteger(userId) || userId <= 0 || userId > INT4_MAX) {
-    return null;
-  }
-
-  return getUserById(userId);
+  return user;
 }
 
 /**
- * Returns current authenticated user.
- * 1. Checks NextAuth session via auth()
- * 2. Checks explicit global test/mock session
- * 3. Falls back to demo user (id 1) if present in DB
+ * Returns the current authenticated user from the Auth.js JWT cookie refreshed from DB.
+ * In-memory globalForAuth override is restricted strictly to Vitest unit tests so
+ * runtime requests can never inherit another user's session or fall back to demo user.
  */
-export async function getCurrentUser(): Promise<User> {
-  // 1. Try to get user from Auth.js session
+export async function getCurrentUser(): Promise<User | null> {
   try {
     const session = await auth();
-    if (session?.user?.id) {
-      const user = await getUserById(Number(session.user.id));
-      if (user) return user;
+    const userId = parseSessionUserId(session?.user?.id);
+    if (userId !== null) {
+      return getUserById(userId);
     }
   } catch {
     // Outside request context / headers not available
   }
 
-  // 2. Global session for dev / mock testing
-  if (globalForAuth.__nomaddeskCurrentUserId !== undefined && globalForAuth.__nomaddeskCurrentUserId !== null) {
-    const user = await getUserById(globalForAuth.__nomaddeskCurrentUserId);
-    if (user) return user;
+  // Test-only in-memory session shim for Vitest suites running outside HTTP request context
+  if (
+    process.env.VITEST === 'true' &&
+    globalForAuth.__nomaddeskCurrentUserId !== undefined &&
+    globalForAuth.__nomaddeskCurrentUserId !== null
+  ) {
+    return getUserById(globalForAuth.__nomaddeskCurrentUserId);
   }
 
-  // 3. Fallback to demo user
-  const fallback = await getUserByEmail('demo@example.com');
-  if (fallback) return fallback;
-
-  return {
-    id: 1,
-    email: 'demo@example.com',
-    passwordHash: '',
-    firstName: 'Demo',
-    lastName: 'User',
-    role: 'guest',
-    isActive: true,
-  };
+  return null;
 }
 
 /**
- * Sets current session user by ID.
+ * Sets in-memory session user by ID (Vitest unit tests only).
  */
 export async function setCurrentUserId(userId: number): Promise<User> {
   const user = await getUserById(userId);
   if (!user) {
     throw new Error(`User with id ${userId} not found`);
   }
-  globalForAuth.__nomaddeskCurrentUserId = userId;
+  if (process.env.VITEST === 'true') {
+    globalForAuth.__nomaddeskCurrentUserId = userId;
+  }
   return user;
 }
 
 /**
- * Switches current active role for dev & test exploration (guest | host | admin).
+ * Switches active in-memory test role (Vitest unit tests only).
  */
 export async function switchRole(role: UserRole): Promise<User> {
   let targetEmail = 'demo@example.com';
@@ -103,15 +104,20 @@ export async function switchRole(role: UserRole): Promise<User> {
   if (!user) {
     throw new Error(`User for role ${role} (${targetEmail}) not found`);
   }
-  globalForAuth.__nomaddeskCurrentUserId = user.id;
+  if (process.env.VITEST === 'true') {
+    globalForAuth.__nomaddeskCurrentUserId = user.id;
+  }
   return user;
 }
 
 /**
- * Retrieves the current session object.
+ * Retrieves the current session object, or null when unauthenticated.
  */
-export async function getSession(): Promise<{ user: User; role: UserRole }> {
+export async function getSession(): Promise<{ user: User; role: UserRole } | null> {
   const user = await getCurrentUser();
+  if (!user || !user.isActive) {
+    return null;
+  }
   return {
     user,
     role: user.role,
@@ -119,15 +125,15 @@ export async function getSession(): Promise<{ user: User; role: UserRole }> {
 }
 
 /**
- * Clears the in-memory mock session user ID.
+ * Clears the in-memory test session user ID.
  */
 export function clearCurrentUserId(): void {
   globalForAuth.__nomaddeskCurrentUserId = null;
 }
 
 /**
- * Resets active mock session back to initial demo guest user.
+ * Resets in-memory test session back to initial demo guest user (Vitest only).
  */
 export function resetSession(): void {
-  globalForAuth.__nomaddeskCurrentUserId = 1;
+  globalForAuth.__nomaddeskCurrentUserId = process.env.VITEST === 'true' ? 1 : null;
 }

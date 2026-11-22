@@ -7,13 +7,13 @@ services:
     ports:
       - "55188:5432"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nomaddesk
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-nomaddesk}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,11 +40,12 @@ services:
       mailpit:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/nomaddesk
-      NEXTAUTH_URL: http://localhost:3288
-      NEXTAUTH_SECRET: nomaddesk_jwt_secret_dev
-      AUTH_SECRET: nomaddesk_jwt_secret_dev
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@db:5432/nomaddesk}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3288}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-nomaddesk_jwt_secret_dev}
+      AUTH_SECRET: ${AUTH_SECRET:-nomaddesk_jwt_secret_dev}
       AUTH_TRUST_HOST: "true"
+      ALLOW_MOCK_RESET: ${ALLOW_MOCK_RESET:-true}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       UPLOAD_DIR: /app/web/.data/uploads
@@ -52,7 +53,7 @@ services:
       HOSTNAME: 0.0.0.0
     volumes:
       - ky-uploads:/app/web/.data/uploads
-    command: sh -c "npm run db:migrate && npm run db:seed && npm start"
+    command: sh -c "npm run db:migrate && npm run db:seed && exec npm start"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3288/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""]
       interval: 10s

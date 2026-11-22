@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { sendEmail } from '@/lib/email/client';
+import { notifyContactForm } from '@/lib/email/notifications';
 import { SITE_CONFIG } from '@/content/site';
 
 const contactFormSchema = z.object({
@@ -14,15 +14,6 @@ const contactFormSchema = z.object({
 export interface ContactActionResult {
   success: boolean;
   error?: string;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 export async function submitContactInquiryAction(input: {
@@ -40,45 +31,17 @@ export async function submitContactInquiryAction(input: {
   }
 
   const { name, email, subject, message } = parsed.data;
-  const emailSubject = subject
-    ? `[${SITE_CONFIG.name} Support] ${subject}`
-    : `[${SITE_CONFIG.name} Support] New inquiry from ${name}`;
+  const sent = await notifyContactForm(
+    { name, email, subject: subject || undefined, message },
+    SITE_CONFIG.contactEmail
+  );
 
-  const textBody = [
-    `Name: ${name}`,
-    `Email: ${email}`,
-    subject ? `Subject: ${subject}` : null,
-    '',
-    message,
-  ]
-    .filter((line): line is string => line !== null)
-    .join('\n');
-
-  const htmlBody = `
-    <div style="font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; color: #1f1b17;">
-      <h2 style="margin-bottom: 12px;">New Support Inquiry</h2>
-      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-      <p><strong>Email:</strong> ${escapeHtml(email)}</p>
-      ${subject ? `<p><strong>Subject:</strong> ${escapeHtml(subject)}</p>` : ''}
-      <hr style="border: 0; border-top: 1px solid #e5e0d8; margin: 16px 0;" />
-      <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
-    </div>
-  `;
-
-  try {
-    await sendEmail({
-      to: SITE_CONFIG.contactEmail,
-      replyTo: email,
-      subject: emailSubject,
-      text: textBody,
-      html: htmlBody,
-    });
-    return { success: true };
-  } catch (err) {
-    console.error('[submitContactInquiryAction] Failed to dispatch contact email:', err);
+  if (!sent) {
     return {
       success: false,
       error: 'Unable to send your message right now. Please try again in a moment.',
     };
   }
+
+  return { success: true };
 }

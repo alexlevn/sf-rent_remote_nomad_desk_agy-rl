@@ -17,7 +17,7 @@ export async function getHostPortalContext(
   callbackPath: string
 ): Promise<HostPortalContext> {
   const user = await getStrictSessionUser();
-  if (!user) {
+  if (!user || !user.isActive) {
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackPath)}`);
   }
 

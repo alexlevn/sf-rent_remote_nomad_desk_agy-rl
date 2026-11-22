@@ -2,6 +2,7 @@ import NextAuth, { type DefaultSession } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { getUserByEmail, getUserById } from '@/lib/api/users';
 import { verifyPassword } from '@/lib/auth/password';
+import { getAuthSecret } from '@/lib/env';
 import type { UserRole } from '@/lib/types';
 
 declare module 'next-auth' {
@@ -72,16 +73,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.email = user.email;
         token.name = user.name;
       }
-      // Rủi ro #10: Luôn đọc lại role và trạng thái từ DB để tránh stale role
+      // Always refresh role and active status from DB to avoid stale JWT claims (Risk #10)
       if (token.id) {
         try {
           const dbUser = await getUserById(Number(token.id));
           if (dbUser) {
             token.role = dbUser.role;
             token.isActive = dbUser.isActive;
+          } else {
+            // Invalidate token immediately if the user row was deleted
+            token.isActive = false;
           }
         } catch {
-          // Khi DB offline hoặc trong test mock
+          // Keep existing token claims when DB is unavailable during isolated unit tests
         }
       }
       return token;
@@ -98,6 +102,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET || 'nomaddesk_jwt_secret_dev',
+  secret: getAuthSecret(),
   trustHost: true,
 });

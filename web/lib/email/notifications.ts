@@ -181,7 +181,7 @@ export async function notifyPasswordReset(
 }
 
 export async function notifyContactForm(
-  input: { name: string; email: string; message: string },
+  input: { name: string; email: string; subject?: string; message: string },
   adminEmail?: string,
   options?: NotificationOptions,
 ): Promise<boolean> {
