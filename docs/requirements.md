@@ -1,6 +1,6 @@
 # NomadDesk — Yêu cầu sản phẩm
 
-Tài liệu mô tả phạm vi chức năng, vai trò, quy tắc nghiệp vụ và tiêu chí nghiệm thu của NomadDesk. Cách chạy xem [README.md](README.md).
+Tài liệu mô tả phạm vi chức năng, vai trò, quy tắc nghiệp vụ và tiêu chí nghiệm thu của NomadDesk. Cách chạy xem [README](../README.md); các tài liệu khác xem [mục lục docs](README.md).
 
 ---
 

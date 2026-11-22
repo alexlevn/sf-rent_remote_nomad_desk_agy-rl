@@ -2,7 +2,7 @@
 
 **NomadDesk** là nền tảng marketplace chọn lọc cho thuê căn hộ trung & dài hạn (≥ 30 đêm) trang bị sẵn trạm làm việc công thái học (Workstation) dành cho Digital Nomads và Remote Workers. Hệ thống hỗ trợ trọn vẹn 3 vai trò **Guest / Host / Admin** (kèm trình soạn thảo trực quan Tiptap, thư viện upload ảnh lưu trên Docker volume, chống đặt trùng bằng Postgres `btree_gist`, Mailpit email và thanh toán mock) và chạy hoàn toàn local.
 
-Phạm vi chức năng, vai trò, quy tắc nghiệp vụ và tiêu chí nghiệm thu: xem [REQUIREMENTS.md](REQUIREMENTS.md).
+Tài liệu sản phẩm và kỹ thuật (yêu cầu, kiến trúc, database, API, deploy): xem [docs/README.md](docs/README.md).
 
 ---
 
@@ -116,6 +116,18 @@ cd web && npm run e2e:docker -- --reporter=list
 
 ---
 
+## Tài liệu
+
+| Tài liệu | Nội dung |
+| --- | --- |
+| [Yêu cầu sản phẩm](docs/requirements.md) | Phạm vi, vai trò & phân quyền, quy tắc nghiệp vụ, tiêu chí nghiệm thu |
+| [Kiến trúc](docs/architecture.md) | Stack, các khu của app, phân lớp code, luồng đặt phòng / upload / email |
+| [Database](docs/database.md) | Sơ đồ quan hệ, bảng & cột, ràng buộc chống đặt trùng, migration & seed |
+| [API & Server Actions](docs/api.md) | HTTP routes, Server Actions, guard phân quyền |
+| [Triển khai & Sao lưu](docs/deploy.md) | Biến môi trường, Docker, nâng cấp, backup / restore, VPS |
+
+---
+
 ## Cấu trúc thư mục
 
 ```text
@@ -124,6 +136,7 @@ cd web && npm run e2e:docker -- --reporter=list
 ├── .env.example              # Biến môi trường mẫu ở gốc repo
 ├── README.md                 # Tài liệu này
 ├── docs/
+│   ├── *.md                  # Tài liệu: requirements, architecture, database, api, deploy, milestones
 │   └── seed/                 # Dữ liệu mẫu (*.json) được seed vào Postgres
 └── web/                      # Ứng dụng Next.js 16 + TypeScript + Tailwind CSS v4
     ├── app/                  # App Router pages, layouts, Server Actions, API Routes (/api/*, /uploads/*)
