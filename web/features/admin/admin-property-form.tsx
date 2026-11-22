@@ -1,61 +1,36 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import {
-  AlertCircle,
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  Building2,
-  CalendarCheck,
-  Clock,
-  DollarSign,
-  ExternalLink,
-  FileText,
-  Image as ImageIcon,
-  Images,
-  Laptop,
-  Loader2,
-  MapPin,
-  Plus,
-  Save,
-  Send,
-  Sliders,
-  Star,
-  Trash2,
-} from 'lucide-react';
-import type { HostProfile, Location, Property, PropertyStatus } from '@/lib/types';
-import { isSafeImagePath } from '@/lib/validations/media';
-import { BOOKING_RULES } from '@/content/booking-rules';
-import { INT4_MAX, formatLastSaved } from '@/lib/format';
-import {
-  createAdminPropertyAction,
-  updateAdminPropertyAction,
-} from '@/app/admin/admin-actions';
-import { TiptapEditor } from '@/features/admin/tiptap-editor';
-import { CurrencyInput } from '@/features/media/currency-input';
-import {
-  MediaLibraryModal,
-  type SelectedMediaItem,
-} from '@/features/media/media-library-modal';
+import { AlertCircle, ArrowLeft } from 'lucide-react';
+import type { HostProfile, Location, Property } from '@/lib/types';
+import { formatLastSaved } from '@/lib/format';
+import { createAdminPropertyAction, updateAdminPropertyAction } from '@/app/admin/admin-actions';
+import { MediaLibraryModal } from '@/features/media/media-library-modal';
 import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
+import { usePropertyImages } from '@/features/property-form/use-property-images';
 import { cn } from '@/lib/utils';
-
-const SEED_GALLERY_OPTIONS = [
-  '/seed/property/prop-madrid-1.webp',
-  '/seed/property/prop-madrid-2.webp',
-  '/seed/property/prop-madrid-3.webp',
-  '/seed/property/prop-madrid-4.webp',
-  '/seed/property/prop-barcelona-1.webp',
-  '/seed/property/prop-barcelona-2.webp',
-  '/seed/property/prop-buenos-aires-1.webp',
-  '/seed/property/prop-lima-1.webp',
-];
-
-const MAX_IMAGES = 50;
+import {
+  DEFAULT_PROPERTY_IMAGE,
+  buildAdminPropertyPayload,
+  buildInitialValues,
+  resolveDefaultHostId,
+  resolveDefaultLocation,
+  validateAdminPropertyForm,
+  type AdminPropertyFormErrors,
+  type AdminPropertyFormValues,
+  type SetAdminPropertyField,
+} from '@/features/admin/property-form/form-values';
+import { SubmitLabel } from '@/features/admin/property-form/form-ui';
+import { BasicsSection, RichContentSection } from '@/features/admin/property-form/content-sections';
+import {
+  PricingSection,
+  SpecsSection,
+  WorkstationSection,
+} from '@/features/admin/property-form/detail-sections';
+import { LocationCard, PublishCard } from '@/features/admin/property-form/sidebar-cards';
+import { AdminPhotosCard } from '@/features/admin/property-form/admin-photos-card';
 
 interface AdminPropertyFormProps {
   initialData?: Property;
@@ -63,195 +38,23 @@ interface AdminPropertyFormProps {
   locations: Location[];
 }
 
-export function AdminPropertyForm({
-  initialData,
-  hosts,
-  locations,
-}: AdminPropertyFormProps) {
+export function AdminPropertyForm({ initialData, hosts, locations }: AdminPropertyFormProps) {
   const router = useRouter();
   const isEditMode = Boolean(initialData);
 
-  const defaultHostId = (() => {
-    if (initialData?.hostId) return String(initialData.hostId);
-    const approvedHost = hosts.find((h) => h.status === 'approved');
-    if (approvedHost) return String(approvedHost.id);
-    return hosts[0] ? String(hosts[0].id) : '';
-  })();
+  const [defaultLocation] = useState(() => resolveDefaultLocation(initialData, locations));
+  const [values, setValues] = useState<AdminPropertyFormValues>(() =>
+    buildInitialValues(initialData, resolveDefaultHostId(initialData, hosts), defaultLocation)
+  );
+  const setField = useCallback<SetAdminPropertyField>((key, value) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
-  const defaultLocation = (() => {
-    if (initialData?.locationId) {
-      const byId = locations.find((l) => l.id === initialData.locationId);
-      if (byId) return byId;
-    }
-    if (initialData?.city) {
-      const byCity = locations.find(
-        (l) => l.city.toLowerCase() === initialData.city.toLowerCase(),
-      );
-      if (byCity) return byCity;
-      // Preserve unmatched city in edit mode instead of silently overwriting with locations[0]
-      return null;
-    }
-    return locations[0] ?? null;
-  })();
-
-  // Ownership, status & booking mode
-  const [hostId, setHostId] = useState<string>(defaultHostId);
-  const [status, setStatus] = useState<PropertyStatus>(
-    initialData?.status ?? 'published',
-  );
-  const [isDirectBooking, setIsDirectBooking] = useState<boolean>(
-    initialData?.isDirectBooking ?? true,
-  );
-
-  // Basics & location
-  const [title, setTitle] = useState<string>(initialData?.title ?? '');
-  const [slug, setSlug] = useState<string>(initialData?.slug ?? '');
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(
-    defaultLocation ? String(defaultLocation.id) : '',
-  );
-  const [neighborhood, setNeighborhood] = useState<string>(
-    initialData?.neighborhood ?? '',
-  );
-  const [address, setAddress] = useState<string>(initialData?.address ?? '');
-
-  // Pricing & stay rules
-  const [monthlyRentUsd, setMonthlyRentUsd] = useState<number | ''>(
-    initialData?.pricePerMonth != null
-      ? Math.round(initialData.pricePerMonth / 100)
-      : 2800,
-  );
-  const [minimumStayNights, setMinimumStayNights] = useState<string>(
-    String(initialData?.minimumStayNights ?? BOOKING_RULES.minimumStayNights),
-  );
-  const [checkInStart, setCheckInStart] = useState<string>(
-    initialData?.checkInStart ?? '15:00',
-  );
-  const [checkOut, setCheckOut] = useState<string>(
-    initialData?.checkOut ?? '11:00',
-  );
-
-  // Specs & amenities
-  const [bedrooms, setBedrooms] = useState<string>(
-    String(initialData?.bedrooms ?? 1),
-  );
-  const [bathrooms, setBathrooms] = useState<string>(
-    String(initialData?.bathrooms ?? 1),
-  );
-  const [bedsCount, setBedsCount] = useState<string>(
-    String(initialData?.bedsCount ?? 1),
-  );
-  const [totalSurface, setTotalSurface] = useState<string>(
-    String(initialData?.totalSurface ?? 65),
-  );
-  const [maxGuests, setMaxGuests] = useState<string>(
-    String(initialData?.maxGuests ?? 2),
-  );
-
-  const [kitchen, setKitchen] = useState<boolean>(initialData?.kitchen ?? true);
-  const [laundry, setLaundry] = useState<boolean>(initialData?.laundry ?? true);
-  const [balcony, setBalcony] = useState<boolean>(initialData?.balcony ?? false);
-  const [petFriendly, setPetFriendly] = useState<boolean>(
-    initialData?.petFriendly ?? false,
-  );
-  const [pool, setPool] = useState<boolean>(initialData?.pool ?? false);
-  const [gym, setGym] = useState<boolean>(initialData?.gym ?? false);
-  const [terrace, setTerrace] = useState<boolean>(initialData?.terrace ?? false);
-
-  // Workstation specs
-  const [hasWorkstation, setHasWorkstation] = useState<boolean>(
-    initialData?.workstation?.hasWorkstation ?? true,
-  );
-  const [desk, setDesk] = useState<string>(
-    initialData?.workstation?.desk ?? 'Ergonomic Standing Desk',
-  );
-  const [chair, setChair] = useState<string>(
-    initialData?.workstation?.chair ?? 'Herman Miller Aeron',
-  );
-  const [monitors, setMonitors] = useState<string>(
-    initialData?.workstation?.monitors ?? '27" 4K UHD Monitor',
-  );
-  const [keyboard, setKeyboard] = useState<string>(
-    initialData?.workstation?.keyboard ?? 'Mechanical Keyboard & Wireless Mouse',
-  );
-  const [wifiSpeed, setWifiSpeed] = useState<string>(
-    String(initialData?.workstation?.wifiSpeed ?? 600),
-  );
-
-  // Photos manager
-  const [images, setImages] = useState<string[]>(
-    initialData?.images && initialData.images.length > 0
-      ? initialData.images
-      : ['/seed/property/prop-madrid-1.webp'],
-  );
-  const [newImageUrl, setNewImageUrl] = useState<string>('');
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [showSeedPicker, setShowSeedPicker] = useState<boolean>(false);
-  const [isMediaModalOpen, setIsMediaModalOpen] = useState<boolean>(false);
-
-  // Rich content (Tiptap)
-  const [description, setDescription] = useState<string>(
-    initialData?.description ?? '',
-  );
-  const [houseRules, setHouseRules] = useState<string>(
-    initialData?.houseRules ??
-      '<p>No smoking inside. Quiet hours 22:00 - 08:00.</p>',
-  );
-
-  // Form submission & validation state
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<AdminPropertyFormErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const isSubmittingRef = useRef<boolean>(false);
   const formRef = useRef<HTMLFormElement | null>(null);
-
-  // Track dirty state against initial snapshot for unsaved-changes warnings
-  const currentSnapshot = JSON.stringify({
-    hostId,
-    status,
-    isDirectBooking,
-    title,
-    slug,
-    selectedLocationId,
-    neighborhood,
-    address,
-    monthlyRentUsd,
-    minimumStayNights,
-    checkInStart,
-    checkOut,
-    bedrooms,
-    bathrooms,
-    bedsCount,
-    totalSurface,
-    maxGuests,
-    kitchen,
-    laundry,
-    balcony,
-    petFriendly,
-    pool,
-    gym,
-    terrace,
-    hasWorkstation,
-    desk,
-    chair,
-    monitors,
-    keyboard,
-    wifiSpeed,
-    images,
-    description,
-    houseRules,
-  });
-  const [baselineSnapshot, setBaselineSnapshot] = useState<string>(
-    () => currentSnapshot,
-  );
-  const isDirty = currentSnapshot !== baselineSnapshot;
-  const { confirmLeave } = useUnsavedChanges(isDirty);
-
-  const lastSavedLabel = formatLastSaved(initialData?.updatedAt);
-  const canViewOnWeb = Boolean(
-    isEditMode && initialData?.status === 'published' && initialData.slug,
-  );
-  const coverImage = images[0] ?? null;
-  const selectedHost = hosts.find((h) => String(h.id) === hostId) ?? null;
 
   const clearImagesFieldError = () => {
     setErrors((prev) => {
@@ -262,204 +65,24 @@ export function AdminPropertyForm({
     });
   };
 
-  const handleAddImage = () => {
-    const trimmed = newImageUrl.trim();
-    if (!isSafeImagePath(trimmed)) {
-      setImageError(
-        'Enter a valid image path (/seed/..., /uploads/...) or https:// URL.',
-      );
-      return;
-    }
-    if (images.includes(trimmed)) {
-      setImageError('This image is already in the gallery.');
-      return;
-    }
-    if (images.length >= MAX_IMAGES) {
-      setImageError(`Maximum ${MAX_IMAGES} images allowed per property.`);
-      return;
-    }
-    setImages((prev) => [...prev, trimmed]);
-    setNewImageUrl('');
-    setImageError(null);
-    clearImagesFieldError();
-  };
+  const photos = usePropertyImages(
+    initialData?.images && initialData.images.length > 0 ? initialData.images : [DEFAULT_PROPERTY_IMAGE],
+    clearImagesFieldError
+  );
 
-  const handleMediaSelect = (selected: SelectedMediaItem[]) => {
-    if (selected.length === 0) return;
+  // Track dirty state against initial snapshot for unsaved-changes warnings
+  const currentSnapshot = JSON.stringify({ ...values, images: photos.images });
+  const [baselineSnapshot, setBaselineSnapshot] = useState<string>(() => currentSnapshot);
+  const isDirty = currentSnapshot !== baselineSnapshot;
+  const { confirmLeave } = useUnsavedChanges(isDirty);
 
-    const next = [...images];
-    let hitLimit = false;
-    let addedCount = 0;
-
-    for (const item of selected) {
-      const trimmed = item.url.trim();
-      if (!isSafeImagePath(trimmed) || next.includes(trimmed)) continue;
-      if (next.length >= MAX_IMAGES) {
-        hitLimit = true;
-        break;
-      }
-      next.push(trimmed);
-      addedCount += 1;
-    }
-
-    if (addedCount > 0) {
-      setImages(next);
-      clearImagesFieldError();
-    }
-
-    setImageError(
-      hitLimit ? `Maximum ${MAX_IMAGES} images allowed per property.` : null,
-    );
-  };
-
-  const handleToggleSeedImage = (url: string) => {
-    setImageError(null);
-    if (images.includes(url)) {
-      setImages((prev) => prev.filter((item) => item !== url));
-      return;
-    }
-    if (images.length >= MAX_IMAGES) {
-      setImageError(`Maximum ${MAX_IMAGES} images allowed per property.`);
-      return;
-    }
-    setImages((prev) => [...prev, url]);
-    clearImagesFieldError();
-  };
-
-  const handleMoveImage = (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= images.length) return;
-    setImages((prev) => {
-      const next = [...prev];
-      const temp = next[index];
-      next[index] = next[targetIndex];
-      next[targetIndex] = temp;
-      return next;
-    });
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setImages((prev) => prev.filter((_, idx) => idx !== index));
-  };
+  const lastSavedLabel = formatLastSaved(initialData?.updatedAt);
+  const canViewOnWeb = Boolean(isEditMode && initialData?.status === 'published' && initialData.slug);
+  const errorCount = Object.keys(errors).length;
 
   const handleCancel = () => {
     if (!confirmLeave()) return;
     router.push('/admin/properties');
-  };
-
-  const validate = (): boolean => {
-    const nextErrors: Record<string, string> = {};
-
-    const parsedHostId = Number(hostId);
-    if (!Number.isInteger(parsedHostId) || parsedHostId <= 0) {
-      nextErrors.hostId = 'Please select an owning host.';
-    }
-
-    if (!title.trim()) {
-      nextErrors.title = 'Property title is required.';
-    } else if (title.trim().length > 255) {
-      nextErrors.title = 'Title must be 255 characters or fewer.';
-    }
-
-    if (slug.trim() && !/^[a-z0-9-]+$/i.test(slug.trim())) {
-      nextErrors.slug = 'Slug may only contain letters, numbers, and hyphens.';
-    }
-
-    const chosenLocation = locations.find(
-      (l) => String(l.id) === selectedLocationId,
-    );
-    if (!chosenLocation && !initialData?.city) {
-      nextErrors.city = 'Please select a destination city.';
-    }
-
-    if (
-      monthlyRentUsd === '' ||
-      !Number.isFinite(monthlyRentUsd) ||
-      monthlyRentUsd <= 0
-    ) {
-      nextErrors.monthlyRentUsd = 'Monthly rent must be greater than $0.';
-    } else if (Math.round(monthlyRentUsd * 100) > INT4_MAX) {
-      nextErrors.monthlyRentUsd =
-        'Monthly rent exceeds the maximum allowed amount.';
-    }
-
-    const minStayNum = Number(minimumStayNights);
-    if (
-      minimumStayNights.trim() === '' ||
-      !Number.isInteger(minStayNum) ||
-      minStayNum < BOOKING_RULES.minimumStayNights ||
-      minStayNum > 3650
-    ) {
-      nextErrors.minimumStayNights = `Minimum stay must be an integer between ${BOOKING_RULES.minimumStayNights} and 3650 nights.`;
-    }
-
-    const bedroomsNum = Number(bedrooms);
-    if (
-      bedrooms.trim() === '' ||
-      !Number.isInteger(bedroomsNum) ||
-      bedroomsNum < 0 ||
-      bedroomsNum > 50
-    ) {
-      nextErrors.bedrooms = 'Bedrooms must be between 0 and 50.';
-    }
-
-    const bathroomsNum = Number(bathrooms);
-    if (
-      bathrooms.trim() === '' ||
-      !Number.isInteger(bathroomsNum) ||
-      bathroomsNum < 0 ||
-      bathroomsNum > 50
-    ) {
-      nextErrors.bathrooms = 'Bathrooms must be between 0 and 50.';
-    }
-
-    const bedsNum = Number(bedsCount);
-    if (
-      bedsCount.trim() === '' ||
-      !Number.isInteger(bedsNum) ||
-      bedsNum < 0 ||
-      bedsNum > 50
-    ) {
-      nextErrors.bedsCount = 'Beds count must be between 0 and 50.';
-    }
-
-    const surfaceNum = Number(totalSurface);
-    if (
-      totalSurface.trim() === '' ||
-      !Number.isInteger(surfaceNum) ||
-      surfaceNum < 0 ||
-      surfaceNum > 100000
-    ) {
-      nextErrors.totalSurface =
-        'Total surface must be between 0 and 100,000 m².';
-    }
-
-    const guestsNum = Number(maxGuests);
-    if (
-      maxGuests.trim() === '' ||
-      !Number.isInteger(guestsNum) ||
-      guestsNum < 1 ||
-      guestsNum > 50
-    ) {
-      nextErrors.maxGuests = 'Max guests must be between 1 and 50.';
-    }
-
-    const wifiNum = Number(wifiSpeed);
-    if (
-      wifiSpeed.trim() === '' ||
-      !Number.isInteger(wifiNum) ||
-      wifiNum < 0 ||
-      wifiNum > 100000
-    ) {
-      nextErrors.wifiSpeed = 'Wi-Fi speed must be between 0 and 100,000 Mbps.';
-    }
-
-    if (images.length === 0) {
-      nextErrors.images = 'Add at least one property photo.';
-    }
-
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -467,7 +90,13 @@ export function AdminPropertyForm({
     if (isSubmittingRef.current) return;
     setServerError(null);
 
-    if (!validate()) {
+    const nextErrors = validateAdminPropertyForm(values, {
+      locations,
+      initialData,
+      imageCount: photos.images.length,
+    });
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
       requestAnimationFrame(() => {
         const firstInvalid = formRef.current?.querySelector<HTMLElement>(
           '[aria-invalid="true"], [data-field-error="true"]'
@@ -478,52 +107,7 @@ export function AdminPropertyForm({
       return;
     }
 
-    const chosenLocation = locations.find(
-      (l) => String(l.id) === selectedLocationId,
-    );
-    const parsedHostId = Number(hostId);
-    const trimmedSlug = slug.trim().toLowerCase();
-
-    const payload: Partial<Property> & { hostId: number } = {
-      hostId: parsedHostId,
-      title: title.trim(),
-      ...(trimmedSlug ? { slug: trimmedSlug } : {}),
-      locationId: chosenLocation?.id ?? initialData?.locationId,
-      city: chosenLocation?.city ?? initialData?.city ?? 'Madrid',
-      country: chosenLocation?.country ?? initialData?.country ?? 'Spain',
-      neighborhood: neighborhood.trim(),
-      address: address.trim(),
-      pricePerMonth: Math.round(Number(monthlyRentUsd) * 100),
-      currency: initialData?.currency ?? 'USD',
-      minimumStayNights: Number(minimumStayNights),
-      checkInStart: checkInStart.trim() || '15:00',
-      checkOut: checkOut.trim() || '11:00',
-      bedrooms: Number(bedrooms),
-      bathrooms: Number(bathrooms),
-      bedsCount: Number(bedsCount),
-      totalSurface: Number(totalSurface),
-      maxGuests: Number(maxGuests),
-      kitchen,
-      laundry,
-      balcony,
-      petFriendly,
-      pool,
-      gym,
-      terrace,
-      workstation: {
-        hasWorkstation,
-        desk: desk.trim(),
-        chair: chair.trim(),
-        monitors: monitors.trim(),
-        keyboard: keyboard.trim(),
-        wifiSpeed: Number(wifiSpeed),
-      },
-      images,
-      isDirectBooking,
-      status,
-      description,
-      houseRules,
-    };
+    const payload = buildAdminPropertyPayload(values, photos.images, { locations, initialData });
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
@@ -543,20 +127,13 @@ export function AdminPropertyForm({
       router.push('/admin/properties');
       router.refresh();
     } catch (err: unknown) {
-      setServerError(
-        err instanceof Error ? err.message : 'Failed to save property.',
-      );
+      setServerError(err instanceof Error ? err.message : 'Failed to save property.');
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  const inputClass =
-    'w-full min-h-10 text-sm py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/25';
-  const labelClass =
-    'block text-xs font-semibold text-[var(--color-text-on-light)] mb-1';
-  const cardClass =
-    'bg-white border border-[var(--color-border-light)] rounded-xl p-5 sm:p-6 space-y-5 shadow-2xs';
+  const sectionProps = { values, errors, setField };
 
   return (
     <>
@@ -585,7 +162,6 @@ export function AdminPropertyForm({
           )}
         </div>
 
-        {/* Server Error Alert */}
         {serverError && (
           <div
             role="alert"
@@ -602,917 +178,31 @@ export function AdminPropertyForm({
 
         {/* WordPress / WooCommerce Two-Column Editor Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* LEFT COLUMN (Main Content) */}
           <div className="lg:col-span-2 space-y-6 min-w-0">
-            {/* Basics: Title & Slug */}
-            <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <Building2 className="w-4 h-4 text-[var(--color-brand)]" />
-                <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                  Basics
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="property-title" className={labelClass}>
-                    Property Title <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="property-title"
-                    data-testid="property-title-input"
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Sunlit 2BR Penthouse with Dual-Monitor Desk"
-                    aria-invalid={Boolean(errors.title) || undefined}
-                    className={inputClass}
-                    required
-                  />
-                  {errors.title && (
-                    <p className="text-xs text-red-600 mt-1">{errors.title}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-slug" className={labelClass}>
-                    URL Slug{' '}
-                    <span className="font-normal text-[var(--color-text-on-light-muted)]">
-                      (auto-generated if blank)
-                    </span>
-                  </label>
-                  <input
-                    id="property-slug"
-                    data-testid="property-slug-input"
-                    type="text"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    placeholder="e.g. sunlit-2br-penthouse-madrid"
-                    className={inputClass}
-                  />
-                  {errors.slug && (
-                    <p className="text-xs text-red-600 mt-1">{errors.slug}</p>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* Rich Description & House Rules (Tiptap) */}
-            <section className={cardClass}>
-              <div className="flex items-start justify-between gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[var(--color-brand)]" />
-                    <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                      Description & House Rules
-                    </h2>
-                  </div>
-                  <p className="text-xs text-[var(--color-text-on-light-muted)] mt-1">
-                    Supports rich formatting, lists, tables, links, embedded images via Media Library, and sanitized HTML.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <span className={labelClass}>Property Description</span>
-                <TiptapEditor
-                  value={description}
-                  onChange={setDescription}
-                  label="Property Description"
-                  placeholder="Describe the apartment layout, natural light, neighborhood highlights, and workspace..."
-                  minHeight="220px"
-                  testIdPrefix="property-description-editor"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <span className={labelClass}>House Rules</span>
-                <TiptapEditor
-                  value={houseRules}
-                  onChange={setHouseRules}
-                  label="House Rules & Check-in Notes"
-                  placeholder="Specify smoking rules, quiet hours, pet policy, and key handover notes..."
-                  minHeight="160px"
-                  testIdPrefix="property-rules-editor"
-                />
-              </div>
-            </section>
-
-            {/* Pricing, Stay Rules & Booking Mode */}
-            <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <DollarSign className="w-4 h-4 text-[var(--color-brand)]" />
-                <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                  Pricing, Stay Rules & Booking Mode
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="property-price" className={labelClass}>
-                    Monthly Rent (USD) <span className="text-red-500">*</span>
-                  </label>
-                  <CurrencyInput
-                    id="property-price"
-                    value={monthlyRentUsd}
-                    onChange={setMonthlyRentUsd}
-                    currencySymbol="$"
-                    suffix="/ mo"
-                    min={1}
-                    placeholder="2,800"
-                    testId="property-price-input"
-                    ariaInvalid={Boolean(errors.monthlyRentUsd)}
-                    required
-                  />
-                  {errors.monthlyRentUsd && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.monthlyRentUsd}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-min-stay" className={labelClass}>
-                    Minimum Stay (Nights ≥ 30){' '}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="property-min-stay"
-                    data-testid="property-min-stay-input"
-                    type="number"
-                    min={30}
-                    max={3650}
-                    step={1}
-                    value={minimumStayNights}
-                    onChange={(e) => setMinimumStayNights(e.target.value)}
-                    className={inputClass}
-                    required
-                  />
-                  {errors.minimumStayNights && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.minimumStayNights}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-checkin" className={labelClass}>
-                    Check-in Start
-                  </label>
-                  <input
-                    id="property-checkin"
-                    type="text"
-                    value={checkInStart}
-                    onChange={(e) => setCheckInStart(e.target.value)}
-                    placeholder="15:00"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="property-checkout" className={labelClass}>
-                    Check-out Time
-                  </label>
-                  <input
-                    id="property-checkout"
-                    type="text"
-                    value={checkOut}
-                    onChange={(e) => setCheckOut(e.target.value)}
-                    placeholder="11:00"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              {/* Booking Mode */}
-              <div className="space-y-2">
-                <span className={labelClass}>Booking Mode</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsDirectBooking(true)}
-                    data-testid="booking-mode-instant"
-                    className={cn(
-                      'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                      isDirectBooking
-                        ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)]'
-                        : 'border-[var(--color-border-light)] hover:bg-neutral-50',
-                    )}
-                  >
-                    <CalendarCheck
-                      className={cn(
-                        'w-5 h-5 shrink-0 mt-0.5',
-                        isDirectBooking
-                          ? 'text-[var(--color-brand)]'
-                          : 'text-neutral-400',
-                      )}
-                    />
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--color-text-on-light)]">
-                        Instant Booking
-                      </div>
-                      <p className="text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
-                        Guests confirm immediately upon checkout without waiting for host approval.
-                      </p>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsDirectBooking(false)}
-                    data-testid="booking-mode-request"
-                    className={cn(
-                      'flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all cursor-pointer',
-                      !isDirectBooking
-                        ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)]'
-                        : 'border-[var(--color-border-light)] hover:bg-neutral-50',
-                    )}
-                  >
-                    <CalendarCheck
-                      className={cn(
-                        'w-5 h-5 shrink-0 mt-0.5',
-                        !isDirectBooking
-                          ? 'text-[var(--color-brand)]'
-                          : 'text-neutral-400',
-                      )}
-                    />
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--color-text-on-light)]">
-                        Request to Book
-                      </div>
-                      <p className="text-xs text-[var(--color-text-on-light-muted)] mt-0.5">
-                        Host has 48 hours to review and accept or decline each reservation request.
-                      </p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Property Specs & Amenities */}
-            <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <Sliders className="w-4 h-4 text-[var(--color-brand)]" />
-                <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                  Property Specs & Amenities
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                <div>
-                  <label htmlFor="property-bedrooms" className={labelClass}>
-                    Bedrooms
-                  </label>
-                  <input
-                    id="property-bedrooms"
-                    type="number"
-                    min={0}
-                    max={50}
-                    value={bedrooms}
-                    onChange={(e) => setBedrooms(e.target.value)}
-                    className={inputClass}
-                  />
-                  {errors.bedrooms && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.bedrooms}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-bathrooms" className={labelClass}>
-                    Bathrooms
-                  </label>
-                  <input
-                    id="property-bathrooms"
-                    type="number"
-                    min={0}
-                    max={50}
-                    value={bathrooms}
-                    onChange={(e) => setBathrooms(e.target.value)}
-                    className={inputClass}
-                  />
-                  {errors.bathrooms && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.bathrooms}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-beds" className={labelClass}>
-                    Beds
-                  </label>
-                  <input
-                    id="property-beds"
-                    type="number"
-                    min={0}
-                    max={50}
-                    value={bedsCount}
-                    onChange={(e) => setBedsCount(e.target.value)}
-                    className={inputClass}
-                  />
-                  {errors.bedsCount && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.bedsCount}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-surface" className={labelClass}>
-                    Surface (m²)
-                  </label>
-                  <input
-                    id="property-surface"
-                    type="number"
-                    min={0}
-                    max={100000}
-                    value={totalSurface}
-                    onChange={(e) => setTotalSurface(e.target.value)}
-                    className={inputClass}
-                  />
-                  {errors.totalSurface && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.totalSurface}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-max-guests" className={labelClass}>
-                    Max Guests
-                  </label>
-                  <input
-                    id="property-max-guests"
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={maxGuests}
-                    onChange={(e) => setMaxGuests(e.target.value)}
-                    className={inputClass}
-                  />
-                  {errors.maxGuests && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.maxGuests}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Amenities Checkboxes */}
-              <div>
-                <span className={labelClass}>Included Amenities</span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-1.5">
-                  {(
-                    [
-                      ['Kitchen', kitchen, setKitchen],
-                      ['Laundry', laundry, setLaundry],
-                      ['Balcony', balcony, setBalcony],
-                      ['Pet Friendly', petFriendly, setPetFriendly],
-                      ['Pool', pool, setPool],
-                      ['Gym', gym, setGym],
-                      ['Terrace', terrace, setTerrace],
-                    ] as const
-                  ).map(([label, checked, setter]) => (
-                    <label
-                      key={label}
-                      className={cn(
-                        'flex min-h-10 items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium cursor-pointer transition-colors',
-                        checked
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand-light)] text-[var(--color-brand)]'
-                          : 'border-[var(--color-border-light)] text-[var(--color-text-on-light)] hover:bg-neutral-50',
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => setter(e.target.checked)}
-                        className="accent-[var(--color-brand)]"
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            {/* Remote Workstation Specs */}
-            <section className={cardClass}>
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--color-border-light)]">
-                <div className="flex items-center gap-2">
-                  <Laptop className="w-4 h-4 text-[var(--color-brand)]" />
-                  <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                    Remote Workstation Specs
-                  </h2>
-                </div>
-
-                <label className="inline-flex min-h-10 items-center gap-2 text-xs font-semibold text-[var(--color-text-on-light)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={hasWorkstation}
-                    onChange={(e) => setHasWorkstation(e.target.checked)}
-                    className="accent-[var(--color-brand)]"
-                  />
-                  <span>Includes Dedicated Workstation</span>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="ws-desk" className={labelClass}>
-                    Desk
-                  </label>
-                  <input
-                    id="ws-desk"
-                    type="text"
-                    value={desk}
-                    onChange={(e) => setDesk(e.target.value)}
-                    placeholder="e.g. Ergonomic Standing Desk"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="ws-chair" className={labelClass}>
-                    Chair
-                  </label>
-                  <input
-                    id="ws-chair"
-                    type="text"
-                    value={chair}
-                    onChange={(e) => setChair(e.target.value)}
-                    placeholder="e.g. Herman Miller Aeron"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="ws-monitors" className={labelClass}>
-                    Monitor(s)
-                  </label>
-                  <input
-                    id="ws-monitors"
-                    type="text"
-                    value={monitors}
-                    onChange={(e) => setMonitors(e.target.value)}
-                    placeholder='e.g. Dual 27" 4K UHD Monitors'
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="ws-wifi" className={labelClass}>
-                    Verified Wi-Fi Speed (Mbps)
-                  </label>
-                  <input
-                    id="ws-wifi"
-                    type="number"
-                    min={0}
-                    max={100000}
-                    value={wifiSpeed}
-                    onChange={(e) => setWifiSpeed(e.target.value)}
-                    className={inputClass}
-                  />
-                  {errors.wifiSpeed && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {errors.wifiSpeed}
-                    </p>
-                  )}
-                </div>
-
-                <div className="md:col-span-2">
-                  <label htmlFor="ws-keyboard" className={labelClass}>
-                    Keyboard & Peripherals
-                  </label>
-                  <input
-                    id="ws-keyboard"
-                    type="text"
-                    value={keyboard}
-                    onChange={(e) => setKeyboard(e.target.value)}
-                    placeholder="e.g. Mechanical Keyboard & Wireless Mouse"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-            </section>
+            <BasicsSection {...sectionProps} />
+            <RichContentSection values={values} setField={setField} />
+            <PricingSection {...sectionProps} />
+            <SpecsSection {...sectionProps} />
+            <WorkstationSection {...sectionProps} />
           </div>
 
-          {/* RIGHT COLUMN (Sidebar Meta Boxes) */}
           <div className="space-y-5 min-w-0">
-            {/* 1. Publish Card */}
-            <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <Send className="w-4 h-4 text-[var(--color-brand)]" />
-                <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                  Publish
-                </h2>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="property-status" className={labelClass}>
-                    Publication Status
-                  </label>
-                  <select
-                    id="property-status"
-                    data-testid="property-status-select"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value as PropertyStatus)}
-                    className={inputClass}
-                  >
-                    <option value="published">
-                      Published (Visible publicly)
-                    </option>
-                    <option value="pending_review">Pending Review</option>
-                    <option value="hidden">Hidden (Removed from search)</option>
-                    <option value="draft">Draft</option>
-                    {initialData?.status === 'rejected' && (
-                      <option value="rejected">Rejected</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="property-host" className={labelClass}>
-                    Owning Host <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="property-host"
-                    data-testid="property-host-select"
-                    value={hostId}
-                    onChange={(e) => setHostId(e.target.value)}
-                    aria-invalid={Boolean(errors.hostId) || undefined}
-                    className={inputClass}
-                    required
-                  >
-                    <option value="">Select a host...</option>
-                    {hosts.map((h) => (
-                      <option key={h.id} value={String(h.id)}>
-                        {h.displayName} (Host #{h.id} · {h.status})
-                      </option>
-                    ))}
-                  </select>
-                  {selectedHost && selectedHost.status !== 'approved' && (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-1.5">
-                      This host is currently <strong>{selectedHost.status}</strong>. Listings owned by non-approved hosts will not be publicly bookable until the host is approved.
-                    </p>
-                  )}
-                  {errors.hostId && (
-                    <p className="text-xs text-red-600 mt-1">{errors.hostId}</p>
-                  )}
-                </div>
-
-                {lastSavedLabel && (
-                  <div className="flex items-center gap-2 text-xs text-[var(--color-text-on-light-muted)] pt-1">
-                    <Clock className="w-3.5 h-3.5 shrink-0" />
-                    <span>Last saved: {lastSavedLabel}</span>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--color-border-light)]">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    data-testid="property-submit-btn"
-                    className="w-full min-h-10 rounded-xl bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white text-sm font-semibold px-4 py-2.5 inline-flex items-center justify-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>
-                          {isEditMode
-                            ? 'Saving Changes...'
-                            : 'Creating Property...'}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>
-                          {isEditMode ? 'Save Changes' : 'Create Property'}
-                        </span>
-                      </>
-                    )}
-                  </button>
-
-                  {canViewOnWeb && initialData && (
-                    <Link
-                      href={`/l/apartments/${initialData.slug}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-testid="property-view-on-web-link"
-                      className="w-full min-h-10 rounded-xl border border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-4 py-2 inline-flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>View on Web</span>
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* 2. Property Photos Card */}
-            <section className={cardClass}>
-              <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-[var(--color-brand)]" />
-                  <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                    Property Photos ({images.length})
-                  </h2>
-                </div>
-              </div>
-
-              {/* Cover Photo Preview */}
-              {coverImage ? (
-                <div className="relative aspect-16/10 w-full overflow-hidden rounded-xl border border-[var(--color-border-light)] bg-[var(--color-surface-muted)]">
-                  <Image
-                    src={coverImage}
-                    alt={title.trim() || 'Property cover photo'}
-                    fill
-                    unoptimized
-                    sizes="(max-width: 1024px) 100vw, 33vw"
-                    className="object-cover"
-                  />
-                  <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-amber-100/95 px-2.5 py-0.5 text-[11px] font-bold text-amber-900 shadow-2xs">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    Cover Photo
-                  </span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center aspect-16/10 rounded-xl border border-dashed border-[var(--color-border-light)] bg-[var(--color-bg-light)] p-4 text-center text-xs text-[var(--color-text-on-light-muted)]">
-                  <ImageIcon className="w-6 h-6 text-[var(--color-text-light-subtle)] mb-1.5" />
-                  <span>No cover photo selected yet.</span>
-                </div>
-              )}
-
-              {/* Primary Media Library Trigger */}
-              <button
-                type="button"
-                data-testid="property-open-media-btn"
-                onClick={() => setIsMediaModalOpen(true)}
-                className="w-full min-h-10 inline-flex items-center justify-center gap-2 rounded-lg border border-[var(--color-brand)] bg-[var(--color-brand-light)] px-3.5 py-2 text-xs font-semibold text-[var(--color-brand)] hover:bg-[var(--color-brand)] hover:text-[var(--color-brand-text)] transition-colors cursor-pointer"
-              >
-                <Images className="w-4 h-4" />
-                <span>Upload / Media Library</span>
-              </button>
-
-              {/* Direct URL / Path Input */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="property-image-url"
-                  className="block text-[11px] font-semibold text-[var(--color-text-on-light-muted)]"
-                >
-                  Or paste image URL / local path
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="property-image-url"
-                    type="text"
-                    data-testid="property-image-url-input"
-                    value={newImageUrl}
-                    onChange={(e) => {
-                      setNewImageUrl(e.target.value);
-                      if (imageError) setImageError(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddImage();
-                      }
-                    }}
-                    placeholder="/uploads/..., /seed/..., or https://..."
-                    aria-label="Image URL or path"
-                    className="flex-1 min-w-0 min-h-10 text-xs py-2 px-3 rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]/25"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddImage}
-                    data-testid="property-add-image-btn"
-                    className="min-h-10 shrink-0 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white font-semibold inline-flex items-center gap-1 text-xs px-3 py-2 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Photo</span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSeedPicker((prev) => !prev)}
-                  className="w-full min-h-10 rounded-lg border border-[var(--color-border-light)] bg-white hover:bg-neutral-50 text-neutral-700 font-semibold text-xs px-3 py-1.5 transition-colors cursor-pointer"
-                >
-                  {showSeedPicker
-                    ? 'Hide Seed Gallery'
-                    : 'Pick from Seed Gallery'}
-                </button>
-
-                {imageError && (
-                  <p className="text-xs text-red-600" role="alert">
-                    {imageError}
-                  </p>
-                )}
-                {errors.images && (
-                  <p data-field-error="true" className="text-xs text-red-600" role="alert">
-                    {errors.images}
-                  </p>
-                )}
-              </div>
-
-              {/* Optional Seed Gallery Picker */}
-              {showSeedPicker && (
-                <div className="p-3 rounded-xl bg-neutral-50 border border-[var(--color-border-light)]">
-                  <p className="text-xs font-semibold text-[var(--color-text-on-light-muted)] mb-2">
-                    Click to add or remove seed photos:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {SEED_GALLERY_OPTIONS.map((url) => {
-                      const selected = images.includes(url);
-                      return (
-                        <button
-                          key={url}
-                          type="button"
-                          onClick={() => handleToggleSeedImage(url)}
-                          className={cn(
-                            'relative h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer',
-                            selected
-                              ? 'border-[var(--color-brand)] ring-2 ring-[var(--color-brand)]/25'
-                              : 'border-transparent hover:border-neutral-300',
-                          )}
-                        >
-                          <Image
-                            src={url}
-                            alt={url}
-                            fill
-                            unoptimized
-                            sizes="140px"
-                            className="object-cover"
-                          />
-                          {selected && (
-                            <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-[var(--color-brand)] text-white text-[10px] font-bold">
-                              Added
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Ordered Photo List */}
-              {images.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-[var(--color-text-on-light-muted)]">
-                    First photo is the cover image. Use arrows to reorder.
-                  </p>
-                  <ul
-                    className="space-y-2 max-h-80 overflow-y-auto pr-0.5"
-                    data-testid="property-images-list"
-                  >
-                    {images.map((img, idx) => (
-                      <li
-                        key={`${img}-${idx}`}
-                        className="flex items-center gap-2.5 p-2 rounded-xl border border-[var(--color-border-light)] bg-neutral-50/70"
-                      >
-                        <div className="relative w-12 h-10 rounded-lg overflow-hidden bg-neutral-200 shrink-0">
-                          <Image
-                            src={img}
-                            alt={`Property photo ${idx + 1}`}
-                            fill
-                            unoptimized
-                            sizes="48px"
-                            className="object-cover"
-                          />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-semibold text-[var(--color-text-on-light)]">
-                              #{idx + 1}
-                            </span>
-                            {idx === 0 && (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
-                                <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                                Cover
-                              </span>
-                            )}
-                          </div>
-                          <p
-                            className="text-[11px] font-mono text-[var(--color-text-on-light-muted)] truncate"
-                            title={img}
-                          >
-                            {img}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleMoveImage(idx, 'up')}
-                            disabled={idx === 0}
-                            title="Move up"
-                            aria-label={`Move photo ${idx + 1} up`}
-                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveImage(idx, 'down')}
-                            disabled={idx === images.length - 1}
-                            title="Move down"
-                            aria-label={`Move photo ${idx + 1} down`}
-                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-[var(--color-border-light)] bg-white text-[var(--color-text-on-light)] hover:bg-neutral-100 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(idx)}
-                            title="Remove photo"
-                            aria-label={`Remove photo ${idx + 1}`}
-                            className="flex min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </section>
-
-            {/* 3. Location Card */}
-            <section className={cardClass}>
-              <div className="flex items-center gap-2 pb-3 border-b border-[var(--color-border-light)]">
-                <MapPin className="w-4 h-4 text-[var(--color-brand)]" />
-                <h2 className="text-base font-bold text-[var(--color-text-on-light)]">
-                  Location
-                </h2>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="property-city" className={labelClass}>
-                    Destination City <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    id="property-city"
-                    data-testid="property-city-select"
-                    value={selectedLocationId}
-                    onChange={(e) => setSelectedLocationId(e.target.value)}
-                    className={inputClass}
-                    required
-                  >
-                    <option value="">
-                      {initialData?.city && !defaultLocation
-                        ? `${initialData.city}${initialData.country ? `, ${initialData.country}` : ''} (Current)`
-                        : 'Select a city...'}
-                    </option>
-                    {locations.map((loc) => (
-                      <option key={loc.id} value={String(loc.id)}>
-                        {loc.city}, {loc.country}
-                        {!loc.isActive ? ' (Inactive)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.city && (
-                    <p className="text-xs text-red-600 mt-1">{errors.city}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label htmlFor="property-neighborhood" className={labelClass}>
-                    Neighborhood
-                  </label>
-                  <input
-                    id="property-neighborhood"
-                    data-testid="property-neighborhood-input"
-                    type="text"
-                    value={neighborhood}
-                    onChange={(e) => setNeighborhood(e.target.value)}
-                    placeholder="e.g. Salamanca, Eixample, Palermo"
-                    className={inputClass}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="property-address" className={labelClass}>
-                    Street Address
-                  </label>
-                  <input
-                    id="property-address"
-                    data-testid="property-address-input"
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="e.g. Calle de Serrano 42"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-            </section>
+            <PublishCard
+              {...sectionProps}
+              hosts={hosts}
+              initialData={initialData}
+              isEditMode={isEditMode}
+              isSubmitting={isSubmitting}
+              lastSavedLabel={lastSavedLabel}
+              canViewOnWeb={canViewOnWeb}
+            />
+            <AdminPhotosCard photos={photos} title={values.title} fieldError={errors.images} />
+            <LocationCard
+              {...sectionProps}
+              locations={locations}
+              initialData={initialData}
+              hasDefaultLocation={defaultLocation !== null}
+            />
           </div>
         </div>
 
@@ -1524,25 +214,17 @@ export function AdminPropertyForm({
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
             <span
               aria-hidden="true"
-              className={cn(
-                'h-2 w-2 rounded-full',
-                isDirty ? 'bg-amber-500' : 'bg-emerald-500',
-              )}
+              className={cn('h-2 w-2 rounded-full', isDirty ? 'bg-amber-500' : 'bg-emerald-500')}
             />
             <span
               data-testid="property-dirty-status"
-              className={
-                isDirty
-                  ? 'text-amber-700 font-semibold'
-                  : 'text-[var(--color-text-on-light-muted)]'
-              }
+              className={isDirty ? 'text-amber-700 font-semibold' : 'text-[var(--color-text-on-light-muted)]'}
             >
               {isDirty ? 'Unsaved changes' : 'Ready to save'}
             </span>
-            {Object.keys(errors).length > 0 && (
+            {errorCount > 0 && (
               <span role="alert" className="text-red-600 font-semibold">
-                · Please fix {Object.keys(errors).length}{' '}
-                {Object.keys(errors).length === 1 ? 'field' : 'fields'} above
+                · Please fix {errorCount} {errorCount === 1 ? 'field' : 'fields'} above
               </span>
             )}
           </div>
@@ -1562,28 +244,16 @@ export function AdminPropertyForm({
               data-testid="property-sticky-submit-btn"
               className="min-h-10 rounded-xl bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white font-semibold text-sm px-5 py-2 inline-flex items-center gap-2 disabled:opacity-50 transition-colors cursor-pointer"
             >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>
-                    {isEditMode ? 'Saving Changes...' : 'Creating Property...'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>{isEditMode ? 'Save Changes' : 'Create Property'}</span>
-                </>
-              )}
+              <SubmitLabel isSubmitting={isSubmitting} isEditMode={isEditMode} />
             </button>
           </div>
         </div>
       </form>
 
       <MediaLibraryModal
-        isOpen={isMediaModalOpen}
-        onClose={() => setIsMediaModalOpen(false)}
-        onSelect={handleMediaSelect}
+        isOpen={photos.isMediaModalOpen}
+        onClose={() => photos.setMediaModalOpen(false)}
+        onSelect={photos.addFromMediaLibrary}
         multiple={true}
         allowUrlTab={true}
         initialTab="upload"
