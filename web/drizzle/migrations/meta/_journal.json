@@ -15,6 +15,13 @@
       "when": 1795287984039,
       "tag": "0001_worthless_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795329600000,
+      "tag": "0002_add_indexes_and_constraints",
+      "breakpoints": true
     }
   ]
 }

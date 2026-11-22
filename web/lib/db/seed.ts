@@ -1,19 +1,15 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as dotenv from 'dotenv';
+import './load-env';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import bcrypt from 'bcryptjs';
 import { sql } from 'drizzle-orm';
 import { db, pool } from './client';
 import * as schema from './schema';
 import { calculateBookingTotal, DEFAULT_EXCHANGE_RATES } from '../pricing';
+import { getUtcOffsetDateString } from '../format';
 import { BOOKING_RULES } from '../../content/booking-rules';
 
-// Ensure environment variables are loaded
 const repoRoot = path.resolve(__dirname, '../../..');
-dotenv.config({ path: path.resolve(repoRoot, 'web/.env.local') });
-dotenv.config({ path: path.resolve(repoRoot, '.env') });
-dotenv.config();
-
 const SEED_DIR = path.resolve(repoRoot, 'docs/seed');
 
 function readSeedJson<T>(filename: string): T {
@@ -23,9 +19,7 @@ function readSeedJson<T>(filename: string): T {
 }
 
 function getRelativeDateStr(offsetDays: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  return getUtcOffsetDateString(offsetDays);
 }
 
 const SEED_PASSWORDS: Record<string, string> = {
@@ -691,18 +685,24 @@ export async function runSeed() {
     DECLARE
       seq text;
       tbl text;
+      max_id bigint;
       tables text[] := ARRAY[
         'users', 'host_profiles', 'categories', 'locations', 'properties',
         'workstation_packages', 'workstation_components', 'workstation_addons',
         'travel_guides', 'blog_posts', 'community_videos',
-        'reservations', 'blocked_dates', 'favorites'
+        'reservations', 'blocked_dates', 'favorites', 'media'
       ];
     BEGIN
       FOREACH tbl IN ARRAY tables
       LOOP
         seq := pg_get_serial_sequence(tbl, 'id');
         IF seq IS NOT NULL THEN
-          EXECUTE format('SELECT setval(%L, coalesce((SELECT max(id) FROM %I), 1))', seq, tbl);
+          EXECUTE format('SELECT max(id) FROM %I', tbl) INTO max_id;
+          IF max_id IS NULL THEN
+            PERFORM setval(seq, 1, false);
+          ELSE
+            PERFORM setval(seq, max_id, true);
+          END IF;
         END IF;
       END LOOP;
     END $$;
@@ -712,15 +712,17 @@ export async function runSeed() {
 }
 
 // Auto-run if executed directly
+async function main() {
+  try {
+    await runSeed();
+  } catch (err) {
+    console.error('Seed script failed:', err);
+    process.exitCode = 1;
+  } finally {
+    await pool.end();
+  }
+}
+
 if (require.main === module || process.argv[1]?.endsWith('seed.ts')) {
-  runSeed()
-    .then(async () => {
-      await pool.end();
-      process.exit(0);
-    })
-    .catch(async (err) => {
-      console.error('Seed script failed:', err);
-      await pool.end();
-      process.exit(1);
-    });
+  void main();
 }

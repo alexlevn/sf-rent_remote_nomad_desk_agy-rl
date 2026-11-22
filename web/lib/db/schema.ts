@@ -8,9 +8,10 @@ import {
   timestamp,
   date,
   jsonb,
+  index,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // 1. Users
 export const users = pgTable('users', {
@@ -25,43 +26,51 @@ export const users = pgTable('users', {
 });
 
 // 2. Host Profiles
-export const hostProfiles = pgTable('host_profiles', {
-  id: serial('id').primaryKey(),
-  userId: integer('user_id')
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  displayName: varchar('display_name', { length: 150 }).notNull(),
-  slug: varchar('slug', { length: 150 }).unique(),
-  phone: varchar('phone', { length: 50 }).notNull(),
-  website: varchar('website', { length: 255 }),
-  cities: text('cities'),
-  portfolioSize: integer('portfolio_size'),
-  bio: text('bio'),
-  avatar: varchar('avatar', { length: 255 }),
-  status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending' | 'approved' | 'rejected' | 'suspended'
-  rejectionReason: text('rejection_reason'),
-  approvedAt: timestamp('approved_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const hostProfiles = pgTable(
+  'host_profiles',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    displayName: varchar('display_name', { length: 150 }).notNull(),
+    slug: varchar('slug', { length: 150 }).unique(),
+    phone: varchar('phone', { length: 50 }).notNull(),
+    website: varchar('website', { length: 255 }),
+    cities: text('cities'),
+    portfolioSize: integer('portfolio_size'),
+    bio: text('bio'),
+    avatar: varchar('avatar', { length: 255 }),
+    status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending' | 'approved' | 'rejected' | 'suspended'
+    rejectionReason: text('rejection_reason'),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('host_profiles_status_idx').on(table.status)]
+);
 
 // 3. Locations
-export const locations = pgTable('locations', {
-  id: integer('id').primaryKey(),
-  city: varchar('city', { length: 100 }).notNull(),
-  name: varchar('name', { length: 150 }).notNull(),
-  slug: varchar('slug', { length: 150 }).unique(),
-  country: varchar('country', { length: 100 }).notNull(),
-  countryCode: varchar('country_code', { length: 10 }).notNull(),
-  continent: varchar('continent', { length: 50 }),
-  propertiesCount: integer('properties_count').default(0).notNull(),
-  description: text('description'),
-  image: varchar('image', { length: 255 }),
-  center: jsonb('center').$type<[number, number]>(),
-  isActive: boolean('is_active').default(true).notNull(),
-  position: integer('position').default(0).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const locations = pgTable(
+  'locations',
+  {
+    id: integer('id').primaryKey(),
+    city: varchar('city', { length: 100 }).notNull(),
+    name: varchar('name', { length: 150 }).notNull(),
+    slug: varchar('slug', { length: 150 }).unique(),
+    country: varchar('country', { length: 100 }).notNull(),
+    countryCode: varchar('country_code', { length: 10 }).notNull(),
+    continent: varchar('continent', { length: 50 }),
+    propertiesCount: integer('properties_count').default(0).notNull(),
+    description: text('description'),
+    image: varchar('image', { length: 255 }),
+    center: jsonb('center').$type<[number, number]>(),
+    isActive: boolean('is_active').default(true).notNull(),
+    position: integer('position').default(0).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('locations_active_position_idx').on(table.isActive, table.position)]
+);
 
 // 4. Categories
 export const categories = pgTable('categories', {
@@ -75,93 +84,121 @@ export const categories = pgTable('categories', {
 });
 
 // 5. Properties
-export const properties = pgTable('properties', {
-  id: integer('id').primaryKey(),
-  hostId: integer('host_id').references(() => hostProfiles.id),
-  reference: varchar('reference', { length: 50 }).unique(),
-  title: varchar('title', { length: 255 }).notNull(),
-  slug: varchar('slug', { length: 255 }).unique(),
-  description: text('description'),
-  pricePerMonth: integer('price_per_month').notNull(), // in USD cents
-  currency: varchar('currency', { length: 10 }).default('USD').notNull(),
-  locationId: integer('location_id').references(() => locations.id),
-  city: varchar('city', { length: 100 }).notNull(),
-  country: varchar('country', { length: 100 }),
-  neighborhood: varchar('neighborhood', { length: 150 }),
-  address: varchar('address', { length: 255 }),
-  bedrooms: integer('bedrooms').default(1).notNull(),
-  bathrooms: integer('bathrooms').default(1).notNull(),
-  bedsCount: integer('beds_count').default(1).notNull(),
-  totalSurface: integer('total_surface'),
-  maxGuests: integer('max_guests').default(2).notNull(),
-  kitchen: boolean('kitchen').default(true).notNull(),
-  laundry: boolean('laundry').default(true).notNull(),
-  balcony: boolean('balcony').default(false).notNull(),
-  petFriendly: boolean('pet_friendly').default(false).notNull(),
-  pool: boolean('pool').default(false).notNull(),
-  gym: boolean('gym').default(false).notNull(),
-  terrace: boolean('terrace').default(false).notNull(),
-  workstation: jsonb('workstation').$type<Record<string, unknown>>(),
-  houseRules: text('house_rules'),
-  checkInStart: varchar('check_in_start', { length: 20 }).default('15:00').notNull(),
-  checkOut: varchar('check_out', { length: 20 }).default('11:00').notNull(),
-  minimumStayNights: integer('minimum_stay_nights').default(30).notNull(),
-  isDirectBooking: boolean('is_direct_booking').default(false).notNull(),
-  images: jsonb('images').$type<string[]>().default([]).notNull(),
-  featuredPosition: integer('featured_position'),
-  status: varchar('status', { length: 20 }).default('draft').notNull(), // 'draft'|'pending_review'|'published'|'rejected'|'hidden'
-  rejectionReason: text('rejection_reason'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const properties = pgTable(
+  'properties',
+  {
+    id: integer('id').primaryKey(),
+    hostId: integer('host_id').references(() => hostProfiles.id),
+    reference: varchar('reference', { length: 50 }).unique(),
+    title: varchar('title', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 255 }).unique(),
+    description: text('description'),
+    pricePerMonth: integer('price_per_month').notNull(), // in USD cents
+    currency: varchar('currency', { length: 10 }).default('USD').notNull(),
+    locationId: integer('location_id').references(() => locations.id),
+    city: varchar('city', { length: 100 }).notNull(),
+    country: varchar('country', { length: 100 }),
+    neighborhood: varchar('neighborhood', { length: 150 }),
+    address: varchar('address', { length: 255 }),
+    bedrooms: integer('bedrooms').default(1).notNull(),
+    bathrooms: integer('bathrooms').default(1).notNull(),
+    bedsCount: integer('beds_count').default(1).notNull(),
+    totalSurface: integer('total_surface'),
+    maxGuests: integer('max_guests').default(2).notNull(),
+    kitchen: boolean('kitchen').default(true).notNull(),
+    laundry: boolean('laundry').default(true).notNull(),
+    balcony: boolean('balcony').default(false).notNull(),
+    petFriendly: boolean('pet_friendly').default(false).notNull(),
+    pool: boolean('pool').default(false).notNull(),
+    gym: boolean('gym').default(false).notNull(),
+    terrace: boolean('terrace').default(false).notNull(),
+    workstation: jsonb('workstation').$type<Record<string, unknown>>(),
+    houseRules: text('house_rules'),
+    checkInStart: varchar('check_in_start', { length: 20 }).default('15:00').notNull(),
+    checkOut: varchar('check_out', { length: 20 }).default('11:00').notNull(),
+    minimumStayNights: integer('minimum_stay_nights').default(30).notNull(),
+    isDirectBooking: boolean('is_direct_booking').default(false).notNull(),
+    images: jsonb('images').$type<string[]>().default([]).notNull(),
+    featuredPosition: integer('featured_position'),
+    status: varchar('status', { length: 20 }).default('draft').notNull(), // 'draft'|'pending_review'|'published'|'rejected'|'hidden'
+    rejectionReason: text('rejection_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('properties_host_id_idx').on(table.hostId),
+    index('properties_location_id_idx').on(table.locationId),
+    index('properties_status_featured_idx').on(table.status, table.featuredPosition),
+    index('properties_lower_city_idx').on(sql`lower(${table.city})`),
+  ]
+);
 
 // 6. Blocked Dates
-export const blockedDates = pgTable('blocked_dates', {
-  id: serial('id').primaryKey(),
-  propertyId: integer('property_id')
-    .notNull()
-    .references(() => properties.id, { onDelete: 'cascade' }),
-  startDate: date('start_date').notNull(),
-  endDate: date('end_date').notNull(),
-  reason: varchar('reason', { length: 150 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const blockedDates = pgTable(
+  'blocked_dates',
+  {
+    id: serial('id').primaryKey(),
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'cascade' }),
+    startDate: date('start_date').notNull(),
+    endDate: date('end_date').notNull(),
+    reason: varchar('reason', { length: 150 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('blocked_dates_property_dates_idx').on(
+      table.propertyId,
+      table.startDate,
+      table.endDate
+    ),
+  ]
+);
 
 // 7. Reservations
-export const reservations = pgTable('reservations', {
-  id: serial('id').primaryKey(),
-  code: varchar('code', { length: 20 }).notNull().unique(),
-  userId: integer('user_id')
-    .notNull()
-    .references(() => users.id),
-  propertyId: integer('property_id')
-    .notNull()
-    .references(() => properties.id),
-  moveInDate: date('move_in_date').notNull(),
-  moveOutDate: date('move_out_date').notNull(),
-  nights: integer('nights').notNull(),
-  monthlyRent: integer('monthly_rent').notNull(), // cents
-  rentAmount: integer('rent_amount').notNull(), // cents
-  workstationFee: integer('workstation_fee').default(0).notNull(), // cents
-  totalAmount: integer('total_amount').notNull(), // cents
-  commissionAmount: integer('commission_amount').notNull(), // cents
-  hostPayout: integer('host_payout').notNull(), // cents
-  workstationConfig: jsonb('workstation_config').$type<Record<string, unknown>>(),
-  guestName: varchar('guest_name', { length: 150 }).notNull(),
-  guestEmail: varchar('guest_email', { length: 150 }).notNull(),
-  guestPhone: varchar('guest_phone', { length: 50 }),
-  status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending'|'confirmed'|'rejected'|'expired'|'cancelled'|'completed'
-  respondBy: timestamp('respond_by', { withTimezone: true }),
-  rejectionReason: varchar('rejection_reason', { length: 255 }),
-  cancelledBy: varchar('cancelled_by', { length: 20 }),
-  paymentStatus: varchar('payment_status', { length: 20 }).notNull(), // 'authorized'|'captured'|'voided'|'refunded'
-  paymentRef: varchar('payment_ref', { length: 100 }),
-  commissionRate: integer('commission_rate'),
-  respondHours: integer('respond_hours'),
-  freeCancelDays: integer('free_cancel_days'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const reservations = pgTable(
+  'reservations',
+  {
+    id: serial('id').primaryKey(),
+    code: varchar('code', { length: 20 }).notNull().unique(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id),
+    propertyId: integer('property_id')
+      .notNull()
+      .references(() => properties.id),
+    moveInDate: date('move_in_date').notNull(),
+    moveOutDate: date('move_out_date').notNull(),
+    nights: integer('nights').notNull(),
+    monthlyRent: integer('monthly_rent').notNull(), // cents
+    rentAmount: integer('rent_amount').notNull(), // cents
+    workstationFee: integer('workstation_fee').default(0).notNull(), // cents
+    totalAmount: integer('total_amount').notNull(), // cents
+    commissionAmount: integer('commission_amount').notNull(), // cents
+    hostPayout: integer('host_payout').notNull(), // cents
+    workstationConfig: jsonb('workstation_config').$type<Record<string, unknown>>(),
+    guestName: varchar('guest_name', { length: 150 }).notNull(),
+    guestEmail: varchar('guest_email', { length: 150 }).notNull(),
+    guestPhone: varchar('guest_phone', { length: 50 }),
+    status: varchar('status', { length: 20 }).default('pending').notNull(), // 'pending'|'confirmed'|'rejected'|'expired'|'cancelled'|'completed'
+    respondBy: timestamp('respond_by', { withTimezone: true }),
+    rejectionReason: varchar('rejection_reason', { length: 255 }),
+    cancelledBy: varchar('cancelled_by', { length: 20 }),
+    paymentStatus: varchar('payment_status', { length: 20 }).notNull(), // 'authorized'|'captured'|'voided'|'refunded'
+    paymentRef: varchar('payment_ref', { length: 100 }),
+    commissionRate: integer('commission_rate'),
+    respondHours: integer('respond_hours'),
+    freeCancelDays: integer('free_cancel_days'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('reservations_user_id_idx').on(table.userId),
+    index('reservations_property_status_idx').on(table.propertyId, table.status),
+    index('reservations_status_respond_by_idx').on(table.status, table.respondBy),
+    index('reservations_created_at_idx').on(table.createdAt),
+  ]
+);
 
 // 8. Favorites
 export const favorites = pgTable(
@@ -219,55 +256,69 @@ export const workstationAddons = pgTable('workstation_addons', {
 });
 
 // 12. Travel Guides
-export const travelGuides = pgTable('travel_guides', {
-  id: serial('id').primaryKey(),
-  slug: varchar('slug', { length: 150 }).notNull().unique(),
-  title: varchar('title', { length: 255 }).notNull(),
-  city: varchar('city', { length: 100 }).notNull(),
-  category: varchar('category', { length: 100 }),
-  excerpt: text('excerpt'),
-  content: text('content'),
-  coverImage: varchar('cover_image', { length: 255 }),
-  isFeatured: boolean('is_featured').default(false).notNull(),
-  status: varchar('status', { length: 20 }).default('published').notNull(), // 'draft' | 'published'
-  seoTitle: varchar('seo_title', { length: 255 }),
-  seoDescription: text('seo_description'),
-  position: integer('position').default(0).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const travelGuides = pgTable(
+  'travel_guides',
+  {
+    id: serial('id').primaryKey(),
+    slug: varchar('slug', { length: 150 }).notNull().unique(),
+    title: varchar('title', { length: 255 }).notNull(),
+    city: varchar('city', { length: 100 }).notNull(),
+    category: varchar('category', { length: 100 }),
+    excerpt: text('excerpt'),
+    content: text('content'),
+    coverImage: varchar('cover_image', { length: 255 }),
+    isFeatured: boolean('is_featured').default(false).notNull(),
+    status: varchar('status', { length: 20 }).default('published').notNull(), // 'draft' | 'published'
+    seoTitle: varchar('seo_title', { length: 255 }),
+    seoDescription: text('seo_description'),
+    position: integer('position').default(0).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('travel_guides_status_position_idx').on(table.status, table.position)]
+);
 
 // 13. Blog Posts
-export const blogPosts = pgTable('blog_posts', {
-  id: serial('id').primaryKey(),
-  slug: varchar('slug', { length: 150 }).notNull().unique(),
-  title: varchar('title', { length: 255 }).notNull(),
-  excerpt: text('excerpt'),
-  content: text('content'),
-  coverImage: varchar('cover_image', { length: 255 }),
-  author: varchar('author', { length: 100 }),
-  readTime: varchar('read_time', { length: 50 }),
-  category: varchar('category', { length: 100 }),
-  status: varchar('status', { length: 20 }).default('published').notNull(), // 'draft' | 'published'
-  seoTitle: varchar('seo_title', { length: 255 }),
-  seoDescription: text('seo_description'),
-  position: integer('position').default(0).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const blogPosts = pgTable(
+  'blog_posts',
+  {
+    id: serial('id').primaryKey(),
+    slug: varchar('slug', { length: 150 }).notNull().unique(),
+    title: varchar('title', { length: 255 }).notNull(),
+    excerpt: text('excerpt'),
+    content: text('content'),
+    coverImage: varchar('cover_image', { length: 255 }),
+    author: varchar('author', { length: 100 }),
+    readTime: varchar('read_time', { length: 50 }),
+    category: varchar('category', { length: 100 }),
+    status: varchar('status', { length: 20 }).default('published').notNull(), // 'draft' | 'published'
+    seoTitle: varchar('seo_title', { length: 255 }),
+    seoDescription: text('seo_description'),
+    position: integer('position').default(0).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('blog_posts_status_position_idx').on(table.status, table.position)]
+);
 
 // 14. Community Videos
-export const communityVideos = pgTable('community_videos', {
-  id: serial('id').primaryKey(),
-  title: varchar('title', { length: 255 }),
-  author: varchar('author', { length: 100 }),
-  platform: varchar('platform', { length: 50 }).default('instagram').notNull(),
-  videoUrl: varchar('video_url', { length: 255 }),
-  embedUrl: varchar('embed_url', { length: 255 }),
-  thumbnailUrl: varchar('thumbnail_url', { length: 255 }),
-  aspect: varchar('aspect', { length: 20 }),
-  isActive: boolean('is_active').default(true).notNull(),
-  position: integer('position').default(0).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const communityVideos = pgTable(
+  'community_videos',
+  {
+    id: serial('id').primaryKey(),
+    title: varchar('title', { length: 255 }),
+    author: varchar('author', { length: 100 }),
+    platform: varchar('platform', { length: 50 }).default('instagram').notNull(),
+    videoUrl: varchar('video_url', { length: 255 }),
+    embedUrl: varchar('embed_url', { length: 255 }),
+    thumbnailUrl: varchar('thumbnail_url', { length: 255 }),
+    aspect: varchar('aspect', { length: 20 }),
+    isActive: boolean('is_active').default(true).notNull(),
+    position: integer('position').default(0).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('community_videos_active_position_idx').on(table.isActive, table.position),
+  ]
+);
 
 // 15. Settings
 export const settings = pgTable('settings', {
@@ -277,18 +328,22 @@ export const settings = pgTable('settings', {
 });
 
 // 16. Media
-export const media = pgTable('media', {
-  id: serial('id').primaryKey(),
-  url: varchar('url', { length: 255 }).notNull().unique(),
-  storageKey: varchar('storage_key', { length: 255 }).notNull().unique(),
-  mimeType: varchar('mime_type', { length: 50 }).default('image/webp').notNull(),
-  width: integer('width').notNull(),
-  height: integer('height').notNull(),
-  sizeBytes: integer('size_bytes').notNull(),
-  alt: varchar('alt', { length: 255 }),
-  uploadedBy: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const media = pgTable(
+  'media',
+  {
+    id: serial('id').primaryKey(),
+    url: varchar('url', { length: 255 }).notNull().unique(),
+    storageKey: varchar('storage_key', { length: 255 }).notNull().unique(),
+    mimeType: varchar('mime_type', { length: 50 }).default('image/webp').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    alt: varchar('alt', { length: 255 }),
+    uploadedBy: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index('media_uploaded_by_created_at_idx').on(table.uploadedBy, table.createdAt)]
+);
 
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({

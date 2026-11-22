@@ -1,13 +1,7 @@
-import * as path from 'path';
-import * as dotenv from 'dotenv';
+import './load-env';
 import { sql } from 'drizzle-orm';
 import { db, pool } from './client';
 import * as schema from './schema';
-
-const repoRoot = path.resolve(__dirname, '../../..');
-dotenv.config({ path: path.resolve(repoRoot, 'web/.env.local') });
-dotenv.config({ path: path.resolve(repoRoot, '.env') });
-dotenv.config();
 
 interface ExpectedCounts {
   name: string;
@@ -95,15 +89,20 @@ export async function verifySeed(): Promise<boolean> {
   return true;
 }
 
+async function main() {
+  try {
+    const passed = await verifySeed();
+    if (!passed) {
+      process.exitCode = 1;
+    }
+  } catch (err) {
+    console.error('Verification script failed:', err);
+    process.exitCode = 1;
+  } finally {
+    await pool.end();
+  }
+}
+
 if (require.main === module || process.argv[1]?.endsWith('verify-seed.ts')) {
-  verifySeed()
-    .then(async (passed) => {
-      await pool.end();
-      process.exit(passed ? 0 : 1);
-    })
-    .catch(async (err) => {
-      console.error('Verification script failed:', err);
-      await pool.end();
-      process.exit(1);
-    });
+  void main();
 }
