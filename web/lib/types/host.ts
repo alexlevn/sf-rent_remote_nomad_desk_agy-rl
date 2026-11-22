@@ -15,6 +15,7 @@ export interface HostProfile {
   rejectionReason?: string | null;
   approvedAt: string | null;
   createdAt?: string;
+  userEmail?: string | null;
 }
 
 export interface HostApplicationInput {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useRef, useTransition } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -15,6 +15,8 @@ import {
   Info,
 } from 'lucide-react';
 import type { Property, PropertyStatus } from '@/lib/types';
+import { useCurrency } from '@/context/currency-context';
+import { normalizeImageSrc } from '@/lib/format';
 import {
   ListingStatusBadge,
   BookingModeBadge,
@@ -22,8 +24,8 @@ import {
 
 interface HostListingsTableProps {
   initialProperties: Property[];
-  hostId: number;
   hostName: string;
+  isReadOnly?: boolean;
   onSubmitForReview: (
     propertyId: number
   ) => Promise<{ success: boolean; error?: string }>;
@@ -36,37 +38,42 @@ interface HostListingsTableProps {
 export function HostListingsTable({
   initialProperties,
   hostName,
+  isReadOnly = false,
   onSubmitForReview,
   onToggleHide,
 }: HostListingsTableProps) {
+  const { formatPrice } = useCurrency();
   const [properties, setProperties] = useState<Property[]>(initialProperties);
   const [activeTab, setActiveTab] = useState<string>('all');
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const inFlightIdsRef = useRef<Set<number>>(new Set());
 
-  // Tab counts
   const allCount = properties.length;
   const publishedCount = properties.filter((p) => p.status === 'published').length;
   const draftCount = properties.filter((p) => p.status === 'draft').length;
-  const pendingCount = properties.filter(
-    (p) => p.status === 'pending_review'
-  ).length;
+  const pendingCount = properties.filter((p) => p.status === 'pending_review').length;
   const rejectedCount = properties.filter((p) => p.status === 'rejected').length;
   const hiddenCount = properties.filter((p) => p.status === 'hidden').length;
 
-  // Filtered properties
+  const tabs = [
+    { key: 'all', label: `All (${allCount})` },
+    { key: 'published', label: `Published (${publishedCount})` },
+    { key: 'draft', label: `Draft (${draftCount})` },
+    { key: 'pending_review', label: `Pending Review (${pendingCount})` },
+    { key: 'rejected', label: `Rejected (${rejectedCount})` },
+    { key: 'hidden', label: `Hidden (${hiddenCount})` },
+  ];
+
   const filteredProperties = properties.filter((p) => {
     if (activeTab === 'all') return true;
-    if (activeTab === 'published') return p.status === 'published';
-    if (activeTab === 'draft') return p.status === 'draft';
-    if (activeTab === 'pending_review') return p.status === 'pending_review';
-    if (activeTab === 'rejected') return p.status === 'rejected';
-    if (activeTab === 'hidden') return p.status === 'hidden';
-    return true;
+    return p.status === activeTab;
   });
 
   const handleSubmitForReview = async (propId: number) => {
+    if (isReadOnly || inFlightIdsRef.current.has(propId)) return;
+    inFlightIdsRef.current.add(propId);
     setActionLoadingId(propId);
     setActionError(null);
     try {
@@ -85,15 +92,16 @@ export function HostListingsTable({
         setActionError(res.error || 'Failed to submit listing for review.');
       }
     } catch (err: unknown) {
-      setActionError(
-        err instanceof Error ? err.message : 'An error occurred.'
-      );
+      setActionError(err instanceof Error ? err.message : 'An error occurred.');
     } finally {
+      inFlightIdsRef.current.delete(propId);
       setActionLoadingId(null);
     }
   };
 
   const handleToggleHide = async (propId: number, currentStatus: PropertyStatus) => {
+    if (isReadOnly || inFlightIdsRef.current.has(propId)) return;
+    inFlightIdsRef.current.add(propId);
     setActionLoadingId(propId);
     setActionError(null);
     try {
@@ -112,17 +120,11 @@ export function HostListingsTable({
         setActionError(res.error || 'Failed to change listing visibility.');
       }
     } catch (err: unknown) {
-      setActionError(
-        err instanceof Error ? err.message : 'An error occurred.'
-      );
+      setActionError(err instanceof Error ? err.message : 'An error occurred.');
     } finally {
+      inFlightIdsRef.current.delete(propId);
       setActionLoadingId(null);
     }
-  };
-
-  const formatPrice = (cents: number) => {
-    const dollars = Math.round(cents / 100);
-    return `$${dollars.toLocaleString()}`;
   };
 
   return (
@@ -137,13 +139,15 @@ export function HostListingsTable({
             Portfolio owned by <span className="font-semibold text-neutral-800">{hostName}</span>
           </p>
         </div>
-        <Link
-          href="/host/listings/new"
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-xs sm:text-sm font-bold text-white shadow-xs transition-colors self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ New Listing</span>
-        </Link>
+        {!isReadOnly && (
+          <Link
+            href="/host/listings/new"
+            className="inline-flex min-h-10 items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-xs sm:text-sm font-bold text-white shadow-xs transition-colors self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Listing</span>
+          </Link>
+        )}
       </div>
 
       {actionError && (
@@ -156,80 +160,28 @@ export function HostListingsTable({
         </div>
       )}
 
-      {/* Tabs Filter Bar */}
-      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 border-b border-neutral-200 text-xs font-semibold scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setActiveTab('all')}
-          className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'all'
-              ? 'bg-neutral-900 text-white shadow-xs'
-              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-          }`}
-        >
-          All ({allCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('published')}
-          className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'published'
-              ? 'bg-neutral-900 text-white shadow-xs'
-              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-          }`}
-        >
-          Published ({publishedCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('draft')}
-          className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-            activeTab === 'draft'
-              ? 'bg-neutral-900 text-white shadow-xs'
-              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-          }`}
-        >
-          Draft ({draftCount})
-        </button>
-        {pendingCount > 0 && (
+      {/* Tabs Filter Bar (always stable) */}
+      <div
+        role="tablist"
+        aria-label="Filter listings by status"
+        className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 border-b border-neutral-200 text-xs font-semibold scrollbar-none"
+      >
+        {tabs.map((tab) => (
           <button
+            key={tab.key}
             type="button"
-            onClick={() => setActiveTab('pending_review')}
-            className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === 'pending_review'
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+              activeTab === tab.key
                 ? 'bg-neutral-900 text-white shadow-xs'
                 : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
             }`}
           >
-            Pending Review ({pendingCount})
+            {tab.label}
           </button>
-        )}
-        {rejectedCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('rejected')}
-            className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === 'rejected'
-                ? 'bg-neutral-900 text-white shadow-xs'
-                : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-            }`}
-          >
-            Rejected ({rejectedCount})
-          </button>
-        )}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('hidden')}
-            className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-              activeTab === 'hidden'
-                ? 'bg-neutral-900 text-white shadow-xs'
-                : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-            }`}
-          >
-            Hidden ({hiddenCount})
-          </button>
-        )}
+        ))}
       </div>
 
       {/* Desktop Table View (>= 768px) */}
@@ -247,10 +199,10 @@ export function HostListingsTable({
           </thead>
           <tbody className="divide-y divide-neutral-200">
             {filteredProperties.map((prop) => {
-              const coverImg =
-                prop.images && prop.images[0]
-                  ? prop.images[0]
-                  : '/seed/property/prop-madrid-1.webp';
+              const coverImg = normalizeImageSrc(
+                prop.images?.[0],
+                '/seed/property/prop-madrid-1.webp'
+              );
               const isLoadingThis = actionLoadingId === prop.id;
 
               return (
@@ -306,10 +258,9 @@ export function HostListingsTable({
                         className="px-2.5 py-1 rounded text-xs font-semibold border border-neutral-300 hover:bg-neutral-100 text-neutral-700 transition-colors inline-flex items-center gap-1"
                       >
                         <Edit className="w-3 h-3" />
-                        Edit
+                        {isReadOnly ? 'Inspect' : 'Edit'}
                       </Link>
 
-                      {/* Public view: only works when published, otherwise shows tooltip */}
                       {prop.status === 'published' ? (
                         <Link
                           href={`/l/apartments/${prop.slug}`}
@@ -330,27 +281,26 @@ export function HostListingsTable({
                         </span>
                       )}
 
-                      {/* Submit for review button if draft or rejected */}
                       {(prop.status === 'draft' || prop.status === 'rejected') && (
                         <button
                           type="button"
-                          disabled={isLoadingThis}
+                          disabled={isReadOnly || isLoadingThis}
                           onClick={() => handleSubmitForReview(prop.id)}
-                          className="px-2.5 py-1 rounded text-xs font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                          className="px-2.5 py-1 rounded text-xs font-semibold bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white transition-colors disabled:opacity-50 inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Send className="w-3 h-3" />
                           Submit
                         </button>
                       )}
 
-                      {/* Toggle Hide/Unhide */}
                       {prop.status === 'published' && (
                         <button
                           type="button"
-                          disabled={isLoadingThis}
+                          disabled={isReadOnly || isLoadingThis}
                           onClick={() => handleToggleHide(prop.id, 'published')}
                           title="Hide from public search"
-                          className="px-2 py-1 rounded text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                          aria-label={`Hide ${prop.title} from public search`}
+                          className="px-2 py-1 rounded text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors disabled:opacity-40 cursor-pointer"
                         >
                           <EyeOff className="w-3.5 h-3.5" />
                         </button>
@@ -359,10 +309,11 @@ export function HostListingsTable({
                       {prop.status === 'hidden' && (
                         <button
                           type="button"
-                          disabled={isLoadingThis}
+                          disabled={isReadOnly || isLoadingThis}
                           onClick={() => handleToggleHide(prop.id, 'hidden')}
                           title="Unhide and publish"
-                          className="px-2 py-1 rounded text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors"
+                          aria-label={`Unhide ${prop.title} and restore to public search`}
+                          className="px-2 py-1 rounded text-xs font-medium text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 transition-colors disabled:opacity-40 cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
@@ -379,10 +330,10 @@ export function HostListingsTable({
       {/* Mobile Card List (< 768px) */}
       <div className="md:hidden space-y-3">
         {filteredProperties.map((prop) => {
-          const coverImg =
-            prop.images && prop.images[0]
-              ? prop.images[0]
-              : '/seed/property/prop-madrid-1.webp';
+          const coverImg = normalizeImageSrc(
+            prop.images?.[0],
+            '/seed/property/prop-madrid-1.webp'
+          );
           const isLoadingThis = actionLoadingId === prop.id;
 
           return (
@@ -429,12 +380,12 @@ export function HostListingsTable({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Link
                   href={`/host/listings/${prop.id}/edit`}
-                  className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 text-center text-neutral-700 hover:bg-neutral-50"
+                  className="flex-1 min-h-10 inline-flex items-center justify-center rounded-lg text-xs font-semibold border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
                 >
-                  Edit
+                  {isReadOnly ? 'Inspect' : 'Edit'}
                 </Link>
 
                 {prop.status === 'published' ? (
@@ -442,12 +393,12 @@ export function HostListingsTable({
                     href={`/l/apartments/${prop.slug}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 text-center text-neutral-700 hover:bg-neutral-50"
+                    className="flex-1 min-h-10 inline-flex items-center justify-center rounded-lg text-xs font-semibold border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
                   >
                     View
                   </Link>
                 ) : (
-                  <span className="flex-1 py-1.5 rounded-lg text-xs font-medium border border-neutral-200 text-center text-neutral-400 cursor-not-allowed">
+                  <span className="flex-1 min-h-10 inline-flex items-center justify-center rounded-lg text-xs font-medium border border-neutral-200 text-neutral-400 cursor-not-allowed">
                     View
                   </span>
                 )}
@@ -455,11 +406,37 @@ export function HostListingsTable({
                 {(prop.status === 'draft' || prop.status === 'rejected') && (
                   <button
                     type="button"
-                    disabled={isLoadingThis}
+                    disabled={isReadOnly || isLoadingThis}
                     onClick={() => handleSubmitForReview(prop.id)}
-                    className="flex-1 py-1.5 rounded-lg text-xs font-semibold bg-[var(--color-brand)] text-white text-center hover:bg-[var(--color-brand-hover)] disabled:opacity-50"
+                    className="flex-1 min-h-10 inline-flex items-center justify-center rounded-lg text-xs font-semibold bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-50"
                   >
                     Submit
+                  </button>
+                )}
+
+                {prop.status === 'published' && (
+                  <button
+                    type="button"
+                    disabled={isReadOnly || isLoadingThis}
+                    onClick={() => handleToggleHide(prop.id, 'published')}
+                    aria-label={`Hide ${prop.title} from public search`}
+                    className="min-h-10 px-3 inline-flex items-center justify-center gap-1 rounded-lg text-xs font-semibold border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    <span>Hide</span>
+                  </button>
+                )}
+
+                {prop.status === 'hidden' && (
+                  <button
+                    type="button"
+                    disabled={isReadOnly || isLoadingThis}
+                    onClick={() => handleToggleHide(prop.id, 'hidden')}
+                    aria-label={`Unhide ${prop.title} and restore to public search`}
+                    className="min-h-10 px-3 inline-flex items-center justify-center gap-1 rounded-lg text-xs font-semibold border border-neutral-300 text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Unhide</span>
                   </button>
                 )}
               </div>
@@ -480,17 +457,19 @@ export function HostListingsTable({
           <p className="text-xs sm:text-sm text-neutral-500 max-w-sm mx-auto">
             {activeTab === 'all'
               ? 'You have not added any apartment listings to your portfolio yet.'
-              : `There are currently no listings in the "${activeTab}" status category.`}
+              : `There are currently no listings in the "${activeTab.replace('_', ' ')}" status category.`}
           </p>
-          <div className="pt-2">
-            <Link
-              href="/host/listings/new"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-xs font-bold text-white shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create New Listing</span>
-            </Link>
-          </div>
+          {!isReadOnly && (
+            <div className="pt-2">
+              <Link
+                href="/host/listings/new"
+                className="inline-flex min-h-10 items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-xs font-bold text-white shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Listing</span>
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

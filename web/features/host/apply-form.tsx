@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import type { HostApplicationInput, HostProfile } from '@/lib/types';
+import { BOOKING_RULES } from '@/content/booking-rules';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -138,11 +139,12 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Company Name */}
         <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
+          <label htmlFor="host-apply-display-name" className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
             Company / Display Name <span className="text-red-500">*</span>
           </label>
           <div className="relative">
             <input
+              id="host-apply-display-name"
               type="text"
               required
               value={displayName}
@@ -157,11 +159,12 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
         {/* Phone & Website (2 columns on sm+) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
+            <label htmlFor="host-apply-phone" className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
               Contact Phone <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
+                id="host-apply-phone"
                 type="tel"
                 required
                 value={phone}
@@ -174,15 +177,16 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
+            <label htmlFor="host-apply-website" className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
               Website / Portfolio Link <span className="text-[var(--color-text-light-subtle)] font-normal">(Optional)</span>
             </label>
             <div className="relative">
               <input
+                id="host-apply-website"
                 type="url"
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
-                placeholder="https://casaurbana.com"
+                placeholder="https://casaurbana.example.com"
                 className="w-full px-4 py-3 rounded-xl border border-[var(--color-border-light)] bg-white text-sm text-[var(--color-text-on-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)] focus:border-transparent transition-all"
               />
               <Globe className="w-4 h-4 text-[var(--color-text-light-subtle)] absolute right-3.5 top-3.5 pointer-events-none" />
@@ -193,11 +197,12 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
         {/* Operating Cities & Units */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
+            <label htmlFor="host-apply-cities" className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
               Operating Cities <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
+                id="host-apply-cities"
                 type="text"
                 required
                 value={cities}
@@ -210,11 +215,12 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
+            <label htmlFor="host-apply-portfolio-size" className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
               Number of Curated Units <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <input
+                id="host-apply-portfolio-size"
                 type="number"
                 min="1"
                 required
@@ -230,11 +236,12 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
 
         {/* Bio / Description */}
         <div>
-          <label className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
+          <label htmlFor="host-apply-bio" className="block text-xs font-semibold text-[var(--color-text-on-light)] uppercase tracking-wider mb-2">
             Tell us about your furnished apartments and existing workspaces
           </label>
           <div className="relative">
             <textarea
+              id="host-apply-bio"
               rows={4}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
@@ -249,7 +256,7 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
 
         {/* Agreement Checkbox */}
         <div className="pt-2">
-          <label className="flex items-start gap-3 cursor-pointer select-none">
+          <label htmlFor="agree" className="flex items-start gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
               required
@@ -259,7 +266,7 @@ export const ApplyForm: React.FC<ApplyFormProps> = ({
               className="mt-0.5 h-4 w-4 rounded border-[var(--color-border-light)] text-[var(--color-brand)] focus:ring-[var(--color-brand)] cursor-pointer"
             />
             <span className="text-xs text-[var(--color-text-on-light-muted)] leading-relaxed">
-              I agree to the <span className="font-semibold text-[var(--color-text-on-light)]">NomadDesk Host Partner Terms</span> (10% platform commission, 48h booking response window, and verified high-speed internet standard).
+              I agree to the <span className="font-semibold text-[var(--color-text-on-light)]">NomadDesk Host Partner Terms</span> ({BOOKING_RULES.commissionPercent}% platform commission, {BOOKING_RULES.respondHours}h booking response window, and verified high-speed internet standard).
             </span>
           </label>
         </div>

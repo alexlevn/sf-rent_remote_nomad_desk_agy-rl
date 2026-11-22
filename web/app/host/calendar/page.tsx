@@ -1,16 +1,16 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
 import { requireHost } from '@/lib/auth/guards';
-import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
-import { listProperties } from '@/lib/api/properties';
+import { getHostPortalContext, redactUnconfirmedReservation } from '@/lib/auth/host-page';
+import { getPropertyById, listProperties } from '@/lib/api/properties';
 import {
   listReservations,
   listBlockedDates,
   addBlockedDate,
   deleteBlockedDate,
 } from '@/lib/api/reservations';
+import { slugifySegment } from '@/lib/format';
 import type { BlockedDate } from '@/lib/types';
 import { CalendarMonthGrid } from '@/features/host/calendar-month-grid';
 
@@ -22,30 +22,20 @@ export const metadata: Metadata = {
 };
 
 export default async function HostCalendarPage() {
-  const user = await getCurrentUser();
-  const host =
-    (user ? await getHostByUserId(user.id) : null) || (await getHostProfile(1));
+  const { host, isReadOnly } = await getHostPortalContext('/host/calendar');
 
-  if (!host) {
-    return (
-      <div className="bg-white border border-[var(--color-border-light)] rounded-xl p-8 text-center">
-        <h2 className="text-lg font-bold text-neutral-900 mb-2">No Host Profile Found</h2>
-        <p className="text-sm text-neutral-500">Please apply to become a host partner first.</p>
-      </div>
-    );
-  }
+  const [properties, rawReservations] = await Promise.all([
+    listProperties({ hostId: host.id, status: 'all' }),
+    listReservations({ hostId: host.id }),
+  ]);
 
-  // Fetch host properties and reservations
-  const properties = await listProperties({ hostId: host.id, status: 'all' });
-  const reservations = await listReservations({ hostId: host.id });
+  const reservations = rawReservations.map(redactUnconfirmedReservation);
 
-  // Fetch blocked dates for all host properties
   const blockedDatesNested = await Promise.all(
     properties.map((p) => listBlockedDates(p.id))
   );
   const blockedDates: BlockedDate[] = blockedDatesNested.flat();
 
-  // Server action to block dates (AC-HOST-6)
   async function blockDatesAction(data: {
     propertyId: number;
     startDate: string;
@@ -66,6 +56,13 @@ export default async function HostCalendarPage() {
       );
 
       revalidatePath('/host/calendar');
+      const prop = await getPropertyById(data.propertyId);
+      if (prop?.slug) {
+        revalidatePath(`/l/apartments/${prop.slug}`);
+      }
+      if (prop?.city) {
+        revalidatePath(`/c/furnished-apartments-${slugifySegment(prop.city)}`);
+      }
       return { success: true, data: created };
     } catch (err: unknown) {
       return {
@@ -78,8 +75,7 @@ export default async function HostCalendarPage() {
     }
   }
 
-  // Server action to unblock dates
-  async function unblockDatesAction(blockedDateId: number) {
+  async function unblockDatesAction(blockedDateId: number, propertyId?: number) {
     'use server';
     try {
       const { hostId } = await requireHost();
@@ -89,6 +85,15 @@ export default async function HostCalendarPage() {
       }
 
       revalidatePath('/host/calendar');
+      if (propertyId) {
+        const prop = await getPropertyById(propertyId);
+        if (prop?.slug) {
+          revalidatePath(`/l/apartments/${prop.slug}`);
+        }
+        if (prop?.city) {
+          revalidatePath(`/c/furnished-apartments-${slugifySegment(prop.city)}`);
+        }
+      }
       return { success: true };
     } catch (err: unknown) {
       return {
@@ -107,6 +112,7 @@ export default async function HostCalendarPage() {
       reservations={reservations}
       blockedDates={blockedDates}
       initialPropertyId={properties[0]?.id}
+      isReadOnly={isReadOnly}
       onBlockAction={blockDatesAction}
       onUnblockAction={unblockDatesAction}
     />

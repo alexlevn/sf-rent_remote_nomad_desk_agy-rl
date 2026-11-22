@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { safeImagePathSchema } from '@/lib/validations/media';
-
-const INT4_MAX = 2147483647;
+import { INT4_MAX } from '@/lib/format';
+import { BOOKING_RULES } from '@/content/booking-rules';
 
 export const int4IdSchema = z.number().int().min(1).max(INT4_MAX);
 
@@ -61,7 +61,15 @@ export const createPropertySchema = z.object({
   houseRules: z.string().max(5000).optional(),
   checkInStart: z.string().trim().max(20).optional(),
   checkOut: z.string().trim().max(20).optional(),
-  minimumStayNights: z.number().int().min(1).max(3650).optional(),
+  minimumStayNights: z
+    .number()
+    .int()
+    .min(
+      BOOKING_RULES.minimumStayNights,
+      `Minimum stay must be at least ${BOOKING_RULES.minimumStayNights} nights`
+    )
+    .max(3650)
+    .optional(),
   isDirectBooking: z.boolean().optional(),
   images: z.array(safeImagePathSchema).max(50).optional(),
   featuredPosition: z.number().int().min(1).max(INT4_MAX).nullable().optional(),
@@ -97,7 +105,15 @@ export const updatePropertySchema = z.object({
   houseRules: z.string().max(5000).optional(),
   checkInStart: z.string().trim().max(20).optional(),
   checkOut: z.string().trim().max(20).optional(),
-  minimumStayNights: z.number().int().min(1).max(3650).optional(),
+  minimumStayNights: z
+    .number()
+    .int()
+    .min(
+      BOOKING_RULES.minimumStayNights,
+      `Minimum stay must be at least ${BOOKING_RULES.minimumStayNights} nights`
+    )
+    .max(3650)
+    .optional(),
   isDirectBooking: z.boolean().optional(),
   images: z.array(safeImagePathSchema).max(50).optional(),
   featuredPosition: z.number().int().min(1).max(INT4_MAX).nullable().optional(),

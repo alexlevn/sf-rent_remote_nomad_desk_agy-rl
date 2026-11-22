@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Calendar, AlertCircle, Ban } from 'lucide-react';
 import type { BlockedDate } from '@/lib/types';
 
@@ -48,6 +48,17 @@ export const BlockDatesModal: React.FC<BlockDatesModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmittingRef.current) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -124,6 +135,11 @@ export const BlockDatesModal: React.FC<BlockDatesModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="block-dates-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmittingRef.current) {
+          onClose();
+        }
+      }}
     >
       <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[var(--color-border-light)] relative overflow-hidden">
         {/* Header */}

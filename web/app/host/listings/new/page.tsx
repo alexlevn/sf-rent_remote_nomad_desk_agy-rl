@@ -1,9 +1,9 @@
 import React from 'react';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
 import { requireHost } from '@/lib/auth/guards';
-import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
+import { getHostPortalContext } from '@/lib/auth/host-page';
 import { listLocations } from '@/lib/api/locations';
 import { saveHostListing } from '@/lib/api/properties';
 import type { Property } from '@/lib/types';
@@ -17,37 +17,25 @@ export const metadata: Metadata = {
 };
 
 export default async function NewListingPage() {
-  const user = await getCurrentUser();
-  const host =
-    (user ? await getHostByUserId(user.id) : null) || (await getHostProfile(1));
-
-  if (!host) {
-    return (
-      <div className="bg-white border border-[var(--color-border-light)] rounded-xl p-8 text-center">
-        <h2 className="text-lg font-bold text-neutral-900 mb-2">
-          No Host Profile Found
-        </h2>
-        <p className="text-sm text-neutral-500">
-          Please apply to become a host partner first.
-        </p>
-      </div>
-    );
+  const { isReadOnly } = await getHostPortalContext('/host/listings/new');
+  if (isReadOnly) {
+    redirect('/host/listings');
   }
 
   const locations = await listLocations();
 
-  // Server Action to create listing as draft or submit for review (AC-HOST-3)
   async function createListingAction(
     data: Partial<Property>,
-    intent: 'draft' | 'pending_review'
+    intent: 'draft' | 'pending_review' | 'keep'
   ) {
     'use server';
     try {
       const { hostId } = await requireHost();
+      const targetStatus = intent === 'pending_review' ? 'pending_review' : 'draft';
 
       const created = await saveHostListing(hostId, {
         ...data,
-        status: intent,
+        status: targetStatus,
       });
 
       revalidatePath('/host/listings');
@@ -66,7 +54,6 @@ export default async function NewListingPage() {
     <div className="space-y-6">
       <ListingFormSections
         locations={locations}
-        hostId={host.id}
         onSaveAction={createListingAction}
       />
     </div>

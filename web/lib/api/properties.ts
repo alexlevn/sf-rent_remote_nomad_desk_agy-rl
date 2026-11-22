@@ -481,6 +481,16 @@ export async function saveHostListing(
       throw new Error('Hosts cannot publish listings directly; submit for review instead');
     }
     const payload = buildUpdatePayload(parsed);
+    // Keep locationId foreign key synchronized whenever city or locationId changes
+    if (parsed.locationId !== undefined || parsed.city !== undefined) {
+      const resolvedLoc = await resolveLocationId(
+        parsed.locationId,
+        parsed.city ?? existing.city
+      );
+      if (resolvedLoc != null) {
+        payload.locationId = resolvedLoc;
+      }
+    }
     // Prevent hosts from self-featuring listings or overwriting admin moderation fields
     delete payload.featuredPosition;
     delete payload.rejectionReason;

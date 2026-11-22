@@ -2,11 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { getHostProfile, updateHostProfile } from '@/lib/api/hosts';
-import { requireHost } from '@/lib/auth/guards';
+import { requireHost, requireHostReadOnly } from '@/lib/auth/guards';
 import type { HostProfile } from '@/lib/types';
 
 export async function fetchCurrentHostProfileAction(): Promise<HostProfile | null> {
-  const { hostId } = await requireHost();
+  const { hostId } = await requireHostReadOnly();
   return getHostProfile(hostId);
 }
 

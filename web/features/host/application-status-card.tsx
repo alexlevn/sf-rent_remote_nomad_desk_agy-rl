@@ -17,6 +17,8 @@ import {
   FileText,
 } from 'lucide-react';
 import type { HostProfile } from '@/lib/types';
+import { SITE_CONFIG } from '@/content/site';
+import { formatUtcDate } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -32,18 +34,9 @@ export const ApplicationStatusCard: React.FC<ApplicationStatusCardProps> = ({
   const { status, displayName, phone, website, cities, portfolioSize, bio, rejectionReason, approvedAt, createdAt } =
     hostProfile;
 
-  // Format date helper
   const formatDate = (isoString?: string | null) => {
     if (!isoString) return 'Just now';
-    try {
-      return new Date(isoString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    } catch {
-      return isoString;
-    }
+    return formatUtcDate(isoString.slice(0, 10));
   };
 
   if (status === 'pending') {
@@ -164,7 +157,7 @@ export const ApplicationStatusCard: React.FC<ApplicationStatusCardProps> = ({
             ← Back to Partner Network Overview
           </Link>
           <div className="text-xs text-[var(--color-text-on-light-muted)]">
-            Questions? Contact <a href="mailto:partners@nomaddesk.com" className="text-[var(--color-text-on-light)] font-medium hover:underline">partners@nomaddesk.com</a>
+            Questions? Contact <a href={`mailto:${SITE_CONFIG.partnersEmail}`} className="text-[var(--color-text-on-light)] font-medium hover:underline">{SITE_CONFIG.partnersEmail}</a>
           </div>
         </div>
       </div>
@@ -230,6 +223,61 @@ export const ApplicationStatusCard: React.FC<ApplicationStatusCardProps> = ({
           >
             ← View Requirements
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'suspended') {
+    return (
+      <div className="bg-white rounded-3xl border border-amber-300 p-8 sm:p-10 shadow-[var(--shadow-md)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-900 border border-amber-200">
+            <span className="w-2 h-2 rounded-full bg-amber-600" />
+            Host Account Suspended
+          </span>
+          <span className="text-xs text-[var(--color-text-on-light-muted)]">
+            Read-Only Access
+          </span>
+        </div>
+
+        <div className="flex items-start gap-4 mb-6">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-[var(--color-text-on-light)] tracking-tight">
+              Partner Account Suspended
+            </h2>
+            <p className="text-sm text-[var(--color-text-on-light-muted)] mt-1 leading-relaxed">
+              Your host account ({displayName}) is currently suspended. Your listings are hidden from public search and new booking actions are paused, though you can still view existing confirmed reservations in read-only mode.
+            </p>
+          </div>
+        </div>
+
+        {rejectionReason && (
+          <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-xs text-amber-900 mb-6 space-y-1">
+            <div className="font-semibold">Suspension Notice:</div>
+            <p className="text-amber-800 text-sm">{rejectionReason}</p>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-[var(--color-border-light)]">
+          <Button asChild variant="outline" className="w-full sm:w-auto">
+            <Link href="/host">
+              View Host Portal (Read-Only)
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Link>
+          </Button>
+          <div className="text-xs text-[var(--color-text-on-light-muted)]">
+            Need help? Contact{' '}
+            <a
+              href={`mailto:${SITE_CONFIG.partnersEmail}`}
+              className="text-[var(--color-text-on-light)] font-medium hover:underline"
+            >
+              {SITE_CONFIG.partnersEmail}
+            </a>
+          </div>
         </div>
       </div>
     );

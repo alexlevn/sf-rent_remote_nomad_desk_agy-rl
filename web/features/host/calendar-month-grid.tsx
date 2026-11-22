@@ -11,6 +11,7 @@ import {
   Building,
 } from 'lucide-react';
 import type { Property, Reservation, BlockedDate } from '@/lib/types';
+import { MS_PER_DAY, parseUtcDate, toUtcDateString } from '@/lib/format';
 import { BlockDatesModal } from './block-dates-modal';
 
 export interface CalendarMonthGridProps {
@@ -18,16 +19,19 @@ export interface CalendarMonthGridProps {
   reservations: Reservation[];
   blockedDates: BlockedDate[];
   initialPropertyId?: number;
+  isReadOnly?: boolean;
   onBlockAction: (data: {
     propertyId: number;
     startDate: string;
     endDate: string;
     reason?: string;
   }) => Promise<{ success: boolean; data?: BlockedDate; error?: string }>;
-  onUnblockAction: (blockedDateId: number) => Promise<{ success: boolean; error?: string }>;
+  onUnblockAction: (
+    blockedDateId: number,
+    propertyId?: number
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
-const DEFAULT_FALLBACK_PROPERTY_ID = 16060;
 const DESIGN_REFERENCE_YEAR = 2026;
 const DESIGN_REFERENCE_MONTH = 11; // December (0-indexed)
 
@@ -36,15 +40,16 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
   reservations: initialReservations,
   blockedDates: initialBlockedDates,
   initialPropertyId,
+  isReadOnly = false,
   onBlockAction,
   onUnblockAction,
 }) => {
-  // Current selected property
+  // Current selected property (0 when host has no properties yet)
   const [selectedPropertyId, setSelectedPropertyId] = useState<number>(() => {
     if (initialPropertyId && properties.some((p) => p.id === initialPropertyId)) {
       return initialPropertyId;
     }
-    return properties[0]?.id || DEFAULT_FALLBACK_PROPERTY_ID;
+    return properties[0]?.id ?? 0;
   });
 
   // Calendar Month Navigation
@@ -175,9 +180,10 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
   };
 
   const handleDayClick = (dateStr: string) => {
+    if (isReadOnly) return;
+
     const existingBlock = getBlockForDate(dateStr);
     if (existingBlock) {
-      // Prompt unblock
       setUnblockTarget(existingBlock);
       setIsModalOpen(true);
       return;
@@ -185,16 +191,14 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
 
     const existingRes = getReservationForDate(dateStr);
     if (existingRes) {
-      // Booking already exists
       return;
     }
 
-    // Open block modal pre-filled with this day
-    const nextDay = new Date(dateStr);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const mStr = String(nextDay.getMonth() + 1).padStart(2, '0');
-    const dStr = String(nextDay.getDate()).padStart(2, '0');
-    const nextDayStr = `${nextDay.getFullYear()}-${mStr}-${dStr}`;
+    // Use UTC date math to avoid timezone off-by-one shifts
+    const startUtc = parseUtcDate(dateStr);
+    const nextDayStr = startUtc
+      ? toUtcDateString(new Date(startUtc.getTime() + MS_PER_DAY))
+      : dateStr;
 
     handleOpenBlockModal(dateStr, nextDayStr);
   };
@@ -217,7 +221,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
   };
 
   const handleUnblockSuccess = async (blockedDateId: number) => {
-    const res = await onUnblockAction(blockedDateId);
+    const res = await onUnblockAction(blockedDateId, selectedPropertyId);
     if (res.success) {
       setBlockedDates((prev) => prev.filter((b) => b.id !== blockedDateId));
       setFeedback({
@@ -262,11 +266,12 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
 
         <button
           type="button"
+          disabled={isReadOnly}
           onClick={() => handleOpenBlockModal()}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-full bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white transition-colors shadow-sm w-full sm:w-auto"
+          className="inline-flex min-h-10 items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-full bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-white transition-colors shadow-sm w-full sm:w-auto disabled:opacity-50 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Block Custom Dates</span>
+          <span>Block Custom Dates</span>
         </button>
       </div>
 
@@ -308,7 +313,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                 type="button"
                 onClick={handlePrevMonth}
                 aria-label="Previous month"
-                className="p-1 text-neutral-600 hover:text-neutral-900 hover:bg-white rounded transition-colors"
+                className="min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 inline-flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-white rounded transition-colors cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -316,7 +321,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                 type="button"
                 onClick={handleNextMonth}
                 aria-label="Next month"
-                className="p-1 text-neutral-600 hover:text-neutral-900 hover:bg-white rounded transition-colors"
+                className="min-h-10 min-w-10 sm:min-h-8 sm:min-w-8 inline-flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-white rounded transition-colors cursor-pointer"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -402,12 +407,21 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
             }
 
             return (
-              <div
+              <button
+                type="button"
                 key={item.dateStr}
+                disabled={isReadOnly}
                 onClick={() => handleDayClick(item.dateStr)}
-                className={`min-h-[64px] sm:min-h-[82px] p-1.5 sm:p-2 border rounded-xl flex flex-col justify-between transition-all ${dayStyle} ${
-                  !item.isCurrentMonth ? 'opacity-35' : ''
+                aria-label={`${item.dateStr}: ${
+                  blocked
+                    ? `Blocked (${blocked.reason || 'Owner Block'})`
+                    : reservation
+                    ? `${reservation.status} booking ${reservation.code}`
+                    : 'Available'
                 }`}
+                className={`min-h-[64px] sm:min-h-[82px] w-full text-left p-1.5 sm:p-2 border rounded-xl flex flex-col justify-between transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand)] ${dayStyle} ${
+                  !item.isCurrentMonth ? 'opacity-35' : ''
+                } ${isReadOnly ? 'cursor-default' : ''}`}
                 title={
                   blocked
                     ? `Blocked: ${blocked.reason || 'Owner Block'} (Click to unblock)`
@@ -416,7 +430,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                     : `Available - Click to block`
                 }
               >
-                <div className="flex items-center justify-between text-xs font-semibold">
+                <div className="flex items-center justify-between w-full text-xs font-semibold">
                   <span>{item.dayNum}</span>
                   {blocked && <Ban className="w-3 h-3 text-neutral-400 shrink-0" />}
                   {reservation?.status === 'confirmed' && (
@@ -428,7 +442,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                 </div>
 
                 {badgeContent}
-              </div>
+              </button>
             );
           })}
         </div>

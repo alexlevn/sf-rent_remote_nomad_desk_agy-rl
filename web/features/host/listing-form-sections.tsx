@@ -23,6 +23,8 @@ import {
   Star,
 } from 'lucide-react';
 import type { Location, Property } from '@/lib/types';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { INT4_MAX } from '@/lib/format';
 import { stripHtmlTags } from '@/lib/validations/content';
 import { isSafeImagePath } from '@/lib/validations/media';
 import { TiptapEditor } from '@/features/admin/tiptap-editor';
@@ -34,7 +36,6 @@ import {
 import { useUnsavedChanges } from '@/features/media/use-unsaved-changes';
 
 const MAX_IMAGES = 50;
-const INT4_MAX = 2_147_483_647;
 
 const MOCK_GALLERY_OPTIONS = [
   '/seed/property/prop-madrid-1.webp',
@@ -53,16 +54,17 @@ const MOCK_GALLERY_OPTIONS = [
 interface ListingFormSectionsProps {
   initialData?: Property;
   locations: Location[];
-  hostId: number;
+  isReadOnly?: boolean;
   onSaveAction: (
     data: Partial<Property>,
-    intent: 'draft' | 'pending_review'
+    intent: 'draft' | 'pending_review' | 'keep'
   ) => Promise<{ success: boolean; error?: string; property?: Property }>;
 }
 
 export function ListingFormSections({
   initialData,
   locations,
+  isReadOnly = false,
   onSaveAction,
 }: ListingFormSectionsProps) {
   const router = useRouter();
@@ -81,11 +83,9 @@ export function ListingFormSections({
     initialData?.description || ''
   );
 
-  // Section 2: Photos
+  // Section 2: Photos (start empty for new listings so hosts intentionally upload or pick photos)
   const [images, setImages] = useState<string[]>(
-    initialData?.images && initialData.images.length > 0
-      ? initialData.images
-      : ['/seed/property/prop-madrid-1.webp', '/seed/property/prop-madrid-2.webp']
+    initialData?.images ? [...initialData.images] : []
   );
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
   const [imageError, setImageError] = useState<string | null>(null);
@@ -166,9 +166,10 @@ export function ListingFormSections({
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittingIntent, setSubmittingIntent] = useState<
-    'draft' | 'pending_review' | null
+    'draft' | 'pending_review' | 'keep' | null
   >(null);
   const isSubmittingRef = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Track dirty state against initial snapshot for unsaved-changes warnings
   const currentSnapshot = JSON.stringify({
@@ -221,23 +222,15 @@ export function ListingFormSections({
     });
   };
 
-  // AC-HOST-7: Client-side isolation safeguard
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem('nomaddesk_user');
-      if (stored && initialData) {
-        const parsed = JSON.parse(stored);
-        if (parsed.email === 'host2@example.com' && initialData.hostId !== 2) {
-          router.replace('/_not-found');
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  }, [initialData, router]);
+  const isPreservableLiveStatus =
+    initialData?.status === 'published' || initialData?.status === 'hidden';
+
+  const hasCurrentCityInLocations = locations.some(
+    (l) => l.city.toLowerCase() === city.toLowerCase()
+  );
 
   // Helper to validate fields
-  const validateForm = (intent: 'draft' | 'pending_review'): boolean => {
+  const validateForm = (intent: 'draft' | 'pending_review' | 'keep'): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!title.trim()) {
@@ -263,9 +256,8 @@ export function ListingFormSections({
         'Monthly rent exceeds the maximum allowed amount.';
     }
 
-    if (minimumStayNights < 30) {
-      newErrors.minimumStayNights =
-        'NomadDesk standard requires minimum stay of 30 nights.';
+    if (minimumStayNights < BOOKING_RULES.minimumStayNights) {
+      newErrors.minimumStayNights = `NomadDesk standard requires minimum stay of ${BOOKING_RULES.minimumStayNights} nights.`;
     }
 
     if (images.some((url) => !isSafeImagePath(url))) {
@@ -273,10 +265,10 @@ export function ListingFormSections({
         'All photo URLs must be valid /uploads/, /seed/, or https:// paths.';
     }
 
-    if (intent === 'pending_review') {
+    if (intent === 'pending_review' || intent === 'keep') {
       if (!stripHtmlTags(description).trim()) {
         newErrors.description =
-          'Description is required before submitting for review.';
+          'Description is required before submitting or saving a live listing.';
       }
       if (images.length === 0) {
         newErrors.images =
@@ -297,12 +289,19 @@ export function ListingFormSections({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (intent: 'draft' | 'pending_review') => {
-    if (isSubmittingRef.current) return;
+  const handleSubmit = async (intent: 'draft' | 'pending_review' | 'keep') => {
+    if (isReadOnly || isSubmittingRef.current) return;
 
     if (!validateForm(intent)) {
-      // Scroll to top error
-      window.scrollTo({ top: 100, behavior: 'smooth' });
+      requestAnimationFrame(() => {
+        const firstInvalid = formRef.current?.querySelector<HTMLElement>(
+          '[aria-invalid="true"], [role="alert"]'
+        );
+        if (firstInvalid) {
+          firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstInvalid.focus?.();
+        }
+      });
       return;
     }
 
@@ -322,13 +321,12 @@ export function ListingFormSections({
         ...(initialData?.id ? { id: initialData.id } : {}),
         title: title.trim(),
         city: city.trim(),
-        country: selectedLocation?.country || 'Spain',
-        locationId: selectedLocation?.id || 1,
-        neighborhood: neighborhood.trim() || 'Central',
-        address: address.trim() || 'Available upon confirmed booking',
+        country: selectedLocation?.country || initialData?.country || '',
+        ...(selectedLocation?.id ? { locationId: selectedLocation.id } : {}),
+        neighborhood: neighborhood.trim(),
+        address: address.trim(),
         description: description.trim(),
-        images:
-          images.length > 0 ? images : ['/seed/property/prop-madrid-1.webp'],
+        images,
         bedrooms: Number(bedrooms),
         bathrooms: Number(bathrooms),
         totalSurface: Number(totalSurface),
@@ -342,12 +340,12 @@ export function ListingFormSections({
         gym,
         terrace,
         workstation: {
-          hasWorkstation: true,
-          desk: desk.trim() || 'Standard Desk',
-          chair: chair.trim() || 'Ergonomic Chair',
-          monitors: monitors.trim() || 'Dual 27" 4K Monitors',
-          keyboard: keyboard.trim() || 'Standard Keyboard & Mouse',
-          wifiSpeed: Number(wifiSpeed) || 300,
+          hasWorkstation: Boolean(desk.trim() || chair.trim() || monitors.trim()),
+          desk: desk.trim(),
+          chair: chair.trim(),
+          monitors: monitors.trim(),
+          keyboard: keyboard.trim(),
+          wifiSpeed: Number(wifiSpeed) || 0,
         },
         pricePerMonth: parsedPricePerMonthCents,
         minimumStayNights: Number(minimumStayNights),
@@ -516,7 +514,7 @@ export function ListingFormSections({
         </div>
       )}
 
-      <form onSubmit={(e) => e.preventDefault()} className="space-y-10">
+      <form ref={formRef} onSubmit={(e) => e.preventDefault()} className="space-y-10">
         {/* SECTION 1: BASICS */}
         <section aria-labelledby="section-basics">
           <div className="flex items-center gap-2 pb-3 mb-5 border-b border-neutral-200">
@@ -569,6 +567,12 @@ export function ListingFormSections({
                   onChange={(e) => setCity(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-lg border border-neutral-300 text-sm text-neutral-900 bg-white focus:outline-none focus:border-[var(--color-brand)] focus:ring-1 focus:ring-[var(--color-brand)]"
                 >
+                  {!hasCurrentCityInLocations && city && (
+                    <option value={city}>
+                      {city}
+                      {initialData?.country ? `, ${initialData.country}` : ''} (Archived)
+                    </option>
+                  )}
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.city}>
                       {loc.city}, {loc.country}
@@ -1341,7 +1345,7 @@ export function ListingFormSections({
 
             <button
               type="button"
-              disabled={isSubmitting}
+              disabled={isReadOnly || isSubmitting}
               onClick={() => handleSubmit('draft')}
               className="flex-1 sm:flex-none min-h-10 px-4 py-2 rounded-lg border border-neutral-300 bg-neutral-100 hover:bg-neutral-200 text-sm font-semibold text-neutral-800 transition-colors disabled:opacity-50 cursor-pointer"
             >
@@ -1350,29 +1354,52 @@ export function ListingFormSections({
                   <span className="w-3.5 h-3.5 border-2 border-neutral-500 border-t-transparent rounded-full animate-spin" />
                   Saving Draft...
                 </span>
+              ) : isPreservableLiveStatus ? (
+                'Move to Draft'
               ) : (
                 'Save Draft'
               )}
             </button>
 
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => handleSubmit('pending_review')}
-              className="flex-1 sm:flex-none min-h-10 px-5 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-sm font-bold text-white shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {isSubmitting && submittingIntent === 'pending_review' ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Submitting...
-                </span>
-              ) : (
-                <>
-                  <CalendarCheck className="w-4 h-4" />
-                  <span>Submit for Review →</span>
-                </>
-              )}
-            </button>
+            {isPreservableLiveStatus ? (
+              <button
+                type="button"
+                disabled={isReadOnly || isSubmitting}
+                onClick={() => handleSubmit('keep')}
+                className="flex-1 sm:flex-none min-h-10 px-5 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-sm font-bold text-white shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSubmitting && submittingIntent === 'keep' ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving Changes...
+                  </span>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={isReadOnly || isSubmitting}
+                onClick={() => handleSubmit('pending_review')}
+                className="flex-1 sm:flex-none min-h-10 px-5 py-2 rounded-lg bg-[var(--color-brand)] hover:bg-[var(--color-brand-hover)] text-sm font-bold text-white shadow-xs transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isSubmitting && submittingIntent === 'pending_review' ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Submitting...
+                  </span>
+                ) : (
+                  <>
+                    <CalendarCheck className="w-4 h-4" />
+                    <span>Submit for Review →</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </form>

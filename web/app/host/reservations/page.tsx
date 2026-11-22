@@ -1,11 +1,11 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
 import { requireHost } from '@/lib/auth/guards';
-import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
+import { getHostPortalContext, redactUnconfirmedReservation } from '@/lib/auth/host-page';
 import { listProperties } from '@/lib/api/properties';
 import { listReservations, updateReservationStatus } from '@/lib/api/reservations';
+import { toUtcDateString } from '@/lib/format';
 import { HostReservationsTable } from '@/features/host/host-reservations-table';
 
 export const metadata: Metadata = {
@@ -16,33 +16,32 @@ export const metadata: Metadata = {
 };
 
 export default async function HostReservationsPage() {
-  const user = await getCurrentUser();
-  const host =
-    (user ? await getHostByUserId(user.id) : null) || (await getHostProfile(1));
+  const { host, isReadOnly } = await getHostPortalContext('/host/reservations');
 
-  if (!host) {
-    return (
-      <div className="bg-white border border-[var(--color-border-light)] rounded-xl p-8 text-center">
-        <h2 className="text-lg font-bold text-neutral-900 mb-2">No Host Profile Found</h2>
-        <p className="text-sm text-neutral-500">Please apply to become a host partner first.</p>
-      </div>
-    );
-  }
+  const [properties, rawReservations] = await Promise.all([
+    listProperties({ hostId: host.id, status: 'all' }),
+    listReservations({ hostId: host.id }),
+  ]);
 
-  // Fetch host properties and reservations
-  const properties = await listProperties({ hostId: host.id, status: 'all' });
-  const reservations = await listReservations({ hostId: host.id });
+  const reservations = rawReservations.map(redactUnconfirmedReservation);
+  const todayIso = toUtcDateString(new Date());
 
-  // Server Action to accept booking request (AC-HOST-4)
   async function acceptReservationAction(reservationId: number) {
     'use server';
     try {
       const { hostId } = await requireHost();
-      await updateReservationStatus(reservationId, 'confirmed', undefined, undefined, { hostId });
+      const updated = await updateReservationStatus(
+        reservationId,
+        'confirmed',
+        undefined,
+        undefined,
+        { hostId }
+      );
       revalidatePath('/host/reservations');
       revalidatePath('/host');
       revalidatePath('/host/calendar');
-      return { success: true };
+      revalidatePath('/host/payouts');
+      return { success: true, reservation: updated };
     } catch (err: unknown) {
       return {
         success: false,
@@ -54,16 +53,22 @@ export default async function HostReservationsPage() {
     }
   }
 
-  // Server Action to reject booking request (AC-HOST-5)
   async function rejectReservationAction(reservationId: number, reason?: string) {
     'use server';
     try {
       const { hostId } = await requireHost();
-      await updateReservationStatus(reservationId, 'rejected', reason, 'host', { hostId });
+      const updated = await updateReservationStatus(
+        reservationId,
+        'rejected',
+        reason,
+        'host',
+        { hostId }
+      );
       revalidatePath('/host/reservations');
       revalidatePath('/host');
       revalidatePath('/host/calendar');
-      return { success: true };
+      revalidatePath('/host/payouts');
+      return { success: true, reservation: redactUnconfirmedReservation(updated) };
     } catch (err: unknown) {
       return {
         success: false,
@@ -79,6 +84,8 @@ export default async function HostReservationsPage() {
     <HostReservationsTable
       initialReservations={reservations}
       properties={properties}
+      todayIso={todayIso}
+      isReadOnly={isReadOnly}
       onAcceptAction={acceptReservationAction}
       onRejectAction={rejectReservationAction}
     />

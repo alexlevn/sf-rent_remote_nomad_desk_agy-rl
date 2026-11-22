@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Clock,
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import type { Reservation, Property } from '@/lib/types';
 import { useCurrency } from '@/context/currency-context';
+import { BOOKING_RULES } from '@/content/booking-rules';
+import { formatUtcDateRange, getSmartLockPasscode } from '@/lib/format';
 
 export interface PendingRequestItem {
   reservation: Reservation;
@@ -29,6 +31,7 @@ export interface UpcomingCheckInItem {
 export interface RequestsTableProps {
   initialRequests: PendingRequestItem[];
   upcomingCheckIns: UpcomingCheckInItem[];
+  isReadOnly?: boolean;
   onAcceptAction: (reservationId: number) => Promise<{ success: boolean; error?: string }>;
   onRejectAction: (
     reservationId: number,
@@ -39,6 +42,7 @@ export interface RequestsTableProps {
 export const RequestsTable: React.FC<RequestsTableProps> = ({
   initialRequests,
   upcomingCheckIns: initialUpcoming,
+  isReadOnly = false,
   onAcceptAction,
   onRejectAction,
 }) => {
@@ -50,29 +54,26 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
   );
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState('Dates unavailable due to scheduled repairs');
+  const [rejectModalError, setRejectModalError] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<number | null>(null);
 
   // Double-submit prevention ref
   const isProcessingRef = useRef(false);
 
-  const formatDatesRange = (moveInDate: string, moveOutDate: string) => {
-    try {
-      const dIn = new Date(moveInDate);
-      const dOut = new Date(moveOutDate);
-      const inStr = dIn.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const outStr = dOut.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-      return `${inStr} – ${outStr}`;
-    } catch {
-      return `${moveInDate} – ${moveOutDate}`;
-    }
-  };
+  useEffect(() => {
+    if (!rejectingId) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isProcessingRef.current) {
+        setRejectingId(null);
+        setRejectModalError(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [rejectingId]);
 
   const handleAccept = async (reqItem: PendingRequestItem) => {
-    if (isProcessingRef.current) return;
+    if (isReadOnly || isProcessingRef.current) return;
     isProcessingRef.current = true;
     setLoadingId(reqItem.reservation.id);
     setFeedback(null);
@@ -80,7 +81,6 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
     try {
       const res = await onAcceptAction(reqItem.reservation.id);
       if (res.success) {
-        // Move from requests to upcoming check-ins
         setRequests((prev) => prev.filter((r) => r.reservation.id !== reqItem.reservation.id));
         setUpcoming((prev) => [
           {
@@ -111,9 +111,10 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
   };
 
   const handleConfirmReject = async () => {
-    if (!rejectingId || isProcessingRef.current) return;
+    if (isReadOnly || !rejectingId || isProcessingRef.current) return;
     isProcessingRef.current = true;
     setLoadingId(rejectingId);
+    setRejectModalError(null);
     setFeedback(null);
 
     const targetId = rejectingId;
@@ -127,16 +128,10 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
         });
         setRejectingId(null);
       } else {
-        setFeedback({
-          type: 'error',
-          message: res.error || 'Failed to reject booking request.',
-        });
+        setRejectModalError(res.error || 'Failed to reject booking request.');
       }
     } catch {
-      setFeedback({
-        type: 'error',
-        message: 'A network error occurred while rejecting the request.',
-      });
+      setRejectModalError('A network error occurred while rejecting the request.');
     } finally {
       isProcessingRef.current = false;
       setLoadingId(null);
@@ -179,7 +174,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
           <h2 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
             <span>⚡ Requests Awaiting Your Response</span>
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-              48h Countdown
+              {BOOKING_RULES.respondHours}h Countdown
             </span>
           </h2>
           <span className="text-xs text-neutral-500">
@@ -196,7 +191,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
               All caught up!
             </h3>
             <p className="text-sm text-neutral-500 max-w-md mx-auto">
-              There are no pending booking requests awaiting your response right now. New guest inquiries will appear here with an active 48-hour countdown timer.
+              There are no pending booking requests awaiting your response right now. New guest inquiries will appear here with an active {BOOKING_RULES.respondHours}-hour countdown timer.
             </p>
           </div>
         ) : (
@@ -227,7 +222,9 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                       {/* Guest */}
                       <td className="py-4 px-4 sm:px-6 align-middle">
                         <div className="font-bold text-neutral-900">{r.guestName}</div>
-                        <div className="text-xs text-neutral-400">{r.guestEmail}</div>
+                        <div className="text-xs text-neutral-400 italic">
+                          Contact visible after confirmation
+                        </div>
                       </td>
 
                       {/* Property */}
@@ -236,13 +233,13 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                           {p?.title || `Apartment #${r.propertyId}`}
                         </div>
                         <div className="text-xs text-neutral-400">
-                          {p?.city ? `${p.neighborhood}, ${p.city}` : 'Madrid, Spain'}
+                          {p ? [p.neighborhood, p.city].filter(Boolean).join(', ') : ''}
                         </div>
                       </td>
 
                       {/* Dates */}
                       <td className="py-4 px-4 sm:px-6 align-middle whitespace-nowrap text-neutral-700">
-                        {formatDatesRange(r.moveInDate, r.moveOutDate)}
+                        {formatUtcDateRange(r.moveInDate, r.moveOutDate)}
                         <span className="block text-xs text-neutral-400">
                           {r.nights} nights
                         </span>
@@ -281,17 +278,20 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                         <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
-                            disabled={isActing}
+                            disabled={isReadOnly || isActing}
                             onClick={() => handleAccept(item)}
-                            className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-xs"
+                            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-hover)] disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
                           >
                             {isActing ? 'Saving...' : 'Accept'}
                           </button>
                           <button
                             type="button"
-                            disabled={isActing}
-                            onClick={() => setRejectingId(r.id)}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            disabled={isReadOnly || isActing}
+                            onClick={() => {
+                              setRejectModalError(null);
+                              setRejectingId(r.id);
+                            }}
+                            className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors cursor-pointer"
                           >
                             Reject
                           </button>
@@ -361,7 +361,9 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                           <User className="w-3.5 h-3.5 text-neutral-400" />
                           <span>{r.guestName}</span>
                         </div>
-                        <div className="text-xs text-neutral-400">{r.guestEmail}</div>
+                        {r.guestEmail && (
+                          <div className="text-xs text-neutral-400">{r.guestEmail}</div>
+                        )}
                       </td>
 
                       <td className="py-4 px-4 sm:px-6 align-middle">
@@ -369,7 +371,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                           {p?.title || `Apartment #${r.propertyId}`}
                         </div>
                         <div className="text-xs text-neutral-400">
-                          {p?.city ? `${p.neighborhood}, ${p.city}` : 'Madrid, Spain'}
+                          {p ? [p.neighborhood, p.city].filter(Boolean).join(', ') : ''}
                         </div>
                       </td>
 
@@ -384,7 +386,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                       <td className="py-4 px-4 sm:px-6 align-middle whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 font-mono text-xs bg-neutral-100 text-neutral-800 px-2 py-0.5 rounded border border-neutral-200">
                           <KeyRound className="w-3 h-3 text-neutral-500" />
-                          <span>8492#</span>
+                          <span>{getSmartLockPasscode(r.id)}</span>
                         </span>
                       </td>
 
@@ -405,24 +407,49 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
 
       {/* Reject Modal */}
       {rejectingId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dashboard-reject-modal-title"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isProcessingRef.current) {
+              setRejectingId(null);
+              setRejectModalError(null);
+            }
+          }}
+        >
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-[var(--color-border-light)] animate-in fade-in zoom-in-95 duration-150">
             <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-4">
               <XCircle className="w-6 h-6" />
             </div>
 
-            <h3 className="text-lg font-bold text-neutral-900 mb-2">
+            <h3 id="dashboard-reject-modal-title" className="text-lg font-bold text-neutral-900 mb-2">
               Decline Booking Request?
             </h3>
             <p className="text-sm text-neutral-500 mb-4 leading-relaxed">
               Declining this request will immediately release the guest&apos;s card authorization and unblock the dates. Please specify the reason:
             </p>
 
+            {rejectModalError && (
+              <div
+                role="alert"
+                className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{rejectModalError}</span>
+              </div>
+            )}
+
             <div className="mb-5">
-              <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-2">
+              <label
+                htmlFor="dashboard-reject-reason"
+                className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-2"
+              >
                 Reason for decline
               </label>
               <select
+                id="dashboard-reject-reason"
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 className="w-full text-sm border border-[var(--color-border-light)] rounded-lg p-2.5 bg-neutral-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
@@ -446,8 +473,11 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
               <button
                 type="button"
                 disabled={loadingId === rejectingId}
-                onClick={() => setRejectingId(null)}
-                className="px-4 py-2 text-sm font-semibold rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors"
+                onClick={() => {
+                  setRejectingId(null);
+                  setRejectModalError(null);
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -455,7 +485,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
                 type="button"
                 disabled={loadingId === rejectingId}
                 onClick={handleConfirmReject}
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-xs"
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 {loadingId === rejectingId ? 'Declining...' : 'Confirm Decline'}
               </button>

@@ -1,7 +1,10 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { getCurrentUser } from '@/lib/auth/session';
-import { getHostByUserId, applyHost, updateHostProfile } from '@/lib/api/hosts';
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import { getStrictSessionUser } from '@/lib/auth/session';
+import { requireStrictUser } from '@/lib/auth/guards';
+import { getHostByUserId, applyHost } from '@/lib/api/hosts';
 import type { HostApplicationInput, HostProfile } from '@/lib/types';
 import { HostApplyContainer } from '@/features/host/host-apply-container';
 
@@ -9,13 +12,17 @@ export const metadata: Metadata = {
   title: 'Apply to Become a Host Partner | NomadDesk',
   description:
     'Submit your curated furnished apartment portfolio to the NomadDesk Partner Network. Connect with vetted tech professionals and remote workers for steady 30+ night stays.',
+  robots: { index: false, follow: false },
 };
 
 export default async function HostApplyPage() {
-  const user = await getCurrentUser();
-  const hostProfile = user ? await getHostByUserId(user.id) : null;
+  const user = await getStrictSessionUser();
+  if (!user) {
+    redirect('/login?callbackUrl=/host/apply');
+  }
 
-  // Server action to handle host application submission or re-submission
+  const hostProfile = await getHostByUserId(user.id);
+
   async function submitHostApplicationAction(data: HostApplicationInput): Promise<{
     success: boolean;
     error?: string;
@@ -23,37 +30,17 @@ export default async function HostApplyPage() {
   }> {
     'use server';
 
-    const currentUser = await getCurrentUser();
-    if (!currentUser) {
-      return {
-        success: false,
-        error: 'You must be signed in to submit a host application.',
-      };
-    }
-
     try {
-      const existing = await getHostByUserId(currentUser.id);
-      let savedProfile: HostProfile;
+      const currentUser = await requireStrictUser();
+      // Always route through applyHost so re-submissions enforce status guards and notify admin
+      const savedProfile = await applyHost({
+        ...data,
+        userId: currentUser.id,
+      });
 
-      if (existing) {
-        // Re-submission / update existing profile
-        savedProfile = await updateHostProfile(existing.id, {
-          displayName: data.displayName,
-          phone: data.phone,
-          website: data.website || null,
-          cities: data.cities,
-          portfolioSize: data.portfolioSize,
-          bio: data.bio,
-          status: 'pending',
-          rejectionReason: null,
-        });
-      } else {
-        // New application
-        savedProfile = await applyHost({
-          ...data,
-          userId: currentUser.id,
-        });
-      }
+      revalidatePath('/host/apply');
+      revalidatePath('/admin/hosts');
+      revalidatePath('/admin');
 
       return {
         success: true,
@@ -74,7 +61,6 @@ export default async function HostApplyPage() {
     <div className="min-h-[calc(100vh-140px)] flex flex-col justify-between">
       <main className="flex-1">
         <HostApplyContainer
-          initialUser={user}
           initialHostProfile={hostProfile}
           submitAction={submitHostApplicationAction}
         />

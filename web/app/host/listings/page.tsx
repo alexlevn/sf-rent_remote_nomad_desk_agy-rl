@@ -1,10 +1,10 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
 import { requireHost } from '@/lib/auth/guards';
-import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
+import { getHostPortalContext } from '@/lib/auth/host-page';
 import { getPropertyById, listProperties, updatePropertyStatus } from '@/lib/api/properties';
+import { slugifySegment } from '@/lib/format';
 import type { PropertyStatus } from '@/lib/types';
 import { HostListingsTable } from '@/features/host/host-listings-table';
 
@@ -16,23 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function HostListingsPage() {
-  const user = await getCurrentUser();
-  const host =
-    (user ? await getHostByUserId(user.id) : null) || (await getHostProfile(1));
-
-  if (!host) {
-    return (
-      <div className="bg-white border border-[var(--color-border-light)] rounded-xl p-8 text-center">
-        <h2 className="text-lg font-bold text-neutral-900 mb-2">
-          No Host Profile Found
-        </h2>
-        <p className="text-sm text-neutral-500">
-          Please apply to become a host partner first.
-        </p>
-      </div>
-    );
-  }
-
+  const { host, isReadOnly } = await getHostPortalContext('/host/listings');
   const properties = await listProperties({ hostId: host.id, status: 'all' });
 
   // Server Action to submit property for admin review (AC-HOST-3)
@@ -44,11 +28,19 @@ export default async function HostListingsPage() {
       if (!target || target.hostId !== hostId) {
         return { success: false, error: 'Unauthorized: property does not belong to this host.' };
       }
+      if (target.status !== 'draft' && target.status !== 'rejected') {
+        return {
+          success: false,
+          error: 'Only draft or rejected listings can be submitted for review.',
+        };
+      }
       const updated = await updatePropertyStatus(propertyId, 'pending_review');
       if (!updated) {
         return { success: false, error: 'Property not found.' };
       }
       revalidatePath('/host/listings');
+      revalidatePath('/admin/properties');
+      revalidatePath('/admin');
       return { success: true };
     } catch (err: unknown) {
       return {
@@ -84,6 +76,14 @@ export default async function HostListingsPage() {
         return { success: false, error: 'Property not found.' };
       }
       revalidatePath('/host/listings');
+      revalidatePath('/host');
+      revalidatePath('/');
+      if (target.slug) {
+        revalidatePath(`/l/apartments/${target.slug}`);
+      }
+      if (target.city) {
+        revalidatePath(`/c/furnished-apartments-${slugifySegment(target.city)}`);
+      }
       return { success: true };
     } catch (err: unknown) {
       return {
@@ -99,8 +99,8 @@ export default async function HostListingsPage() {
   return (
     <HostListingsTable
       initialProperties={properties}
-      hostId={host.id}
       hostName={host.displayName}
+      isReadOnly={isReadOnly}
       onSubmitForReview={submitForReviewAction}
       onToggleHide={toggleHidePropertyAction}
     />

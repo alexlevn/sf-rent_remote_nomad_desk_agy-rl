@@ -1,11 +1,11 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
-import { getCurrentUser } from '@/lib/auth/session';
 import { requireHost } from '@/lib/auth/guards';
-import { getHostProfile, getHostByUserId } from '@/lib/api/hosts';
+import { getHostPortalContext, redactUnconfirmedReservation } from '@/lib/auth/host-page';
 import { listProperties } from '@/lib/api/properties';
 import { listReservations, updateReservationStatus } from '@/lib/api/reservations';
+import { MS_PER_HOUR, getUtcOffsetDateString, toUtcDateString } from '@/lib/format';
 import type { Property } from '@/lib/types';
 import { DashboardKpis } from '@/features/host/dashboard-kpis';
 import {
@@ -22,40 +22,30 @@ export const metadata: Metadata = {
 };
 
 export default async function HostDashboardPage() {
-  const user = await getCurrentUser();
-  const host = (user ? await getHostByUserId(user.id) : null) || (await getHostProfile(1));
+  const { host, isReadOnly } = await getHostPortalContext('/host');
 
-  if (!host) {
-    return (
-      <div className="bg-white border border-[var(--color-border-light)] rounded-xl p-8 text-center">
-        <h2 className="text-lg font-bold text-neutral-900 mb-2">No Host Profile Found</h2>
-        <p className="text-sm text-neutral-500">Please apply to become a host partner first.</p>
-      </div>
-    );
-  }
+  const [properties, rawReservations] = await Promise.all([
+    listProperties({ hostId: host.id, status: 'all' }),
+    listReservations({ hostId: host.id }),
+  ]);
 
-  // Fetch host properties and reservations
-  const properties = await listProperties({ hostId: host.id, status: 'all' });
-  const reservations = await listReservations({ hostId: host.id });
+  const reservations = rawReservations.map(redactUnconfirmedReservation);
 
-  // Map properties for fast lookup
   const propertyMap = new Map<number, Property>();
   properties.forEach((p) => propertyMap.set(p.id, p));
 
-  // Compute KPI: Live listings
-  const liveListings = properties.filter((p) => p.status === 'published');
-  const liveListingsCount = liveListings.length > 0 ? liveListings.length : 4;
+  // Compute KPI: Live published listings (no synthetic fallback)
+  const liveListingsCount = properties.filter((p) => p.status === 'published').length;
 
-  // Compute pending requests with 48h countdown
+  // Compute pending requests with real respondBy - Date.now() countdown
+  const nowMs = Date.now();
   const pendingRaw = reservations.filter((r) => r.status === 'pending');
-  const pendingRequests: PendingRequestItem[] = pendingRaw.map((r, idx) => {
-    let hoursRemaining = idx === 0 ? 36 : 44;
+  const pendingRequests: PendingRequestItem[] = pendingRaw.map((r) => {
+    let hoursRemaining = 0;
     if (r.respondBy) {
-      const diffMs = new Date(r.respondBy).getTime() - new Date(r.createdAt || '2026-11-20T12:00:00Z').getTime();
-      const calcHours = Math.round(diffMs / (3600 * 1000));
-      if (calcHours > 0) hoursRemaining = calcHours;
+      const diffMs = new Date(r.respondBy).getTime() - nowMs;
+      hoursRemaining = Math.max(0, Math.ceil(diffMs / MS_PER_HOUR));
     }
-
     return {
       reservation: r,
       property: propertyMap.get(r.propertyId) || null,
@@ -63,26 +53,42 @@ export default async function HostDashboardPage() {
     };
   });
 
-  // Upcoming confirmed check-ins (next 30 days)
-  const upcomingRaw = reservations.filter((r) => r.status === 'confirmed');
+  // Upcoming confirmed check-ins in the next 30 days (UTC)
+  const todayIso = toUtcDateString(new Date(nowMs));
+  const in30DaysIso = getUtcOffsetDateString(30);
+  const upcomingRaw = reservations
+    .filter(
+      (r) =>
+        r.status === 'confirmed' &&
+        r.moveInDate >= todayIso &&
+        r.moveInDate <= in30DaysIso
+    )
+    .sort((a, b) => a.moveInDate.localeCompare(b.moveInDate));
+
   const upcomingCheckIns: UpcomingCheckInItem[] = upcomingRaw.map((r) => ({
     reservation: r,
     property: propertyMap.get(r.propertyId) || null,
   }));
 
-  // Expected payout this month (USD cents)
-  let expectedNetPayoutCents = upcomingRaw.reduce((sum, r) => sum + (r.hostPayout || 0), 0);
-  if (expectedNetPayoutCents === 0) {
-    expectedNetPayoutCents = 432000; // $4,320 fallback matching design
-  }
+  // Expected net payout for active confirmed/completed stays starting or active this month
+  const currentMonthPrefix = todayIso.slice(0, 7);
+  const expectedNetPayoutCents = reservations
+    .filter(
+      (r) =>
+        (r.status === 'confirmed' || r.status === 'completed') &&
+        r.moveInDate.startsWith(currentMonthPrefix)
+    )
+    .reduce((sum, r) => sum + (r.hostPayout || 0), 0);
 
-  // Server action to accept booking request
   async function acceptReservationAction(reservationId: number) {
     'use server';
     try {
       const { hostId } = await requireHost();
       await updateReservationStatus(reservationId, 'confirmed', undefined, undefined, { hostId });
       revalidatePath('/host');
+      revalidatePath('/host/reservations');
+      revalidatePath('/host/calendar');
+      revalidatePath('/host/payouts');
       return { success: true };
     } catch (err) {
       return {
@@ -92,13 +98,15 @@ export default async function HostDashboardPage() {
     }
   }
 
-  // Server action to reject booking request
   async function rejectReservationAction(reservationId: number, reason?: string) {
     'use server';
     try {
       const { hostId } = await requireHost();
       await updateReservationStatus(reservationId, 'rejected', reason, 'host', { hostId });
       revalidatePath('/host');
+      revalidatePath('/host/reservations');
+      revalidatePath('/host/calendar');
+      revalidatePath('/host/payouts');
       return { success: true };
     } catch (err) {
       return {
@@ -117,7 +125,14 @@ export default async function HostDashboardPage() {
             Welcome back, {host.displayName}
           </h2>
           <p className="text-xs sm:text-sm text-neutral-500 mt-0.5">
-            Portfolio overview for {host.cities} • Partner status: <span className="text-emerald-700 font-semibold uppercase">{host.status}</span>
+            Portfolio overview for {host.cities || 'your properties'} • Partner status:{' '}
+            <span
+              className={`font-semibold uppercase ${
+                host.status === 'suspended' ? 'text-amber-700' : 'text-emerald-700'
+              }`}
+            >
+              {host.status}
+            </span>
           </p>
         </div>
       </div>
@@ -126,7 +141,7 @@ export default async function HostDashboardPage() {
       <DashboardKpis
         liveListingsCount={liveListingsCount}
         pendingRequestsCount={pendingRequests.length}
-        upcomingCheckInsCount={upcomingCheckIns.length || 3}
+        upcomingCheckInsCount={upcomingCheckIns.length}
         expectedNetPayoutCents={expectedNetPayoutCents}
       />
 
@@ -134,37 +149,10 @@ export default async function HostDashboardPage() {
       <RequestsTable
         initialRequests={pendingRequests}
         upcomingCheckIns={upcomingCheckIns}
+        isReadOnly={isReadOnly}
         onAcceptAction={acceptReservationAction}
         onRejectAction={rejectReservationAction}
       />
-
-      {/* UI States & Verification Block (Faithful to design) */}
-      <div className="mt-12 pt-8 border-t border-[var(--color-border-light)]">
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-              Host Operations Verification & UI States
-            </h3>
-            <span className="text-[11px] font-mono px-2 py-0.5 bg-neutral-200 text-neutral-700 rounded">
-              P0 Scope: Screen #21
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-neutral-600">
-            <div className="bg-white p-3 rounded-lg border border-neutral-200">
-              <span className="font-semibold block text-neutral-800 mb-1">⏱️ 48-Hour Response SLA</span>
-              Requests not answered within 48 hours automatically expire to protect tenant travel arrangements.
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-neutral-200">
-              <span className="font-semibold block text-neutral-800 mb-1">💳 Card Authorization Hold</span>
-              Guest card is pre-authorized on checkout and only captured when host clicks &quot;Accept&quot;.
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-neutral-200">
-              <span className="font-semibold block text-neutral-800 mb-1">📊 10% Flat Marketplace Fee</span>
-              Host receives 90% of monthly rent with zero hidden disbursement fees.
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

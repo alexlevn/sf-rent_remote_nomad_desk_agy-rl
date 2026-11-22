@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useCurrency } from '@/context/currency-context';
+import { BOOKING_RULES } from '@/content/booking-rules';
 
 export interface DashboardKpisProps {
   liveListingsCount: number;
@@ -42,7 +43,9 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
           {pendingRequestsCount}
         </div>
         <div className="mt-1 text-xs text-amber-600 font-medium">
-          {pendingRequestsCount > 0 ? 'Requires action within 48h' : 'All caught up'}
+          {pendingRequestsCount > 0
+            ? `Requires action within ${BOOKING_RULES.respondHours}h`
+            : 'All caught up'}
         </div>
       </div>
 
@@ -68,7 +71,7 @@ export const DashboardKpis: React.FC<DashboardKpisProps> = ({
           {formatPrice(expectedNetPayoutCents)}
         </div>
         <div className="mt-1 text-xs text-neutral-400">
-          Net after 10% platform commission
+          Net after {BOOKING_RULES.commissionPercent}% platform commission
         </div>
       </div>
     </div>

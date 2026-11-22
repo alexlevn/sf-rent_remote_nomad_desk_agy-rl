@@ -12,7 +12,10 @@ import {
   updateHostProfileSchema,
 } from '@/lib/validations/host';
 
-function mapHostRow(row: typeof hostProfiles.$inferSelect): HostProfile {
+function mapHostRow(
+  row: typeof hostProfiles.$inferSelect,
+  userEmail?: string | null
+): HostProfile {
   return {
     id: row.id,
     userId: row.userId,
@@ -28,6 +31,7 @@ function mapHostRow(row: typeof hostProfiles.$inferSelect): HostProfile {
     rejectionReason: row.rejectionReason ?? null,
     approvedAt: row.approvedAt ? row.approvedAt.toISOString() : null,
     createdAt: row.createdAt ? row.createdAt.toISOString() : undefined,
+    ...(userEmail !== undefined ? { userEmail } : {}),
   };
 }
 
@@ -48,7 +52,7 @@ export async function listHosts(): Promise<HostProfile[]> {
     .select()
     .from(hostProfiles)
     .orderBy(asc(hostProfiles.id));
-  return rows.map(mapHostRow);
+  return rows.map((r) => mapHostRow(r));
 }
 
 /**
@@ -200,7 +204,7 @@ export async function listHostApplications(): Promise<HostProfile[]> {
     .where(eq(hostProfiles.status, 'pending'))
     .orderBy(desc(hostProfiles.createdAt), asc(hostProfiles.id));
 
-  return rows.map(mapHostRow);
+  return rows.map((r) => mapHostRow(r));
 }
 
 /**
@@ -525,7 +529,7 @@ export async function listAdminHostsPaginated(
       : db.select({ count: sql<number>`count(*)::int` }).from(hostProfiles),
     whereClause
       ? db
-          .select({ host: hostProfiles })
+          .select({ host: hostProfiles, userEmail: users.email })
           .from(hostProfiles)
           .leftJoin(users, eq(hostProfiles.userId, users.id))
           .where(whereClause)
@@ -533,15 +537,16 @@ export async function listAdminHostsPaginated(
           .limit(pageSize)
           .offset(offset)
       : db
-          .select({ host: hostProfiles })
+          .select({ host: hostProfiles, userEmail: users.email })
           .from(hostProfiles)
+          .leftJoin(users, eq(hostProfiles.userId, users.id))
           .orderBy(desc(hostProfiles.createdAt), desc(hostProfiles.id))
           .limit(pageSize)
           .offset(offset),
   ]);
 
   return {
-    items: itemRows.map((r) => mapHostRow(r.host)),
+    items: itemRows.map((r) => mapHostRow(r.host, r.userEmail ?? null)),
     total: Number(totalRows[0]?.count ?? 0),
     page,
     pageSize,
