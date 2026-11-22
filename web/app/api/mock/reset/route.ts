@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { eq, gt, inArray, notInArray, sql } from 'drizzle-orm';
-import { resetMockData } from '@/lib/api/mock/seed-data';
 import { resetSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/client';
 import {
@@ -46,7 +45,6 @@ export async function POST(request?: Request) {
     );
   }
 
-  resetMockData();
   resetSession();
 
   let keepMedia = false;
