@@ -21,7 +21,7 @@ Stages of the automated build pipeline for this project.
 | S7D | runner | Build: Content entry + image upload | ✅ | 10 tasks |
 | S8 | agent | Frontend review & fixes | ✅ |  |
 | S9 | agent | Backend review & fixes | ✅ |  |
-| S10 | agent | Full local run, E2E & final report | ⏳ | attempt 1 |
+| S10 | agent | Full local run, E2E & final report | ✅ |  |
 | W1 | script | Convert images to WebP | 🔲 |  |
 
 Legend: 🔲 todo · ⏳ running · ✅ done · ⏸ awaiting review · ❌ failed
