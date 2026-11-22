@@ -226,6 +226,7 @@ test.describe('City Search & Filters E2E Suite', () => {
     expect(notFoundRes?.status()).toBe(404);
 
     // 2. Authenticate as Host via Auth.js credentials and visit Host Listings
+    await page.context().clearCookies();
     await page.goto('/login');
     await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
     await page.getByLabel(/email address/i).fill('host@example.com');

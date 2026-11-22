@@ -122,6 +122,15 @@ test.describe('Apartment Detail & Availability E2E Suite', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+
+    // Sign in as demo guest so authenticated checkout renders directly
+    await page.context().clearCookies();
+    await page.goto('/login');
+    await page.getByLabel(/email address/i).fill('demo@example.com');
+    await page.getByLabel(/password/i).fill('demo1234');
+    await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+    await page.waitForURL('/');
+
     await page.goto('/l/apartments/exclusive-240-sqm-residence-in-jeronimos-retiro-park');
 
     // 1. Locate CTA button

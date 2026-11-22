@@ -9,6 +9,7 @@ function getOffsetDateStr(offsetDays: number): string {
 
 // Helper to login as guest demo user
 async function loginAsGuest(page: Page) {
+  await page.context().clearCookies();
   await page.goto('/login');
   const emailInput = page.getByLabel(/email address/i);
   const passwordInput = page.getByLabel(/password/i);
@@ -42,6 +43,7 @@ test.describe('Auth, Guest Portal & Booking Flow E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Ensure logged out state
+    await page.context().clearCookies();
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
     await page.reload();

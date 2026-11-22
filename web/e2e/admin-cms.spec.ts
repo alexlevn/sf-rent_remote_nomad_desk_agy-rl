@@ -3,6 +3,7 @@ import { BOOKING_RULES } from '../content/booking-rules';
 
 // Helper to authenticate user via /login
 async function loginAs(page: Page, email: string, password = 'demo1234') {
+  await page.context().clearCookies();
   await page.goto('/login');
   await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
   await page.getByLabel(/email address/i).fill(email);

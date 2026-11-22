@@ -9,6 +9,7 @@ function getOffsetDateStr(offsetDays: number): string {
 
 // Helper to authenticate user via /login
 async function loginAs(page: Page, email: string, password = 'demo1234') {
+  await page.context().clearCookies();
   await page.goto('/login');
   await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
   await page.getByLabel(/email address/i).fill(email);
@@ -93,7 +94,8 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.waitForURL(/\/host\/apply/);
     await expect(page).toHaveURL(/\/host\/apply/);
 
-    // 3. Unauthenticated user: clear localStorage auth session
+    // 3. Unauthenticated user: clear auth session cookies and localStorage
+    await page.context().clearCookies();
     await page.evaluate(() => localStorage.removeItem('nomaddesk_user'));
 
     // 4. Attempt to access /host -> redirected to /login
@@ -108,7 +110,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Log in as host
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
 
     // 2. Navigate to new listing page
     await page.goto('/host/listings/new');
@@ -127,6 +129,8 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await descEditable.pressSequentially(
       'Executive penthouse in central Madrid featuring ultra-fast 1Gbps fiber internet and dual 4K monitors.'
     );
+    await page.getByTestId('host-custom-photo-input').fill('/seed/property/prop-madrid-1.webp');
+    await page.getByTestId('host-add-photo-btn').click();
 
     // 4. Click "Submit for Review →"
     const submitBtn = page.getByRole('button', { name: /Submit for Review/i });
@@ -153,7 +157,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Log in as host
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
 
     // 2. Navigate to /host/reservations
     await page.goto('/host/reservations');
@@ -185,7 +189,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Log in as host
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
 
     // 2. Navigate to /host/reservations
     await page.goto('/host/reservations');
@@ -236,7 +240,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Log in as host
-    await loginAs(page, 'host@example.com', 'demo1234');
+    await loginAs(page, 'host@example.com', 'host1234');
 
     // 2. Navigate to /host/calendar
     await page.goto('/host/calendar');
@@ -301,7 +305,7 @@ test.describe('Host Portal Lifecycle E2E Suite', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 1. Log in as host2 (Mateo Rivas, Andes Living Co. - owns 17001, 18001)
-    await loginAs(page, 'host2@example.com', 'demo1234');
+    await loginAs(page, 'host2@example.com', 'host1234');
 
     // 2. Direct navigation to edit property 16060 (owned by Host 1 Casa Urbana Stays)
     const editRes = await page.goto('/host/listings/16060/edit');
