@@ -129,7 +129,7 @@ export function PropertyCard({
       </div>
 
       {/* Card Body */}
-      <div className="p-4 flex-1 flex flex-col justify-between">
+      <div className="card-body p-4 flex-1 flex flex-col justify-between">
         <div>
           <div className="text-xs text-[var(--color-text-on-light-muted)] mb-1">
             {property.neighborhood} · {property.bedrooms}{' '}

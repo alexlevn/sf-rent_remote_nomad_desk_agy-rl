@@ -70,8 +70,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({ authUser, onSignOut }) => 
 
       {/* Slide-out Drawer Panel */}
       <div
-        role="dialog"
-        aria-modal="true"
+        role={isOpen ? 'dialog' : undefined}
+        aria-modal={isOpen ? true : undefined}
+        aria-hidden={!isOpen ? true : undefined}
         aria-label="Navigation menu"
         className={cn(
           'fixed top-0 right-0 bottom-0 w-[85%] max-w-xs bg-[var(--color-bg-dark)] border-l border-[var(--color-border-dark)] text-[var(--color-text-on-dark)] z-[70] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out',

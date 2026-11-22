@@ -1,4 +1,3 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getLocationBySlug } from '@/lib/api/locations';
@@ -55,27 +54,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-function CityViewSkeleton() {
-  return (
-    <div className="flex flex-col min-h-screen animate-pulse">
-      <div className="bg-white border-b border-[var(--color-border-light)] py-4 px-6 h-16 flex items-center justify-between">
-        <div className="w-48 h-6 bg-neutral-200 rounded" />
-        <div className="flex gap-2">
-          <div className="w-24 h-8 bg-neutral-200 rounded-full" />
-          <div className="w-24 h-8 bg-neutral-200 rounded-full" />
-        </div>
-      </div>
-      <div className="max-w-[1728px] w-full mx-auto flex flex-col lg:flex-row flex-1 p-6 gap-6">
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div className="h-80 bg-neutral-200 rounded-2xl" />
-          <div className="h-80 bg-neutral-200 rounded-2xl" />
-        </div>
-        <div className="hidden lg:block lg:w-[45%] h-[600px] bg-neutral-200 rounded-2xl" />
-      </div>
-    </div>
-  );
-}
-
 export default async function CityApartmentsPage({ params, searchParams }: PageProps) {
   const { city: citySlug } = await params;
   const location = await getLocationBySlug(citySlug);
@@ -126,12 +104,10 @@ export default async function CityApartmentsPage({ params, searchParams }: PageP
   };
 
   return (
-    <Suspense fallback={<CityViewSkeleton />}>
-      <CityViewContainer
-        city={location}
-        allCityProperties={cityProperties}
-        initialFilters={initialFilters}
-      />
-    </Suspense>
+    <CityViewContainer
+      city={location}
+      allCityProperties={cityProperties}
+      initialFilters={initialFilters}
+    />
   );
 }
